@@ -132,14 +132,23 @@ export class Storage {
     this.write(TIMES_KEY, { ...(all && typeof all === 'object' ? all : {}), [code]: times });
   }
 
-  /** Enabled logic-helper rules, or null if never saved. */
-  loadLogicRules(): string[] | null {
+  /**
+   * Enabled logic-helper rules and the rules that existed when they were
+   * saved, or null if never saved. (Old saves are a plain list: `known` is missing.)
+   */
+  loadLogicRules(): { enabled: string[]; known?: string[] } | null {
     const r = this.read<unknown>(LOGIC_KEY, null);
-    return Array.isArray(r) ? r.filter((x): x is string => typeof x === 'string') : null;
+    const strings = (x: unknown) => (Array.isArray(x) ? x.filter((y): y is string => typeof y === 'string') : []);
+    if (Array.isArray(r)) return { enabled: strings(r) };
+    if (r && typeof r === 'object' && 'enabled' in r) {
+      const o = r as { enabled: unknown; known?: unknown };
+      return { enabled: strings(o.enabled), known: Array.isArray(o.known) ? strings(o.known) : undefined };
+    }
+    return null;
   }
 
-  saveLogicRules(rules: string[]): void {
-    this.write(LOGIC_KEY, rules);
+  saveLogicRules(choice: { enabled: string[]; known: string[] }): void {
+    this.write(LOGIC_KEY, choice);
   }
 
   loadSettings(): Settings {

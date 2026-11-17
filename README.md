@@ -42,11 +42,18 @@ The app opens on a sample puzzle in the **Play** tab.
   - **Corners** — a tile with only two ways out, at a right angle, uses both.
   - **Passages** — a tile walled in on opposite sides gets a straight line.
   - **Continue** — a tile whose remaining ways out are exactly what it still needs takes them (including a path end with only one way out).
-  - **Full tiles** — a tile with all its lines gets X marks on its other borders.
   - **No early loops** — X out a border that would close a loop too soon.
+  - **No early finish** (path puzzles) — X out a border that would join both ends of the path before every tile is used.
+  - **Number order** (3+ checkpoints) — X out a border that would join numbers out of order or skip one (e.g. 1 straight to 3).
+  - **Bottlenecks** — an area reachable through only two borders uses both; with one end of the path inside, it crosses exactly once.
+  - **Checkerboard balance** — the path alternates shaded and white tiles, so an area with more of one colour must be entered on that colour.
+
+  The checklist only shows the rules that can apply to the current puzzle. Hints in Play use all of them, simplest first, and highlight the area a rule is about.
+
+  A tile that already has all its lines is understood to be closed on its other borders; no rule or hint is spent on that.
 
   It reports when it's stuck, when logic alone solves the puzzle, or when it finds a contradiction. Editing the puzzle resets it.
-- The puzzle is **checked automatically** in the background after every edit. A chip shows **Unique**, **No solution**, **2+ solutions** or **Too big**; tap it for the explanation (e.g. a checkerboard parity mismatch). The eye button overlays the solutions it found.
+- The puzzle is **checked automatically** in the background after every edit. A chip shows **Unique**, **No solution**, **2+ solutions** or **Too big**; tap it for the explanation (e.g. a checkerboard parity mismatch). Tapping **Unique** shows the solution (tap again to hide it); with 2+ solutions, the eye button steps through the ones it found.
 - **Play** switches to the Play tab with your puzzle.
 
 ## Sharing and saving

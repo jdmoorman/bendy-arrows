@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ALL_RULES, applyStep, logicStep, type LogicState, type RuleId } from '../src/logic';
+import { ALL_RULES, applyStep, BASIC_RULES, logicStep, type LogicState, type RuleId } from '../src/logic';
 import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, portEnd, portId, type Puzzle } from '../src/model';
 import { solve } from '../src/solver';
 import { pathEdges } from './helpers';
@@ -45,18 +45,63 @@ describe('logic rules', () => {
     expect(first.byRule).toEqual({ continue: 2 }); // both end tiles take their only way out
   });
 
-  test('full tiles get X marks', () => {
+  test('borders of full tiles count as closed without a step', () => {
+    // Centre tile 4 has its two lines (left and right); tile 1 above it then has
+    // only left and right as ways out, so it is a passage.
     const p = createPuzzle(3, 3);
     const state: LogicState = { segments: new Set([edgeBetween(p, 3, 4), edgeBetween(p, 4, 5)]), xs: new Set() };
-    const step = logicStep(p, state, ['complete']);
-    expect(new Set(step.xs)).toEqual(new Set([edgeBetween(p, 1, 4), edgeBetween(p, 4, 7)]));
+    const step = logicStep(p, state, ['passages']);
+    expect(step.xs).toEqual([]);
+    expect(step.segments).toEqual(expect.arrayContaining([edgeBetween(p, 0, 1), edgeBetween(p, 1, 2)]));
   });
 
   test('no early loops: the border that would close a small loop gets an X', () => {
-    const p = createPuzzle(3, 3);
+    // (On a 3x3 the full tiles would wall the top-right corner off, a contradiction.)
+    const p = createPuzzle(4, 4);
     const state: LogicState = { segments: pathEdges(p, [[0, 0], [0, 1], [1, 1], [1, 0]]), xs: new Set() };
     const step = logicStep(p, state, ['noLoops']);
-    expect(step.xs).toEqual([edgeBetween(p, 0, 3)]);
+    expect(step.xs).toEqual([edgeBetween(p, 0, 4)]);
+  });
+
+  test('no early finish: joining both path ends too soon gets an X', () => {
+    const p = createPuzzle(3, 3);
+    p.checkpoints = [0, 2];
+    const state: LogicState = { segments: new Set([edgeBetween(p, 0, 1)]), xs: new Set() };
+    expect(logicStep(p, state, ['noFinish']).xs).toEqual([edgeBetween(p, 1, 2)]);
+  });
+
+  test('number order: joining 1 straight to 3 gets an X', async () => {
+    const { findHint } = await import('../src/logic');
+    const p = createPuzzle(3, 3);
+    p.checkpoints = [0, 8, 1, 6]; // 1 top-left, 2 bottom-right, 3 top-middle, 4 bottom-left
+    const step = logicStep(p, empty(), ['order']);
+    expect(step.xs).toContain(edgeBetween(p, 0, 1));
+    expect(step.byRule).toEqual({ order: step.xs.length });
+    const state = runToEnd(p, ['corners', 'passages', 'continue', 'noLoops']).state;
+    const h = findHint(p, state);
+    if (h.kind === 'deduction' && h.deduction.rule === 'order') expect(h.text).toMatch(/without passing 2/);
+  });
+
+  test('bottlenecks: an area with two ways in uses both', () => {
+    const p = createPuzzle(4, 4);
+    // The top-left 2x2 is reachable only through 1-2 and 4-8.
+    p.walls.add(edgeBetween(p, 5, 6)).add(edgeBetween(p, 5, 9));
+    const step = logicStep(p, empty(), ['bottlenecks']);
+    expect(step.segments).toEqual(expect.arrayContaining([edgeBetween(p, 1, 2), edgeBetween(p, 4, 8)]));
+  });
+
+  test('checkerboard balance: an area with an extra white tile is entered on white tiles', () => {
+    const p = createPuzzle(5, 3);
+    // The middle row is drawn, leaving the top row (white, shaded, white, shaded, white) with two ways in.
+    const state: LogicState = { segments: pathEdges(p, [[1, 0], [1, 1], [1, 2], [1, 3], [1, 4]]), xs: new Set() };
+    const step = logicStep(p, state, ['balance']);
+    expect(step.segments).toEqual(expect.arrayContaining([edgeBetween(p, 0, 5), edgeBetween(p, 4, 9)]));
+  });
+
+  test('a cut-off area is a contradiction', () => {
+    const p = createPuzzle(4, 2);
+    p.walls.add(edgeBetween(p, 1, 2)).add(edgeBetween(p, 5, 6));
+    expect(logicStep(p, empty(), ['bottlenecks']).contradiction?.cells?.length).toBe(4);
   });
 
   test('reports a contradiction', () => {
@@ -90,6 +135,54 @@ describe('logic rules', () => {
       for (const e of end.state.xs) expect(sol.has(e), `trial ${trial} x ${e}`).toBe(false);
     }
     expect(checked).toBeGreaterThan(30);
+  });
+});
+
+describe('advanced rules', () => {
+  test('agree with every solution of random puzzles that have several', () => {
+    let seed = 5;
+    const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    let checked = 0;
+    let gained = 0;
+    for (let trial = 0; trial < 5000 && checked < 300; trial++) {
+      const w = 3 + Math.floor(rand() * 4);
+      const h = 3 + Math.floor(rand() * 4);
+      const p = createPuzzle(w, h);
+      for (let c = 0; c < w * h; c++) if (rand() < 0.05) p.blocked.add(c);
+      for (let e = 0; e < edgeCount(p); e++) if (rand() < 0.1 && isUsableEdge(p, e)) p.walls.add(e);
+      const k = rand();
+      if (k < 0.33) {
+        const a = Math.floor(rand() * 2 * (w + h));
+        const b = Math.floor(rand() * 2 * (w + h));
+        if (a !== b) p.endpoints = [portEnd(a), portEnd(b)];
+      } else if (k < 0.66) {
+        const m = 2 + Math.floor(rand() * 4);
+        for (let i = 0; i < m; i++) {
+          const c = Math.floor(rand() * w * h);
+          if (!p.blocked.has(c) && !p.checkpoints.includes(c)) p.checkpoints.push(c);
+        }
+      }
+      const r = solve(p, { maxSolutions: 300, nodeLimit: 2e5 });
+      if (r.status === 'aborted' || !r.solutions.length || r.solutions.length >= 300) continue;
+      checked++;
+      const sols = r.solutions.map((x) => new Set(x));
+      const end = runToEnd(p);
+      const ctx = `trial ${trial}`;
+      expect(end.contradiction, ctx).toBeUndefined();
+      for (const e of end.state.segments) expect(sols.every((x) => x.has(e)), ctx).toBe(true);
+      for (const e of end.state.xs) expect(sols.every((x) => !x.has(e)), ctx).toBe(true);
+      const basic = runToEnd(p, BASIC_RULES).state;
+      if (end.state.segments.size + end.state.xs.size > basic.segments.size + basic.xs.size) gained++;
+    }
+    expect(checked).toBe(300);
+    expect(gained).toBeGreaterThan(30); // the advanced rules get further than the basic ones
+  });
+
+  test('a step on a 30x30 board is quick', () => {
+    const p = createPuzzle(30, 30);
+    const t = performance.now();
+    logicStep(p, empty(), ALL_RULES);
+    expect(performance.now() - t).toBeLessThan(1000);
   });
 });
 

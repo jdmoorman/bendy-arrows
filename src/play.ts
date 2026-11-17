@@ -410,13 +410,13 @@ export class PlayView {
     // A shown hint is drawn on top of the board in the highlight colour.
     const hint = live.solved ? null : this.shownHint;
     const d = hint?.kind === 'deduction' ? hint.deduction : null;
-    const focus = d ? d.cell : hint?.kind === 'mistake' ? hint.cell : -1;
+    const focus = d ? (d.cells ?? [d.cell]) : hint?.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
     renderBoard(this.svg, this.puzzle, {
       pad: padFor(this.puzzle),
       segments: d ? new Set([...this.segments, ...d.segments]) : this.segments,
       xMarks: d ? new Set([...this.xMarks, ...d.xs]) : this.xMarks,
       highlight: d ? new Set([...d.segments, ...d.xs]) : undefined,
-      focusCells: focus >= 0 ? new Set([focus]) : undefined,
+      focusCells: focus.length ? new Set(focus) : undefined,
       errorCells,
       errorEdges,
       solved: live.solved,

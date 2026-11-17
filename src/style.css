@@ -937,3 +937,38 @@ select {
     flex: 1 1 40%;
   }
 }
+
+/* The editor gets the same side column on wide, landscape screens. */
+@media (min-width: 600px) and (orientation: landscape) {
+  .editor-view {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(340px, 44vw, 420px);
+    grid-template-rows: 1fr auto auto 1fr;
+    grid-template-areas:
+      'board .'
+      'board status'
+      'board toolbar'
+      'board .';
+    column-gap: 16px;
+  }
+  .editor-view > .board-wrap {
+    grid-area: board;
+  }
+  .editor-view > .status {
+    grid-area: status;
+    min-height: 7em;
+    margin: 8px 12px;
+  }
+  .editor-view > .toolbar {
+    grid-area: toolbar;
+    padding: 0 12px 0 0;
+  }
+  /* Undo, redo, clear and the eye on one row; the check chip and Play below. */
+  .editor-view .actions-row {
+    flex-wrap: wrap;
+  }
+  .editor-view .actions-row > .btn.primary,
+  .editor-view .editor-actions > .validity {
+    flex: 1 1 40%;
+  }
+}

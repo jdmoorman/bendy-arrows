@@ -28,7 +28,11 @@ export function attachUniquenessCheck(editor: EditorView): void {
   const setChip = (state: 'checking' | 'unique' | 'none' | 'multiple' | 'aborted', label: string) => {
     chip.dataset.state = state;
     chip.innerHTML = state === 'checking' ? `<span class="spinner" aria-hidden="true"></span><span>${label}</span>` : `<span>${label}</span>`;
-    chip.setAttribute('aria-label', state === 'checking' ? 'Checking the puzzle' : `${label}: tap for details`);
+    chip.setAttribute(
+      'aria-label',
+      state === 'checking' ? 'Checking the puzzle' : state === 'unique' ? `${label}: tap to show the solution` : `${label}: tap for details`,
+    );
+    chip.removeAttribute('aria-pressed');
   };
 
   const start = async () => {
@@ -39,7 +43,8 @@ export function attachUniquenessCheck(editor: EditorView): void {
       if (run !== thisRun) return;
       run = null;
       last = r;
-      showBtn.classList.toggle('hidden', r.solutions.length === 0);
+      // A unique puzzle's chip shows its solution; the eye steps through several.
+      showBtn.classList.toggle('hidden', r.status !== 'multiple' || r.solutions.length === 0);
       if (r.status === 'unique') setChip('unique', 'Unique');
       else if (r.status === 'none') setChip('none', 'No solution');
       else if (r.status === 'multiple') setChip('multiple', '2+ solutions');
@@ -66,6 +71,13 @@ export function attachUniquenessCheck(editor: EditorView): void {
 
   chip.addEventListener('click', () => {
     if (!last) return editor.setMessage('Checking whether the puzzle has exactly one solution…');
+    if (last.status === 'unique') {
+      // Toggle the solution overlay.
+      shown = shown === 0 ? -1 : 0;
+      editor.showGhost(shown === 0 ? last.solutions[0] : null);
+      chip.setAttribute('aria-pressed', String(shown === 0));
+      if (shown === 0) return editor.setMessage('Showing the unique solution. Tap Unique again to hide it.', 'success');
+    }
     editor.setMessage(describe(last), last.status === 'unique' ? 'success' : 'error');
   });
 

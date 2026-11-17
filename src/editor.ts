@@ -20,7 +20,7 @@ import {
   type Puzzle,
 } from './model';
 import { padFor, renderBoard } from './render';
-import { ALL_RULES, applyStep, logicStep, RULES, type LogicState, type RuleId } from './logic';
+import { ALL_RULES, applyStep, BASIC_RULES, logicStep, RULES, rulesFor, type LogicState, type RuleId } from './logic';
 import { Storage } from './storage';
 import { openSheet } from './ui';
 
@@ -76,11 +76,9 @@ export class EditorView {
   private logic: LogicState = { segments: new Set(), xs: new Set() };
   private logicFresh = new Set<number>();
   private logicSteps = 0;
-  private logicBad = -1;
+  private logicBad: number[] = [];
   private logicNote = '';
-  private logicRules = new Set<RuleId>(
-    (new Storage().loadLogicRules() ?? ALL_RULES).filter((r): r is RuleId => ALL_RULES.includes(r as RuleId)),
-  );
+  private logicRules = loadRuleChoice(new Storage());
 
   constructor() {
     this.el = document.createElement('section');
@@ -196,7 +194,7 @@ export class EditorView {
     this.logic = { segments: new Set(), xs: new Set() };
     this.logicFresh = new Set();
     this.logicSteps = 0;
-    this.logicBad = -1;
+    this.logicBad = [];
     this.logicNote = '';
   }
 
@@ -209,7 +207,7 @@ export class EditorView {
       return;
     }
     const step = logicStep(p, this.logic, this.logicRules);
-    this.logicBad = step.contradiction?.cell ?? -1;
+    this.logicBad = step.contradiction ? (step.contradiction.cells ?? [step.contradiction.cell]) : [];
     if (step.contradiction) {
       this.logicFresh = new Set();
       this.setMessage(`Contradiction: ${step.contradiction.reason} This puzzle has no solution.`, 'error');
@@ -241,7 +239,8 @@ export class EditorView {
   private openRulesSheet() {
     const body = document.createElement('div');
     body.className = 'sheet-stack';
-    for (const r of RULES) {
+    // Only the rules that can apply to this puzzle (e.g. Number order needs checkpoints).
+    for (const r of rulesFor(this.puzzle)) {
       const row = document.createElement('label');
       row.className = 'switch-row';
       const text = document.createElement('span');
@@ -257,7 +256,7 @@ export class EditorView {
       input.addEventListener('change', () => {
         if (input.checked) this.logicRules.add(r.id);
         else this.logicRules.delete(r.id);
-        this.storage.saveLogicRules([...this.logicRules]);
+        this.storage.saveLogicRules({ enabled: [...this.logicRules], known: ALL_RULES });
       });
       row.append(text, input);
       body.append(row);
@@ -450,7 +449,7 @@ export class EditorView {
       segments: logic ? this.logic.segments : undefined,
       xMarks: logic ? this.logic.xs : undefined,
       highlight: logic ? this.logicFresh : undefined,
-      errorCells: logic && this.logicBad >= 0 ? new Set([this.logicBad]) : undefined,
+      errorCells: logic && this.logicBad.length ? new Set(this.logicBad) : undefined,
     });
     this.widthSel.value = String(p.w);
     this.heightSel.value = String(p.h);
@@ -467,4 +466,16 @@ export class EditorView {
       if (logic && this.logicNote) this.status.textContent = this.logicNote;
     }
   }
+}
+
+/**
+ * The saved rule choices. Rules added since the choice was saved start on;
+ * a choice saved before the list was recorded knew only the basic rules.
+ */
+function loadRuleChoice(storage: Storage): Set<RuleId> {
+  const saved = storage.loadLogicRules();
+  if (!saved) return new Set(ALL_RULES);
+  const known = new Set<string>(saved.known ?? BASIC_RULES);
+  const on = new Set<string>(saved.enabled);
+  return new Set(ALL_RULES.filter((r) => on.has(r) || !known.has(r)));
 }
