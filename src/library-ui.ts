@@ -215,6 +215,7 @@ export function openLibrarySheet(ctx: LibraryContext): void {
       ),
       ['Sparse: one obstacle or none', SAMPLES.filter((x) => x.group === 'one')],
       ['Sparse: fewest obstacles by size', SAMPLES.filter((x) => x.group === 'fewest')],
+      ['Sparse: hard with few obstacles', SAMPLES.filter((x) => x.group === 'hardsparse')],
     ];
     for (const [heading, list] of sections) {
       const key = heading;

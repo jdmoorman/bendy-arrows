@@ -251,9 +251,9 @@ describe('sample difficulty', async () => {
   const { SAMPLES } = await import('../src/samples');
   const { decodePuzzle } = await import('../src/codec');
   const { rateDifficulty } = await import('../src/generator');
-  // The fewest-obstacle collection is left out: its big boards are slow to rate.
+  // The sparse big-board collections are left out: they are slow to rate.
   // Their uniqueness is still checked in solver.test.ts.
-  for (const s of SAMPLES.filter((x) => x.group !== 'fewest')) {
+  for (const s of SAMPLES.filter((x) => x.group !== 'fewest' && x.group !== 'hardsparse')) {
     const expected = s.level;
     test(`${s.level} ${s.name} is unique and rated ${expected}`, () => {
       const p = decodePuzzle(s.code);

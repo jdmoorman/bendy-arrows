@@ -23,7 +23,7 @@ import { padFor, renderBoard } from './render';
 import { ALL_RULES, applyStep, BASIC_RULES, findHint, RULES, rulesFor, type LogicState, type RuleId } from './logic';
 import { Storage } from './storage';
 import { openSheet } from './ui';
-import { openNewPuzzleSheet } from './new-puzzle-ui';
+import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from './new-puzzle-ui';
 
 type Tool = 'tiles' | 'walls' | 'ends' | 'checkpoints';
 
@@ -119,7 +119,8 @@ export class EditorView {
         <div class="toolbar-row actions-row">
           <button class="btn" data-act="undo" aria-label="Undo">${ICONS.undo}</button>
           <button class="btn" data-act="redo" aria-label="Redo">${ICONS.redo}</button>
-          <button class="btn" data-act="new" aria-label="New puzzle" title="New puzzle">${ICONS.plus}</button>
+          <button class="btn" data-act="new" aria-label="New blank puzzle" title="New blank puzzle">${ICONS.plus}</button>
+          <button class="btn" data-act="generate" aria-label="Generate a puzzle" title="Generate a puzzle">${ICONS.dice}</button>
           <button class="btn" data-act="save" aria-label="Save to the library" title="Save">${ICONS.save}</button>
           <button class="btn" data-act="transform" aria-label="Size, rotate and flip" title="Size, rotate and flip">${ICONS.transform}</button>
           <button class="btn primary" data-act="play">${ICONS.play}<span>Play</span></button>
@@ -152,30 +153,30 @@ export class EditorView {
     q<HTMLButtonElement>('[data-logic=rules]').addEventListener('click', () => this.openRulesSheet());
     this.undoBtn.addEventListener('click', () => this.undo());
     this.redoBtn.addEventListener('click', () => this.redo());
-    q<HTMLButtonElement>('[data-act=new]').addEventListener('click', () =>
-      openNewPuzzleSheet({
-        storage: this.storage,
-        w: this.puzzle.w,
-        h: this.puzzle.h,
-        onBlank: (w, h) => {
-          this.marksStillFit = false;
-          this.edit(() => createPuzzle(w, h));
-        },
-        onGenerated: (p, { options, difficulty }) => {
-          this.marksStillFit = false;
-          this.edit(() => p);
-          const kind = { loop: 'loop', path: 'path', checkpoints: 'numbers' }[options.type];
-          const word = (d: string) => (d === 'veryhard' ? 'very hard' : d);
-          const note =
-            options.difficulty === 'any' || difficulty === options.difficulty ? '' : ` (no ${word(options.difficulty)} one turned up, so this is the closest)`;
-          const obstacles = p.walls.size + p.blocked.size;
-          this.setMessage(
-            `Generated ${difficulty === 'easy' ? 'an' : 'a'} ${word(difficulty)} ${kind} puzzle with ${obstacles} obstacle${obstacles === 1 ? '' : 's'}${note} · seed ${options.seed}`,
-            'success',
-          );
-        },
-      }),
-    );
+    const newPuzzle = (): NewPuzzleContext => ({
+      storage: this.storage,
+      w: this.puzzle.w,
+      h: this.puzzle.h,
+      onBlank: (w, h) => {
+        this.marksStillFit = false;
+        this.edit(() => createPuzzle(w, h));
+      },
+      onGenerated: (p, { options, difficulty }) => {
+        this.marksStillFit = false;
+        this.edit(() => p);
+        const kind = { loop: 'loop', path: 'path', checkpoints: 'numbers' }[options.type];
+        const word = (d: string) => (d === 'veryhard' ? 'very hard' : d);
+        const note =
+          options.difficulty === 'any' || difficulty === options.difficulty ? '' : ` (no ${word(options.difficulty)} one turned up, so this is the closest)`;
+        const obstacles = p.walls.size + p.blocked.size;
+        this.setMessage(
+          `Generated ${difficulty === 'easy' ? 'an' : 'a'} ${word(difficulty)} ${kind} puzzle with ${obstacles} obstacle${obstacles === 1 ? '' : 's'}${note} · seed ${options.seed}`,
+          'success',
+        );
+      },
+    });
+    q<HTMLButtonElement>('[data-act=new]').addEventListener('click', () => openBlankPuzzleSheet(newPuzzle()));
+    q<HTMLButtonElement>('[data-act=generate]').addEventListener('click', () => openGeneratorSheet(newPuzzle()));
     q<HTMLButtonElement>('[data-act=save]').addEventListener('click', () => this.onSave?.());
     q<HTMLButtonElement>('[data-act=play]').addEventListener('click', () => this.onPlay?.());
 

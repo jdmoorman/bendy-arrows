@@ -1106,3 +1106,15 @@ select {
 .lib-fold[open] > summary > span:first-child::before {
   transform: rotate(45deg);
 }
+
+/* New puzzle sheet: "Size" label beside its picker. */
+.size-row {
+  align-items: center;
+}
+.size-row > .field-label {
+  flex: 0 0 auto;
+  margin: 0;
+}
+.new-puzzle .segmented .seg-btn {
+  padding: 0 4px;
+}

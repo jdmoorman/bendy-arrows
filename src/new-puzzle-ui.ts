@@ -1,5 +1,5 @@
 import { generateInBackground, type GeneratorRun } from './generator-client';
-import { DEFAULT_SIZE, randomSeed, type ClueKind, type Difficulty, type GenOptions, type GenType } from './generator';
+import { randomSeed, type ClueKind, type Difficulty, type GenOptions, type GenType } from './generator';
 import { ICONS } from './icons';
 import type { Puzzle } from './model';
 import type { Storage } from './storage';
@@ -11,7 +11,7 @@ const GEN_MAX = 12;
 
 export interface NewPuzzleContext {
   storage: Storage;
-  /** Size of the puzzle being edited, for a blank one. */
+  /** Size of the puzzle being edited; the sheet starts at this size. */
   w: number;
   h: number;
   onBlank(w: number, h: number): void;
@@ -36,11 +36,8 @@ const CLUES: [ClueKind, string][] = [
   ['tiles', 'Tiles only'],
 ];
 
-/** The last-used options, and whether the size was picked by hand. */
-type Saved = Omit<GenOptions, 'seed'> & { sizeChosen: boolean };
-
-/** The usual size for a difficulty ('any' gets the medium size). */
-const sizeFor = (d: Difficulty | 'any') => DEFAULT_SIZE[d === 'any' ? 'medium' : d];
+/** The last-used options (the size comes from the sheet's size picker). */
+type Saved = Omit<GenOptions, 'seed' | 'w' | 'h'>;
 
 /** Choices for the obstacle limit. */
 const MAX_OBSTACLE_CHOICES = 30;
@@ -48,17 +45,12 @@ const MAX_OBSTACLE_CHOICES = 30;
 function savedOptions(storage: Storage): Saved {
   const o = storage.loadGeneratorOptions() ?? {};
   const oneOf = <T extends string>(v: unknown, list: [T, string][], d: T): T => (list.some(([k]) => k === v) ? (v as T) : d);
-  const size = (v: unknown, d: number) => (typeof v === 'number' && v >= GEN_MIN && v <= GEN_MAX ? v : d);
-  const difficulty = oneOf(o.difficulty, DIFFS, 'easy');
   return {
     type: oneOf(o.type, TYPES, 'path'),
-    difficulty,
+    difficulty: oneOf(o.difficulty, DIFFS, 'easy'),
     clues: oneOf(o.clues, CLUES, 'mixed'),
-    w: size(o.w, sizeFor(difficulty)),
-    h: size(o.h, sizeFor(difficulty)),
     minimal: typeof o.minimal === 'boolean' ? o.minimal : true,
     maxObstacles: typeof o.maxObstacles === 'number' && o.maxObstacles >= 0 ? o.maxObstacles : undefined,
-    sizeChosen: o.sizeChosen === true,
   };
 }
 
@@ -100,34 +92,40 @@ function sizePicker(w: number, h: number, min: number, max: number, onChange: (w
   return { el: label, set };
 }
 
-/** The editor's New puzzle sheet: a blank grid, or a generated puzzle. */
-export function openNewPuzzleSheet(ctx: NewPuzzleContext): void {
+const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
+
+function sizeRow(picker: { el: HTMLElement }): HTMLElement {
+  const row = el('div', 'sheet-row size-row');
+  row.append(el('span', 'field-label', 'Size'), picker.el);
+  return row;
+}
+
+/** The editor's New puzzle sheet: an empty grid of any size. */
+export function openBlankPuzzleSheet(ctx: NewPuzzleContext): void {
   const body = el('div', 'sheet-stack new-puzzle');
   const sheet = openSheet('New puzzle', body);
-  let run: GeneratorRun | null = null;
-  sheet.dialog.addEventListener('close', () => run?.cancel());
-
-  // --- Blank ---
-  let blank = { w: ctx.w, h: ctx.h };
-  const blankSize = sizePicker(ctx.w, ctx.h, 1, 30, (w, h) => (blank = { w, h }));
-  const blankBtn = el('button', 'btn', `${ICONS.plus}<span>Blank puzzle</span>`);
-  blankBtn.addEventListener('click', () => {
-    ctx.onBlank(blank.w, blank.h);
+  let size = { w: ctx.w, h: ctx.h };
+  const picker = sizePicker(size.w, size.h, 1, 30, (w, h) => (size = { w, h }));
+  const create = el('button', 'btn primary', `${ICONS.plus}<span>Create</span>`);
+  create.addEventListener('click', () => {
+    ctx.onBlank(size.w, size.h);
     sheet.close();
   });
-  const blankRow = el('div', 'sheet-row');
-  blankRow.append(blankSize.el, blankBtn);
-  body.append(el('p', 'field-label', 'Start from an empty grid'), blankRow, el('hr', 'sheet-sep'));
+  body.append(sizeRow(picker), create);
+}
+
+/** The editor's Generate sheet: a random puzzle with the chosen options. */
+export function openGeneratorSheet(ctx: NewPuzzleContext): void {
+  const body = el('div', 'sheet-stack new-puzzle');
+  const sheet = openSheet('Generate a puzzle', body);
+  let run: GeneratorRun | null = null;
+  sheet.dialog.addEventListener('close', () => run?.cancel());
+  let size = { w: clamp(ctx.w, GEN_MIN, GEN_MAX), h: clamp(ctx.h, GEN_MIN, GEN_MAX) };
+  const picker = sizePicker(size.w, size.h, GEN_MIN, GEN_MAX, (w, h) => (size = { w, h }));
 
   // --- Generate ---
   const o = savedOptions(ctx.storage);
   const save = () => ctx.storage.saveGeneratorOptions(o);
-  const genSize = sizePicker(o.w, o.h, GEN_MIN, GEN_MAX, (w, h) => {
-    o.w = w;
-    o.h = h;
-    o.sizeChosen = true;
-    save();
-  });
   const minimal = el('label', 'switch-row');
   const minimalText = el('span', 'switch-text');
   minimalText.append(document.createTextNode('Minimal clues'), Object.assign(el('small'), { textContent: 'Remove every wall, tile and number the puzzle doesn’t need' }));
@@ -167,6 +165,7 @@ export function openNewPuzzleSheet(ctx: NewPuzzleContext): void {
 
   const status = el('p', 'field-label gen-status');
   const genBtn = el('button', 'btn primary', `${ICONS.step}<span>Generate</span>`);
+
   const cancelBtn = el('button', 'btn hidden', '<span>Cancel</span>');
   const genRow = el('div', 'sheet-row');
   genRow.append(cancelBtn, genBtn);
@@ -183,8 +182,7 @@ export function openNewPuzzleSheet(ctx: NewPuzzleContext): void {
   });
   genBtn.addEventListener('click', async () => {
     const seed = Number.parseInt(seedInput.value, 10);
-    const { sizeChosen: _, ...chosen } = o;
-    const options: GenOptions = { ...chosen, seed: Number.isFinite(seed) ? Math.abs(seed) : randomSeed() };
+    const options: GenOptions = { ...o, w: size.w, h: size.h, seed: Number.isFinite(seed) ? Math.abs(seed) : randomSeed() };
     seedInput.value = String(options.seed);
     busy(true);
     status.innerHTML = '<span class="spinner" aria-hidden="true"></span> Generating…';
@@ -207,25 +205,19 @@ export function openNewPuzzleSheet(ctx: NewPuzzleContext): void {
   });
 
   body.append(
-    el('p', 'field-label', 'Or generate one'),
+    sizeRow(picker),
     segmented('Puzzle type', TYPES, o.type, (v) => {
       o.type = v;
       save();
     }),
     segmented('Difficulty', DIFFS, o.difficulty, (v) => {
       o.difficulty = v;
-      // Follow the difficulty's usual size until the size is chosen by hand.
-      if (!o.sizeChosen) {
-        o.w = o.h = sizeFor(v);
-        genSize.set(o.w, o.h);
-      }
       save();
     }),
     segmented('Clues', CLUES, o.clues, (v) => {
       o.clues = v;
       save();
     }),
-    genSize.el,
     minimal,
     maxRow,
     el('p', 'field-label', 'Seed (the same options and seed always give the same puzzle)'),

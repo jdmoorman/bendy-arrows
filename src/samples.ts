@@ -9,7 +9,7 @@ export type SampleLevel = 'easy' | 'medium' | 'hard' | 'veryhard';
  * with small balance areas, hard with bigger ones, very hard beyond every rule.
  */
 /** Special collections shown in their own library section. */
-export type SampleGroup = 'one' | 'fewest';
+export type SampleGroup = 'one' | 'fewest' | 'hardsparse';
 
 export const SAMPLES: { level: SampleLevel; group?: SampleGroup; name: string; code: string }[] = [
   { level: 'easy', name: 'Path 6×6 · walls & tiles', code: 'BQQGBgASAAkAAEgCAAAAAFQAABI' },
@@ -112,6 +112,25 @@ export const SAMPLES: { level: SampleLevel; group?: SampleGroup; name: string; c
   { level: 'easy', group: 'fewest', name: 'Path 9×9 · 14 obstacles', code: 'BQQJCQANABsAAAAgEgACEAAQIAigAAAAGAAAAgAAAAAAAAIAAA' },
   { level: 'medium', group: 'fewest', name: 'Path 10×10 · 17 obstacles', code: 'BQQKCgAFACMEAEAAAAAABAAIAAABACQAAIQgBAAQAAAAUAAAAAACIAAAAg' },
   { level: 'easy', group: 'fewest', name: 'Path 10×10 · 26 obstacles', code: 'BQQKCgADACAAAAAAAAAAAAAAAAAAQADAFUAAGAJiAABAEACELQAhAAIEIA' },
+  // Hard puzzles with the fewest obstacles a 40-minute generator search found (research/hard-sparse).
+  { level: 'hard', group: 'hardsparse', name: 'Loop 8×8 · 7 obstacles', code: 'BQEICBAAAAgAASAAAAAAAEAAAAABAAAAAgA' },
+  { level: 'hard', group: 'hardsparse', name: 'Loop 8×8 · 8 obstacles', code: 'BQEICAAAAAAAgQAAEAAgAAAIEAACAAAEAAA' },
+  { level: 'hard', group: 'hardsparse', name: 'Loop 8×8 · 9 obstacles', code: 'BQEICAAAAIAABAAAAABAAAAAQCIICAABAAA' },
+  { level: 'hard', group: 'hardsparse', name: 'Loop 9×10 · 16 obstacles', code: 'BQEJCgABAACAAAgAQAAAAABAGAAJBAgIIEAAAgCAAAAAAAAA' },
+  { level: 'hard', group: 'hardsparse', name: 'Loop 9×10 · 17 obstacles', code: 'BQEJCgAAAAAAAAAQAgAAAAiAIQCEEAQAEAAAAUAACAAgIAEA' },
+  { level: 'hard', group: 'hardsparse', name: 'Loop 9×10 · 18 obstacles', code: 'BQEJCgAAAEAAAAAAgAgQCEAiAABAAIAAAAAAAUSIAQIgAAAA' },
+  { level: 'hard', group: 'hardsparse', name: 'Loop 10×10 · 21 obstacles', code: 'BQEKCgAAAECAAAgAAAAIACAAAAACEGAQBAEBAEAQMAAAAAAIQhAA' },
+  { level: 'hard', group: 'hardsparse', name: 'Loop 10×10 · 22 obstacles #1', code: 'BQEKCgAAAAAAAABAAAEAAAAASDACAgCgAQQAAgUAAgAUQQEAAAgA' },
+  { level: 'hard', group: 'hardsparse', name: 'Loop 10×10 · 22 obstacles #2', code: 'BQEKCgAAAAAASAAAAAAAAAAACAAAgCCA4CAACBCFABAACIEABAgC' },
+  { level: 'hard', group: 'hardsparse', name: 'Path 8×8 · 7 obstacles', code: 'BQQICAAHAAIAAAAAhAAAAAAAAAIAAAAIBAIAAAIA' },
+  { level: 'hard', group: 'hardsparse', name: 'Path 8×8 · 8 obstacles', code: 'BQQICAAcABQAIAAAAAAAAQIFAAAAEAAAAAABCAAA' },
+  { level: 'hard', group: 'hardsparse', name: 'Path 8×8 · 9 obstacles', code: 'BQQICAAaAAoAAAAAAAAAAAIAAABCAAAgEAAgAIkA' },
+  { level: 'hard', group: 'hardsparse', name: 'Path 9×9 · 13 obstacles', code: 'BQQJCQAEABQAgCAAQIQAAABACCAAABAAEQAAAAQAAAAAAAACAA' },
+  { level: 'hard', group: 'hardsparse', name: 'Path 9×9 · 14 obstacles #1', code: 'BQQJCQACAAQAIAAAgQSAAQAAQAAECAAAAMAAAAAAAEAQAAAQAA' },
+  { level: 'hard', group: 'hardsparse', name: 'Path 9×9 · 14 obstacles #2', code: 'BQQJCQACAAsAAAAAAAAAAAAAABAAAIIgiAQAEAAgJAAAEEQAAA' },
+  { level: 'hard', group: 'hardsparse', name: 'Path 10×10 · 19 obstacles', code: 'BQQKCgAEAAaAAAAAAACAAAAAIAAAgIUAAAAAAACAFAAAAIASkIIAIEAAAA' },
+  { level: 'hard', group: 'hardsparse', name: 'Path 10×10 · 21 obstacles #1', code: 'BQQKCgAEAAIAAAAAAIAAAAAAAAAAAoAFsAQAABEAAQAAgABAAAAIAUElAA' },
+  { level: 'hard', group: 'hardsparse', name: 'Path 10×10 · 21 obstacles #2', code: 'BQQKCgAEAAwAAAAAAAAAAAAAAAAAAIEAAAQiAQCBhBAgEgAChIIAAIIAAA' },
 ];
 
 export function samplePuzzle(i = 0): Puzzle {
