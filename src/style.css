@@ -1013,3 +1013,27 @@ select {
     display: none;
   }
 }
+
+/* Logic rules sheet: a link inside a switch's description, and the easy rules listed one by one. */
+.link-btn {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.switch-row.sub-rule {
+  padding-left: 20px;
+  border-left: 2px solid var(--border);
+  margin-left: 4px;
+}
+.switch:indeterminate {
+  background: var(--accent);
+  opacity: 0.55;
+}
+.switch:indeterminate::after {
+  transform: translateX(10px);
+}

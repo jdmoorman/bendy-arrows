@@ -45,7 +45,7 @@ export const RULES: RuleInfo[] = [
   {
     id: 'balance',
     label: 'Checkerboard balance',
-    hint: 'The path alternates shaded and white tiles, so an area with more of one colour must be entered on that colour.',
+    hint: 'The path alternates colours, so it crosses into an area on its commoner colour twice as many extra times as that colour has extra tiles — and a balanced area equally often on each.',
   },
 ];
 
@@ -546,30 +546,46 @@ function areaRules(p: Puzzle, state: LogicState, need: Int8Array, closed: Set<nu
     return cells.filter((c) => !inSide.has(c));
   };
 
-  /** Checkerboard balance: the shaded/white mix of `area` fixes how the path crosses `cut`. */
-  const balance = (area: number[], cut: number[]): Contradiction | null => {
+  /**
+   * Checkerboard balance. The path alternates colours, so inside any area it
+   * runs in stretches whose shaded-minus-white count is +1, 0 or -1 depending
+   * on the colours of the stretch's two end tiles. Each stretch ends where the
+   * path crosses into the area or at a path end, so
+   *   (crossings into shaded tiles + shaded path ends) - (same for white) = 2 x (shaded - white tiles).
+   * For a loop (no path ends) in an area with as many shaded tiles as white,
+   * that's "as many crossings into shaded tiles as into white ones".
+   * The path must also cross at least once (twice when the count is even).
+   */
+  const balance = (area: number[]): Contradiction | null => {
+    if (area.length < 2 || area.length >= cells.length) return null;
     const inArea = new Set(area);
     let diff = 0;
     let endS = 0;
     let endW = 0;
+    let needSum = 0;
     for (const c of area) {
       diff += shaded(c) ? 1 : -1;
+      needSum += need[c];
       if (need[c] === 1) shaded(c) ? endS++ : endW++;
     }
-    const target = 2 * diff - endS + endW; // shaded crossings minus white crossings
     let sDrawn = 0;
     let wDrawn = 0;
     const sOpen: number[] = [];
     const wOpen: number[] = [];
-    for (const e of cut) {
-      const [a, b] = edgeCells(p, e);
-      const s = shaded(inArea.has(a) ? a : b);
-      if (state.segments.has(e)) s ? sDrawn++ : wDrawn++;
-      else (s ? sOpen : wOpen).push(e);
+    for (const t of area) {
+      for (const e of adj[t]) {
+        if (inArea.has(other(e, t))) continue;
+        if (state.segments.has(e)) shaded(t) ? sDrawn++ : wDrawn++;
+        else (shaded(t) ? sOpen : wOpen).push(e);
+      }
     }
-    const lo = sDrawn - wDrawn - wOpen.length;
-    const hi = sDrawn + sOpen.length - wDrawn;
-    if (target < lo || target > hi) {
+    if (!sOpen.length && !wOpen.length) return null;
+    const target = 2 * diff - endS + endW; // shaded crossings minus white crossings
+    const minCrossings = needSum % 2 ? 1 : 2;
+    const sMinBalance = Math.max(sDrawn, wDrawn + target);
+    const sMin = Math.max(sMinBalance, Math.ceil((minCrossings + target) / 2));
+    const sMax = Math.min(sDrawn + sOpen.length, wDrawn + wOpen.length + target);
+    if (sMin > sMax) {
       return {
         cell: Math.min(...area),
         cells: area,
@@ -577,29 +593,43 @@ function areaRules(p: Puzzle, state: LogicState, need: Int8Array, closed: Set<nu
         hint: 'Something is off: the highlighted area has the wrong mix of shaded and white tiles for the ways in and out that are left — check the lines and X marks around it.',
       };
     }
-    if (!sOpen.length && !wOpen.length) return null;
-    let lines: number[];
-    let xs: number[];
-    let into: string;
-    let notInto: string;
-    if (target === hi) [lines, xs, into, notInto] = [sOpen, wOpen, 'shaded', 'white'];
-    else if (target === lo) [lines, xs, into, notInto] = [wOpen, sOpen, 'white', 'shaded'];
-    else return null;
+    const wMin = sMin - target;
+    const wMax = sMax - target;
+    const lines: number[] = [];
+    const xs: number[] = [];
+    const doing: string[] = [];
+    if (sOpen.length && sMin === sDrawn + sOpen.length) {
+      lines.push(...sOpen);
+      doing.push('use every open border into its shaded tiles');
+    } else if (sOpen.length && sMax === sDrawn) {
+      xs.push(...sOpen);
+      doing.push('never cross into its shaded tiles');
+    }
+    if (wOpen.length && wMin === wDrawn + wOpen.length) {
+      lines.push(...wOpen);
+      doing.push('use every open border into its white tiles');
+    } else if (wOpen.length && wMax === wDrawn) {
+      xs.push(...wOpen);
+      doing.push('never cross into its white tiles');
+    }
+    if (!doing.length) return null;
+    const n = Math.abs(diff);
     const more = diff > 0 ? 'shaded' : 'white';
     const less = diff > 0 ? 'white' : 'shaded';
-    const n = Math.abs(diff);
     const mix = n === 0 ? 'as many shaded tiles as white ones' : `${n} more ${more} tile${n === 1 ? '' : 's'} than ${less} ones`;
-    const ends = endS + endW ? `, counting the path end inside it` : '';
-    const doing = [lines.length ? `cross into its ${into} tiles at every open border` : '', xs.length ? `never cross into its ${notInto} tiles` : '']
-      .filter(Boolean)
-      .join(' and ');
+    const ends = endS + endW ? ' (a path end inside it counts as a way in)' : '';
+    const law =
+      n === 0
+        ? 'so it must cross into the area on shaded tiles exactly as often as on white tiles'
+        : `so it must cross into the area on ${more} tiles ${2 * n} more time${2 * n === 1 ? '' : 's'} than on ${less} tiles`;
+    const entry = sMin > sMinBalance ? (minCrossings === 1 ? ' It has to get into the area at least once.' : ' It has to get into the area and back out.') : '';
     out.push({
       rule: 'balance',
       cell: Math.min(...area),
       cells: area,
       segments: lines,
       xs,
-      why: `On the checkerboard, the highlighted area has ${mix}${ends}. The path alternates colours, so to make that work it must ${doing}.`,
+      why: `On the checkerboard, the highlighted area has ${mix}. The path alternates colours${ends}, ${law}.${entry} So it must ${doing.join(' and ')}.`,
     });
     return null;
   };
@@ -660,7 +690,7 @@ function areaRules(p: Puzzle, state: LogicState, need: Int8Array, closed: Set<nu
       }
     }
     if (enabled.has('balance')) {
-      const bad = balance(side, cut);
+      const bad = balance(side);
       if (bad) return bad;
     }
   }
@@ -676,12 +706,17 @@ function areaRules(p: Puzzle, state: LogicState, need: Int8Array, closed: Set<nu
       if (!empty[c] || done[c]) continue;
       const area = reach(c, [], empty);
       for (const t of area) done[t] = 1;
-      if (area.length < 2 || area.length === cells.length) continue;
-      const inArea = new Set(area);
-      const cut: number[] = [];
-      for (const t of area) for (const e of adj[t]) if (!inArea.has(other(e, t))) cut.push(e);
-      if (!cut.length) continue;
-      const bad = balance(area, cut);
+      const bad = balance(area);
+      if (bad) return bad;
+    }
+    // ...and for each strip across the whole board: the top rows, and the left columns.
+    // (The bottom rows and right columns are their complements, which give the same answer.)
+    for (let k = 1; k < p.h; k++) {
+      const bad = balance(cells.filter((c) => Math.floor(c / p.w) < k));
+      if (bad) return bad;
+    }
+    for (let k = 1; k < p.w; k++) {
+      const bad = balance(cells.filter((c) => c % p.w < k));
       if (bad) return bad;
     }
   }

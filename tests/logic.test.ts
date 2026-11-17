@@ -91,11 +91,21 @@ describe('logic rules', () => {
   });
 
   test('checkerboard balance: an area with an extra white tile is entered on white tiles', () => {
-    const p = createPuzzle(5, 3);
-    // The middle row is drawn, leaving the top row (white, shaded, white, shaded, white) with two ways in.
-    const state: LogicState = { segments: pathEdges(p, [[1, 0], [1, 1], [1, 2], [1, 3], [1, 4]]), xs: new Set() };
-    const step = logicStep(p, state, ['balance']);
-    expect(step.segments).toEqual(expect.arrayContaining([edgeBetween(p, 0, 5), edgeBetween(p, 4, 9)]));
+    // 3x4 loop: the top row is white, shaded, white, so the loop must enter it on
+    // white tiles twice more than on shaded ones: down from both corners, never the middle.
+    const p = createPuzzle(3, 4);
+    const step = logicStep(p, empty(), ['balance']);
+    expect(step.segments).toEqual(expect.arrayContaining([edgeBetween(p, 0, 3), edgeBetween(p, 2, 5)]));
+    expect(step.xs).toContain(edgeBetween(p, 1, 4));
+  });
+
+  test('checkerboard balance: a balanced area is left on shaded and white tiles equally', () => {
+    // 4x4 loop: the left column (white, shaded, white, shaded) can only be left from
+    // its top (white) and bottom (shaded) tiles, so both must be used.
+    const p = createPuzzle(4, 4);
+    p.walls.add(edgeBetween(p, 4, 5)).add(edgeBetween(p, 8, 9));
+    const step = logicStep(p, empty(), ['balance']);
+    expect(step.segments).toEqual(expect.arrayContaining([edgeBetween(p, 0, 1), edgeBetween(p, 12, 13)]));
   });
 
   test('a cut-off area is a contradiction', () => {
@@ -217,16 +227,16 @@ describe('findHint', async () => {
   });
 });
 
-describe('tricky samples', async () => {
+describe('sample difficulty', async () => {
   const { SAMPLES } = await import('../src/samples');
   const { decodePuzzle } = await import('../src/codec');
-  for (const s of SAMPLES.filter((x) => x.name.startsWith('Tricky'))) {
-    test(`${s.name} is unique but not solved by the simple rules alone`, () => {
+  const { rateDifficulty } = await import('../src/generator');
+  for (const s of SAMPLES) {
+    const expected = s.name.startsWith('Hard') ? 'hard' : s.name.startsWith('Medium') ? 'medium' : 'easy';
+    test(`${s.name} is unique and rated ${expected}`, () => {
       const p = decodePuzzle(s.code);
       expect(solve(p).status).toBe('unique');
-      const end = runToEnd(p);
-      expect(end.contradiction).toBeUndefined();
-      expect(end.solved).toBe(false);
+      expect(rateDifficulty(p)).toBe(expected);
     });
   }
 });

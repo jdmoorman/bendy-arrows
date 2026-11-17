@@ -27,6 +27,9 @@ import { openNewPuzzleSheet } from './new-puzzle-ui';
 
 type Tool = 'tiles' | 'walls' | 'ends' | 'checkpoints';
 
+/** Rules listed on their own in the Rules sheet; the rest are grouped as the easy rules. */
+const ADVANCED_RULES: RuleId[] = ['bottlenecks', 'balance'];
+
 const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends', checkpoints: 'cells' };
 const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
@@ -265,31 +268,83 @@ export class EditorView {
     this.render();
   }
 
+  /** Whether the easy rules are listed one by one in the Rules sheet. */
+  private easyRulesExpanded = false;
+
   private openRulesSheet() {
     const body = document.createElement('div');
     body.className = 'sheet-stack';
-    // Only the rules that can apply to this puzzle (e.g. Number order needs checkpoints).
-    for (const r of rulesFor(this.puzzle)) {
+    const save = () => this.storage.saveLogicRules({ enabled: [...this.logicRules], known: ALL_RULES });
+
+    const switchRow = (label: string, hint: string | HTMLElement, checked: boolean, onChange: (on: boolean) => void, cls = '') => {
       const row = document.createElement('label');
-      row.className = 'switch-row';
+      row.className = `switch-row ${cls}`.trim();
       const text = document.createElement('span');
       text.className = 'switch-text';
       const small = document.createElement('small');
-      small.textContent = r.hint;
-      text.append(document.createTextNode(r.label), small);
+      small.append(hint);
+      text.append(document.createTextNode(label), small);
       const input = document.createElement('input');
       input.type = 'checkbox';
       input.className = 'switch';
       input.setAttribute('role', 'switch');
-      input.checked = this.logicRules.has(r.id);
-      input.addEventListener('change', () => {
-        if (input.checked) this.logicRules.add(r.id);
-        else this.logicRules.delete(r.id);
-        this.storage.saveLogicRules({ enabled: [...this.logicRules], known: ALL_RULES });
-      });
+      input.checked = checked;
+      input.addEventListener('change', () => onChange(input.checked));
       row.append(text, input);
       body.append(row);
-    }
+      return input;
+    };
+
+    const render = () => {
+      body.replaceChildren();
+      // Only the rules that can apply to this puzzle (e.g. Number order needs checkpoints).
+      const rules = rulesFor(this.puzzle);
+      const easy = rules.filter((r) => !ADVANCED_RULES.includes(r.id));
+      const advanced = rules.filter((r) => ADVANCED_RULES.includes(r.id));
+
+      const onCount = easy.filter((r) => this.logicRules.has(r.id)).length;
+      const hint = document.createElement('span');
+      hint.textContent = `${easy.map((r) => r.label).join(', ')}. `;
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'link-btn';
+      toggle.textContent = this.easyRulesExpanded ? 'Group them again' : 'Choose them one by one';
+      toggle.addEventListener('click', (ev) => {
+        ev.preventDefault(); // don't flip the switch this link sits in
+        this.easyRulesExpanded = !this.easyRulesExpanded;
+        render();
+      });
+      hint.append(toggle);
+      const group = switchRow('Easy rules', hint, onCount === easy.length, (on) => {
+        for (const r of easy) on ? this.logicRules.add(r.id) : this.logicRules.delete(r.id);
+        save();
+        render();
+      });
+      group.indeterminate = onCount > 0 && onCount < easy.length;
+
+      if (this.easyRulesExpanded) {
+        for (const r of easy) {
+          switchRow(
+            r.label,
+            r.hint,
+            this.logicRules.has(r.id),
+            (on) => {
+              on ? this.logicRules.add(r.id) : this.logicRules.delete(r.id);
+              save();
+              render();
+            },
+            'sub-rule',
+          );
+        }
+      }
+      for (const r of advanced) {
+        switchRow(r.label, r.hint, this.logicRules.has(r.id), (on) => {
+          on ? this.logicRules.add(r.id) : this.logicRules.delete(r.id);
+          save();
+        });
+      }
+    };
+    render();
     openSheet('Logic rules', body);
   }
 

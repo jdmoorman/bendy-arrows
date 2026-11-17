@@ -1,4 +1,4 @@
-import { ALL_RULES, BASIC_RULES, applyStep, logicStep, type LogicState, type RuleId } from './logic';
+import { ALL_RULES, applyStep, logicStep, type LogicState, type RuleId } from './logic';
 import {
   cellCount,
   cellRC,
@@ -83,9 +83,15 @@ export function logicSolves(p: Puzzle, rules: RuleId[]): boolean {
   return false;
 }
 
-/** Easy: the basic rules solve it. Medium: it needs the advanced rules. Hard: beyond all the rules. */
+/** Every rule except Checkerboard balance: what an Easy puzzle may need. */
+export const EASY_RULES: RuleId[] = ALL_RULES.filter((r) => r !== 'balance');
+
+/**
+ * Easy: solved without Checkerboard balance. Medium: needs Checkerboard
+ * balance. Hard: beyond all the rules.
+ */
 export function rateDifficulty(p: Puzzle): Difficulty {
-  if (logicSolves(p, BASIC_RULES)) return 'easy';
+  if (logicSolves(p, EASY_RULES)) return 'easy';
   if (logicSolves(p, ALL_RULES)) return 'medium';
   return 'hard';
 }
