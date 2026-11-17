@@ -52,10 +52,6 @@ export class PlayView {
   private checkRun: SolverRun | null = null;
   /** Hint shown after pressing Hint, until the next change. */
   private shownHint: Hint | null = null;
-  /** Reset needs a second tap within a few seconds. */
-  private resetArmed = false;
-  private resetTimer = 0;
-  private resetBtn: HTMLButtonElement;
   private solved = false;
 
   private svg: SVGSVGElement;
@@ -87,7 +83,7 @@ export class PlayView {
         <div class="toolbar-row">
           <button class="btn" data-act="undo" aria-label="Undo">${ICONS.undo}<span>Undo</span></button>
           <button class="btn" data-act="redo" aria-label="Redo">${ICONS.redo}</button>
-          <button class="btn" data-act="reset" aria-label="Reset puzzle">${ICONS.rotateLeft}</button>
+          <button class="btn" data-act="reset" aria-label="Clear the board" title="Clear the board">${ICONS.rotateLeft}</button>
           <button class="btn" data-act="hint" aria-label="Hint">${ICONS.bulb}<span>Hint</span></button>
           <button class="btn primary" data-act="check">${ICONS.check}<span>Check</span></button>
         </div>
@@ -97,8 +93,7 @@ export class PlayView {
     this.status = this.el.querySelector('.status')!;
     this.undoBtn = this.el.querySelector('[data-act=undo]')!;
     this.redoBtn = this.el.querySelector('[data-act=redo]')!;
-    this.resetBtn = this.el.querySelector('[data-act=reset]')!;
-    this.resetBtn.addEventListener('click', () => this.tapReset());
+    this.el.querySelector('[data-act=reset]')!.addEventListener('click', () => this.clearBoard());
 
     this.undoBtn.addEventListener('click', () => this.undo());
     this.redoBtn.addEventListener('click', () => this.redo());
@@ -296,29 +291,16 @@ export class PlayView {
     this.changed = false;
   }
 
-  /** First tap arms Reset; a second tap within a few seconds resets the puzzle. */
-  private tapReset() {
-    if (this.resetArmed) {
-      this.disarmReset();
-      this.playAgain();
-      return;
-    }
-    this.resetArmed = true;
-    clearTimeout(this.resetTimer);
-    this.resetTimer = window.setTimeout(() => {
-      this.disarmReset();
-      this.render();
-    }, 3000);
-    this.render();
-  }
-
-  private disarmReset() {
-    this.resetArmed = false;
-    clearTimeout(this.resetTimer);
+  /** Reset: empty the board as one undoable step. The timer, hints and checks carry on. */
+  private clearBoard() {
+    if (!this.segments.size && !this.xMarks.size) return;
+    this.history.push(this.snapshot());
+    this.segments.clear();
+    this.xMarks.clear();
+    this.afterChange();
   }
 
   private afterChange() {
-    this.disarmReset();
     this.clearCheck();
     this.shownHint = null;
     const wasSolved = this.solved;
@@ -437,20 +419,16 @@ export class PlayView {
       solved: live.solved,
     });
 
-    const resetting = this.resetArmed;
-    const kind = resetting ? 'error' : live.solved ? 'success' : hint ? (hint.kind === 'mistake' ? 'error' : 'hint') : (check?.kind ?? '');
+    const kind = live.solved ? 'success' : hint ? (hint.kind === 'mistake' ? 'error' : 'hint') : (check?.kind ?? '');
     this.status.classList.toggle('success', kind === 'success');
     this.status.classList.toggle('error', kind === 'error');
     this.status.classList.toggle('hint', kind === 'hint');
-    if (resetting) this.status.textContent = 'Tap reset again to clear your lines and restart the timer, hints and checks.';
-    else if (live.solved) this.status.textContent = live.message;
+    if (live.solved) this.status.textContent = live.message;
     else if (hint) this.status.textContent = hint.text;
     else if (check) this.status.textContent = check.text;
     else this.status.textContent = '';
 
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;
-    this.resetBtn.classList.toggle('danger', resetting);
-    this.resetBtn.setAttribute('aria-label', resetting ? 'Tap again to reset the puzzle' : 'Reset puzzle');
   }
 }

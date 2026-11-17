@@ -480,6 +480,10 @@ function bridges(n: number, cells: number[], adj: number[][], other: (e: number,
 }
 
 const MAX_CUTS = 4000;
+/** Boards up to this many tiles have Checkerboard balance tried on every rectangle. */
+const SMALL_BOARD = 100;
+/** On bigger boards, rectangles up to this many tiles (and full-width or full-height strips). */
+const RECT_AREA = 24;
 
 /**
  * Rules about areas of the board: the borders into an area (bottlenecks),
@@ -709,15 +713,22 @@ function areaRules(p: Puzzle, state: LogicState, need: Int8Array, closed: Set<nu
       const bad = balance(area);
       if (bad) return bad;
     }
-    // ...and for each strip across the whole board: the top rows, and the left columns.
-    // (The bottom rows and right columns are their complements, which give the same answer.)
-    for (let k = 1; k < p.h; k++) {
-      const bad = balance(cells.filter((c) => Math.floor(c / p.w) < k));
-      if (bad) return bad;
-    }
-    for (let k = 1; k < p.w; k++) {
-      const bad = balance(cells.filter((c) => c % p.w < k));
-      if (bad) return bad;
+    // ...and for rectangles of the board: every rectangle on a small board; on a big one,
+    // those of up to RECT_AREA tiles plus the strips that run all the way across.
+    const small = p.w * p.h <= SMALL_BOARD;
+    for (let rh = 1; rh <= p.h; rh++) {
+      for (let rw = 1; rw <= p.w; rw++) {
+        if (rh * rw < 2 || (rh === p.h && rw === p.w)) continue;
+        if (!small && rh * rw > RECT_AREA && rw !== p.w && rh !== p.h) continue;
+        for (let r0 = 0; r0 + rh <= p.h; r0++) {
+          for (let c0 = 0; c0 + rw <= p.w; c0++) {
+            const area: number[] = [];
+            for (let r = r0; r < r0 + rh; r++) for (let c = c0; c < c0 + rw; c++) if (!p.blocked.has(r * p.w + c)) area.push(r * p.w + c);
+            const bad = balance(area);
+            if (bad) return bad;
+          }
+        }
+      }
     }
   }
   return out;

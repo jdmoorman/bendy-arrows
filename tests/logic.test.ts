@@ -232,8 +232,8 @@ describe('sample difficulty', async () => {
   const { decodePuzzle } = await import('../src/codec');
   const { rateDifficulty } = await import('../src/generator');
   for (const s of SAMPLES) {
-    const expected = s.name.startsWith('Hard') ? 'hard' : s.name.startsWith('Medium') ? 'medium' : 'easy';
-    test(`${s.name} is unique and rated ${expected}`, () => {
+    const expected = s.level;
+    test(`${s.level} ${s.name} is unique and rated ${expected}`, () => {
       const p = decodePuzzle(s.code);
       expect(solve(p).status).toBe('unique');
       expect(rateDifficulty(p)).toBe(expected);

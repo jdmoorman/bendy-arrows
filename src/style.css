@@ -903,11 +903,6 @@ select {
   border-color: var(--error);
 }
 
-/* Destructive actions (an armed Reset). */
-.btn.danger {
-  color: var(--error);
-  border-color: var(--error);
-}
 
 /*
  * Wide, landscape screens: the board takes the left and the timer, messages

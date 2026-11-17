@@ -179,28 +179,31 @@ export function openLibrarySheet(ctx: LibraryContext): void {
     }
     body.append(list);
 
-    // --- Samples ---
-    body.append(el('hr', 'sheet-sep'), el('p', 'field-label', 'Samples'));
-    const samples = el('ul', 'lib-list');
-    for (const s of SAMPLES) {
-      const p = decodePuzzle(s.code);
-      const li = el('li', 'lib-item');
-      const main = el('button', 'lib-main');
-      const title = el('span', 'lib-name');
-      title.textContent = s.name;
-      const saved = storage.findByCode(s.code);
-      const solves = solveCount(storage, s.code, saved?.solved);
-      const state = !solves && saved?.progress?.segments.length ? ' · In progress' : '';
-      main.append(title, el('span', 'lib-meta', `${describe(p)}${state}`));
-      main.addEventListener('click', () => {
-        sheet.close();
-        ctx.onOpen({ puzzle: p, progress: saved?.progress, id: saved?.id, name: saved?.name ?? s.name }, 'play');
-      });
-      li.append(main);
-      markSolved(li, main, solves);
-      samples.append(li);
+    // --- Samples, grouped by difficulty ---
+    for (const [level, heading] of [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']] as const) {
+      body.append(el('hr', 'sheet-sep'), el('p', 'field-label', `${heading} samples`));
+      const samples = el('ul', 'lib-list');
+      for (const s of SAMPLES.filter((x) => x.level === level)) {
+        const p = decodePuzzle(s.code);
+        const li = el('li', 'lib-item');
+        const main = el('button', 'lib-main');
+        const title = el('span', 'lib-name');
+        title.textContent = s.name;
+        const saved = storage.findByCode(s.code);
+        const solves = solveCount(storage, s.code, saved?.solved);
+        const state = !solves && saved?.progress?.segments.length ? ' · In progress' : '';
+        // The name already says the type and size.
+        main.append(title, el('span', 'lib-meta', `${openCells(p).length} tiles${state}`));
+        main.addEventListener('click', () => {
+          sheet.close();
+          ctx.onOpen({ puzzle: p, progress: saved?.progress, id: saved?.id, name: saved?.name ?? s.name }, 'play');
+        });
+        li.append(main);
+        markSolved(li, main, solves);
+        samples.append(li);
+      }
+      body.append(samples);
     }
-    body.append(samples);
   };
   render();
 }
