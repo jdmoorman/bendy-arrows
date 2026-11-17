@@ -78,7 +78,7 @@ function facts(code: string) {
   return f;
 }
 
-/** Every saved puzzle and every sample, as table rows. */
+/** Every saved puzzle and every sample not deleted on this device, as table rows. */
 export function libraryRows(storage: Storage, ratings: Record<string, Rating>): LibRow[] {
   const rows: LibRow[] = [];
   const play = (code: string, saved?: LibraryEntry) => {
@@ -100,7 +100,9 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
     const r = ratings[e.code];
     rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: COLLECTIONS.yours, ...f, difficulty: r?.difficulty, unique: r?.unique, ...play(e.code, e), added: e.created });
   }
+  const hidden = new Set(storage.loadHiddenSamples());
   SAMPLES.forEach((s, i) => {
+    if (hidden.has(s.code)) return;
     const f = facts(s.code);
     const saved = storage.findByCode(s.code);
     rows.push({ key: `sample:${i}`, name: s.name, code: s.code, collection: COLLECTIONS[s.group ?? 'samples'], ...f, difficulty: s.level, unique: true, ...play(s.code, saved) });

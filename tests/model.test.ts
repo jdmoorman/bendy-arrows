@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createPuzzle, edgeBetween, edgeCells, edgeCount, neighbors, portCell, portCount, portEnd, portId, portSide, resizePuzzle } from '../src/model';
+import { createPuzzle, edgeBetween, edgeCells, edgeCount, neighbors, portCell, portCount, portEnd, portId, portSide, resizePuzzle, type Puzzle, type Side } from '../src/model';
 
 describe('model', () => {
   test('edge ids round-trip through edgeCells/edgeBetween', () => {
@@ -99,5 +99,38 @@ describe('transformPuzzle', async () => {
     for (const t of ['rotateLeft', 'rotateRight', 'flipH', 'flipV'] as const) {
       expect(solve(transformPuzzle(c, t), { maxSolutions: 1e9 }).solutions.length).toBe(n);
     }
+  });
+});
+
+describe('orientEnds', async () => {
+  const { orientEnds } = await import('../src/model');
+  const end = portEnd;
+  const pid = portId;
+  const sides = (p: Puzzle) => p.endpoints.map((e) => portSide(p, e.port)[0]);
+  const withEnds = (w: number, h: number, a: [Side, number], b: [Side, number]) => {
+    const p = createPuzzle(w, h);
+    p.endpoints = [end(pid(p, a[0], a[1])), end(pid(p, b[0], b[1]))];
+    p.blocked.add(1);
+    return p;
+  };
+  test('ends on opposite sides come in on the left and go out on the right', () => {
+    for (const [a, b] of [['left', 'right'], ['right', 'left'], ['top', 'bottom'], ['bottom', 'top']] as [Side, Side][]) {
+      const p = withEnds(5, 3, [a, 1], [b, 0]);
+      const q = orientEnds(p);
+      expect(sides(q)).toEqual(['left', 'right']);
+      expect(q.blocked.size).toBe(1);
+    }
+  });
+  test('keepSize never turns a non-square board, but does turn a square one', () => {
+    const tall = orientEnds(withEnds(5, 3, ['bottom', 1], ['top', 0]), true);
+    expect([tall.w, tall.h, ...sides(tall)]).toEqual([5, 3, 'top', 'bottom']);
+    const sq = orientEnds(withEnds(4, 4, ['bottom', 1], ['top', 0]), true);
+    expect(sides(sq)).toEqual(['left', 'right']);
+  });
+  test('other puzzles are left alone', () => {
+    const corner = withEnds(4, 4, ['left', 0], ['top', 2]);
+    expect(orientEnds(corner)).toBe(corner);
+    const loop = createPuzzle(4, 4);
+    expect(orientEnds(loop)).toBe(loop);
   });
 });

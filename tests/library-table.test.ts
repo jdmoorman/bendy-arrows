@@ -33,6 +33,14 @@ describe('library table', () => {
     expect(rows.find((x) => !x.entry)!.unique).toBe(true);
   });
 
+  test('deleted samples are left out', () => {
+    const store = new Storage(new MemStore());
+    store.saveHiddenSamples([SAMPLES[0].code, SAMPLES[1].code]);
+    const left = libraryRows(store, {});
+    expect(left).toHaveLength(SAMPLES.length - 2);
+    expect(left.some((r) => r.code === SAMPLES[0].code)).toBe(false);
+  });
+
   test('a rating fills in difficulty and uniqueness', () => {
     const rated = libraryRows(storage, { [encodePuzzle(mine)]: { difficulty: null, unique: false } });
     const r = rated.find((x) => x.entry)!;

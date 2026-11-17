@@ -330,3 +330,26 @@ export function transformPuzzle(p: Puzzle, t: Transform): Puzzle {
   });
   return out;
 }
+
+/**
+ * Turn a puzzle whose two frame ends are on opposite sides so the path comes
+ * in on the left and goes out on the right. With `keepSize`, a non-square
+ * board is never turned a quarter (its width and height stay put); ends on
+ * the top and bottom then come in at the top.
+ */
+export function orientEnds(p: Puzzle, keepSize = false): Puzzle {
+  if (p.endpoints.length !== 2) return p;
+  const [a, b] = p.endpoints.map((e) => portSide(p, e.port)[0]);
+  const opposite: Record<Side, Side> = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' };
+  if (opposite[a] !== b) return p;
+  const canTurn = !keepSize || p.w === p.h;
+  const steps: Record<Side, Transform | null> = {
+    left: null,
+    right: 'flipH',
+    top: canTurn ? 'rotateLeft' : null,
+    bottom: canTurn ? 'rotateRight' : 'flipV',
+  };
+  const t = steps[a];
+  return t ? transformPuzzle(p, t) : p;
+}
+

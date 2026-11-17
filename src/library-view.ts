@@ -149,6 +149,15 @@ export class LibraryView {
     this.filterBtn.classList.toggle('active', active > 0);
     const narrowed = active > 0 || this.state.search.trim() !== '';
     this.count.replaceChildren(`${shown.length === this.rows.length ? 'All' : `${shown.length} of`} ${this.rows.length} puzzles`);
+    const hidden = this.storage.loadHiddenSamples().length;
+    if (hidden) {
+      const restore = el('button', 'link-btn', `Restore ${hidden} deleted sample${hidden === 1 ? '' : 's'}`);
+      restore.addEventListener('click', () => {
+        this.storage.saveHiddenSamples([]);
+        this.refresh();
+      });
+      this.count.append(' · ', restore);
+    }
     if (narrowed) {
       const clear = el('button', 'link-btn', 'Clear search and filters');
       clear.addEventListener('click', () => {
@@ -209,18 +218,22 @@ export class LibraryView {
       edit.setAttribute('aria-label', `Edit ${r.name}`);
       edit.addEventListener('click', () => this.open(r, 'edit'));
       actions.append(edit);
-      if (r.entry) {
-        const entry = r.entry;
-        const del = el('button', 'btn icon', ICONS.clear);
-        del.setAttribute('aria-label', `Delete ${r.name}`);
-        del.addEventListener('click', () => {
+      const del = el('button', 'btn icon', ICONS.clear);
+      del.setAttribute('aria-label', `Delete ${r.name}`);
+      del.addEventListener('click', () => {
+        if (r.entry) {
+          const entry = r.entry;
           if (!confirm(`Delete “${entry.name}”?`)) return;
           this.storage.remove(entry.id);
           this.onDeleted?.(entry.id);
-          this.refresh();
-        });
-        actions.append(del);
-      }
+        } else {
+          // Samples are built in: deleting one hides it on this device.
+          if (!confirm(`Delete the sample “${r.name}” from your library? You can bring deleted samples back later.`)) return;
+          this.storage.saveHiddenSamples([...this.storage.loadHiddenSamples(), r.code]);
+        }
+        this.refresh();
+      });
+      actions.append(del);
       tr.append(actions);
       tbody.append(tr);
     }

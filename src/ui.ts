@@ -11,6 +11,8 @@ export function openSheet(title: string, body: HTMLElement): { close(): void; di
     </div>
     <div class="sheet-body"></div>`;
   dialog.querySelector('.sheet-title')!.textContent = title;
+  // Without a title, the close button floats in the corner instead of taking a row.
+  if (!title) dialog.classList.add('untitled');
   dialog.querySelector('.sheet-body')!.append(body);
   document.body.append(dialog);
   const close = () => dialog.close();

@@ -263,6 +263,29 @@ export function logicStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>,
   return result;
 }
 
+/** Where running the rules to the end got to. */
+export interface LogicRun {
+  state: LogicState;
+  /** How many rounds of deductions were applied. */
+  rounds: number;
+  solved: boolean;
+  contradiction?: Contradiction;
+}
+
+/** Apply every deduction the rules find, round after round, until they find nothing more. */
+export function runLogic(p: Puzzle, rules: Iterable<RuleId>, start: LogicState = { segments: new Set(), xs: new Set() }): LogicRun {
+  const chosen = [...rules];
+  let state = start;
+  for (let rounds = 0; rounds < 1000; rounds++) {
+    const step = logicStep(p, state, chosen);
+    if (step.contradiction) return { state, rounds, solved: false, contradiction: step.contradiction };
+    if (step.solved) return { state, rounds, solved: true };
+    if (!step.segments.length && !step.xs.length) return { state, rounds, solved: false };
+    state = applyStep(state, step);
+  }
+  return { state, rounds: 1000, solved: false };
+}
+
 /** Simplest rules first: the order hints are chosen in. */
 export const HINT_ORDER: RuleId[] = ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'order', 'noSeal', 'bottlenecks', 'balance', 'spacing', 'trial'];
 

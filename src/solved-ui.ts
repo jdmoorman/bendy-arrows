@@ -24,7 +24,6 @@ const dateFmt = new Intl.DateTimeFormat(undefined, {
 export function openSolvedSheet(opts: {
   ms: number;
   result: RecordResult;
-  boardTitle: string;
   onPlayAgain: () => void;
   /** Pick a different puzzle (for now, the library). */
   onAnotherPuzzle: () => void;
@@ -36,7 +35,6 @@ export function openSolvedSheet(opts: {
   time.textContent = formatDuration(opts.ms);
   body.append(time);
 
-  body.append(el('p', 'field-label', opts.boardTitle));
   const list = el('ol', 'times');
   const shown = entries.slice(0, 10);
   // Make sure the new time is visible even if it is outside the top 10.
@@ -63,7 +61,8 @@ export function openSolvedSheet(opts: {
   row.append(again, another);
   body.append(row);
 
-  const sheet = openSheet('Solved!', body);
+  const sheet = openSheet('', body);
+  sheet.dialog.setAttribute('aria-label', 'Solved');
   again.addEventListener('click', () => {
     sheet.close();
     opts.onPlayAgain();

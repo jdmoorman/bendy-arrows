@@ -7,6 +7,7 @@ import {
   edgeCells,
   neighbors,
   openCells,
+  orientEnds,
   portEnd,
   portCell,
   portId,
@@ -132,7 +133,8 @@ export function generate(opts: GenOptions, onProgress?: (attempt: number) => voi
     if (!p) continue;
     if (opts.maxObstacles !== undefined && obstacleCount(p) > opts.maxObstacles) continue;
     const difficulty = rateDifficulty(p);
-    const result = { puzzle: p, difficulty, attempts: attempt };
+    // Paths with ends on opposite sides come in on the left and go out on the right.
+    const result = { puzzle: orientEnds(p, true), difficulty, attempts: attempt };
     if (wanted === 'any' || difficulty === wanted) return result;
     const off = (r: GenResult) => Math.abs(DIFFICULTIES.indexOf(r.difficulty) - target);
     if (!best || off(result) < off(best)) best = result;

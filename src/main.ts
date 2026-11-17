@@ -78,7 +78,6 @@ play.onSolved = async (ms, stats, isNew) => {
   openSolvedSheet({
     ms,
     result,
-    boardTitle: leaderboard.title,
     onPlayAgain: () => play.playAgain(),
     onAnotherPuzzle: openLibrary,
   });

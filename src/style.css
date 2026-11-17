@@ -523,6 +523,15 @@ select {
   gap: var(--gap);
   padding: 10px 10px 4px 18px;
 }
+.sheet.untitled {
+  position: relative;
+}
+.sheet.untitled .sheet-head {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+}
 
 .sheet-title {
   flex: 1;

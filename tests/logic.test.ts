@@ -326,3 +326,19 @@ describe('more rules', async () => {
     for (const e of step.xs) expect(sol.has(e)).toBe(false);
   });
 });
+
+describe('runLogic', async () => {
+  const { runLogic } = await import('../src/logic');
+  test('runs the rules to the end, the same as stepping', () => {
+    const p = createPuzzle(4, 4);
+    const run = runLogic(p, ALL_RULES);
+    const stepped = runToEnd(p, ALL_RULES);
+    expect(run.solved).toBe(stepped.solved);
+    expect([...run.state.segments].sort()).toEqual([...stepped.state.segments].sort());
+    expect(run.rounds).toBeGreaterThan(0);
+  });
+  test('stops when the rules find nothing', () => {
+    const run = runLogic(createPuzzle(4, 4), []);
+    expect(run).toMatchObject({ rounds: 0, solved: false });
+  });
+});

@@ -1,3 +1,4 @@
+import { encodePuzzle } from './codec';
 import { History } from './history';
 import { ICONS } from './icons';
 import { attachBoardInput, type DragKind } from './input';
@@ -21,6 +22,7 @@ import {
 } from './model';
 import { padFor, renderBoard } from './render';
 import { ALL_RULES, applyStep, BASIC_RULES, findHint, RULES, rulesFor, type LogicState, type RuleId } from './logic';
+import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
 import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from './new-puzzle-ui';
@@ -92,6 +94,10 @@ export class EditorView {
   private logicBackBtn!: HTMLButtonElement;
   private logicNote = '';
   private logicRules = loadRuleChoice(new Storage());
+  /** Apply the chosen rules after every change, until they get stuck. */
+  private autoLogic = new Storage().loadLogicRules()?.auto === true;
+  private autoWorker: Worker | null = null;
+  private autoId = 0;
 
   constructor() {
     this.el = document.createElement('section');
@@ -146,6 +152,7 @@ export class EditorView {
     this.logicBackBtn.addEventListener('click', () => this.stepLogicBack());
     q<HTMLButtonElement>('[data-logic=fast]').addEventListener('click', () => this.fastForwardLogic());
     q<HTMLButtonElement>('[data-logic=reset]').addEventListener('click', () => {
+      this.cancelAutoLogic();
       this.resetLogic();
       this.clearMessage();
       this.render();
@@ -212,6 +219,7 @@ export class EditorView {
     this.history.clear();
     this.clearMessage();
     this.render();
+    if (this.autoLogic) this.runAutoLogic();
     for (const fn of this.changeListeners) fn(this.puzzle);
   }
 
@@ -228,6 +236,7 @@ export class EditorView {
   }
 
   private stepLogic() {
+    this.cancelAutoLogic();
     this.clearMessage();
     const p = this.puzzle;
     if (modeOf(p) === 'path' && endpointCells(p).length < 2) {
@@ -268,6 +277,7 @@ export class EditorView {
 
   /** Take hint-sized steps with the chosen easy rules until they find nothing more. */
   private fastForwardLogic() {
+    this.cancelAutoLogic();
     const p = this.puzzle;
     if (modeOf(p) === 'path' && endpointCells(p).length < 2) {
       this.clearMessage();
@@ -302,7 +312,46 @@ export class EditorView {
     }
   }
 
+  /** Run the chosen rules to the end in a worker, replacing any run still going. */
+  private runAutoLogic() {
+    const p = this.puzzle;
+    this.cancelAutoLogic();
+    if (modeOf(p) === 'path' && endpointCells(p).length < 2) return;
+    const id = ++this.autoId;
+    this.autoWorker = new Worker(new URL('./logic.worker.ts', import.meta.url), { type: 'module' });
+    this.autoWorker.onmessage = (ev: MessageEvent<LogicReply>) => {
+      const r = ev.data;
+      if (r.id !== this.autoId) return;
+      this.cancelAutoLogic();
+      this.resetLogic();
+      this.logic = { segments: new Set(r.segments), xs: new Set(r.xs) };
+      // Count the automatic run as one step, so Back clears it and Step carries on from it.
+      if (r.segments.length || r.xs.length) {
+        this.logicHistory.push({ logic: { segments: new Set(), xs: new Set() }, steps: 0 });
+        this.logicSteps = 1;
+      }
+      if (r.contradiction) {
+        this.logicBad = r.contradiction.cells ?? [r.contradiction.cell];
+        this.setMessage(`Contradiction: ${r.contradiction.reason} This puzzle has no solution.`, 'error');
+        return;
+      }
+      if (r.solved) {
+        this.setMessage('Auto-apply: the chosen rules solve it.', 'success');
+        return;
+      }
+      this.logicNote = r.segments.length || r.xs.length ? 'Auto-apply: the chosen rules get this far, then get stuck.' : 'Auto-apply: the chosen rules find nothing to fill in.';
+      this.render();
+    };
+    this.autoWorker.postMessage({ id, code: encodePuzzle(p), rules: [...this.logicRules] } satisfies LogicRequest);
+  }
+
+  private cancelAutoLogic() {
+    this.autoWorker?.terminate();
+    this.autoWorker = null;
+  }
+
   private stepLogicBack() {
+    this.cancelAutoLogic();
     const prev = this.logicHistory.pop();
     if (!prev) return;
     this.clearMessage();
@@ -369,7 +418,11 @@ export class EditorView {
   private openRulesSheet() {
     const body = document.createElement('div');
     body.className = 'sheet-stack';
-    const save = () => this.storage.saveLogicRules({ enabled: [...this.logicRules], known: ALL_RULES });
+    const save = () => {
+      this.storage.saveLogicRules({ enabled: [...this.logicRules], known: ALL_RULES, auto: this.autoLogic });
+      // A different choice of rules gets a fresh automatic run.
+      if (this.autoLogic) this.runAutoLogic();
+    };
 
     const switchRow = (label: string, hint: string | HTMLElement, checked: boolean, onChange: (on: boolean) => void, cls = '') => {
       const row = document.createElement('label');
@@ -392,6 +445,17 @@ export class EditorView {
 
     const render = () => {
       body.replaceChildren();
+      switchRow('Auto-apply', 'After every change, apply the chosen rules until they get stuck.', this.autoLogic, (on) => {
+        this.autoLogic = on;
+        if (!on) {
+          this.cancelAutoLogic();
+          this.resetLogic();
+          this.render();
+        }
+        save();
+      });
+      body.append(document.createElement('hr'));
+      body.lastElementChild!.className = 'sheet-sep';
       // Only the rules that can apply to this puzzle (e.g. Number order needs checkpoints).
       const rules = rulesFor(this.puzzle);
       const easy = rules.filter((r) => !ADVANCED_RULES.includes(r.id));
@@ -519,6 +583,7 @@ export class EditorView {
     this.resetLogic();
     this.clearMessage();
     this.render();
+    if (this.autoLogic) this.runAutoLogic();
     for (const fn of this.changeListeners) fn(this.puzzle);
   }
 

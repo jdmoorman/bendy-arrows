@@ -36,6 +36,7 @@ const GENERATOR_KEY = 'hamiltonian.generator.v1';
 const DAILY_KEY = 'hamiltonian.daily.v1';
 const TABLE_KEY = 'hamiltonian.libtable.v1';
 const RATINGS_KEY = 'hamiltonian.ratings.v1';
+const HIDDEN_KEY = 'hamiltonian.hiddensamples.v1';
 
 /** Per-device display preferences. */
 export interface Settings {
@@ -143,18 +144,18 @@ export class Storage {
    * Enabled logic-helper rules and the rules that existed when they were
    * saved, or null if never saved. (Old saves are a plain list: `known` is missing.)
    */
-  loadLogicRules(): { enabled: string[]; known?: string[] } | null {
+  loadLogicRules(): { enabled: string[]; known?: string[]; auto?: boolean } | null {
     const r = this.read<unknown>(LOGIC_KEY, null);
     const strings = (x: unknown) => (Array.isArray(x) ? x.filter((y): y is string => typeof y === 'string') : []);
     if (Array.isArray(r)) return { enabled: strings(r) };
     if (r && typeof r === 'object' && 'enabled' in r) {
-      const o = r as { enabled: unknown; known?: unknown };
-      return { enabled: strings(o.enabled), known: Array.isArray(o.known) ? strings(o.known) : undefined };
+      const o = r as { enabled: unknown; known?: unknown; auto?: unknown };
+      return { enabled: strings(o.enabled), known: Array.isArray(o.known) ? strings(o.known) : undefined, auto: o.auto === true };
     }
     return null;
   }
 
-  saveLogicRules(choice: { enabled: string[]; known: string[] }): void {
+  saveLogicRules(choice: { enabled: string[]; known: string[]; auto?: boolean }): void {
     this.write(LOGIC_KEY, choice);
   }
 
@@ -176,6 +177,16 @@ export class Storage {
 
   saveLibraryTable(state: TableState): void {
     this.write(TABLE_KEY, state);
+  }
+
+  /** Codes of built-in samples deleted from this device's library. */
+  loadHiddenSamples(): string[] {
+    const h = this.read<unknown>(HIDDEN_KEY, []);
+    return Array.isArray(h) ? h.filter((x): x is string => typeof x === 'string') : [];
+  }
+
+  saveHiddenSamples(codes: string[]): void {
+    this.write(HIDDEN_KEY, codes);
   }
 
   /** Difficulty and uniqueness of saved puzzles, by code, worked out in the background. */
