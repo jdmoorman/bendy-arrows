@@ -1,0 +1,37 @@
+import { encodePuzzle } from './codec';
+import type { Puzzle } from './model';
+import type { SolveResult } from './solver';
+import type { SolverMessage, SolverRequest } from './solver.worker';
+
+export interface SolverRun {
+  result: Promise<SolveResult>;
+  cancel(): void;
+}
+
+/** Solve in a background worker so the page stays responsive. */
+export function solveInBackground(p: Puzzle, onProgress?: (nodes: number) => void, opts: Omit<SolverRequest, 'code'> = {}): SolverRun {
+  const worker = new Worker(new URL('./solver.worker.ts', import.meta.url), { type: 'module' });
+  let settle: { resolve: (r: SolveResult) => void; reject: (e: Error) => void };
+  const result = new Promise<SolveResult>((resolve, reject) => (settle = { resolve, reject }));
+  worker.onmessage = (ev: MessageEvent<SolverMessage>) => {
+    const m = ev.data;
+    if (m.type === 'progress') onProgress?.(m.nodes);
+    else {
+      worker.terminate();
+      if (m.type === 'done') settle.resolve(m.result);
+      else settle.reject(new Error(m.message));
+    }
+  };
+  worker.onerror = (ev) => {
+    worker.terminate();
+    settle.reject(new Error(ev.message || 'Solver failed.'));
+  };
+  worker.postMessage({ code: encodePuzzle(p), ...opts } satisfies SolverRequest);
+  return {
+    result,
+    cancel() {
+      worker.terminate();
+      settle.reject(new DOMException('Cancelled', 'AbortError'));
+    },
+  };
+}

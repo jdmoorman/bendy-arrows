@@ -7,7 +7,8 @@ import { CELL, PAD } from './render';
  * Three gesture kinds:
  *   - 'path':  drag from tile to tile (onStep for each move between adjacent
  *              tiles); tap a border → onTapEdge; tap a tile → onTapCell;
- *              long-press or right-click a border → onSecondaryEdge.
+ *              right-click a border → onSecondaryEdge. A drag that starts
+ *              on a border draws from the tile it started in.
  *   - 'edges': every border the pointer comes nearest to is painted
  *              (onPaintEdge), starting with the one under the initial touch.
  *   - 'cells': every tile the pointer touches is painted (onPaintCell).
@@ -25,7 +26,7 @@ export interface BoardHandlers {
   onPathStart?(cell: number): void;
   onTapEdge?(edge: number): void;
   onTapCell?(cell: number): void;
-  /** Right-click or long-press on a border. */
+  /** Right-click on a border. */
   onSecondaryEdge?(edge: number): void;
   onPaintEdge?(edge: number, first: boolean): void;
   onPaintCell?(cell: number, first: boolean): void;
@@ -44,7 +45,6 @@ export interface Hit {
 export const EDGE_TOLERANCE = 0.28;
 /** How far into a new tile a drag must reach before it counts (reduces jitter at corners). */
 const ENTER_MARGIN = 0.12;
-const LONG_PRESS_MS = 450;
 
 /**
  * Classify a point given in tile units (x = column, y = row, fractional).
@@ -87,8 +87,6 @@ export function attachBoardInput(svg: SVGSVGElement, getPuzzle: () => Puzzle, h:
     lastCell: number;
     lastEdge: number;
     moved: boolean;
-    longPressed: boolean;
-    timer: number;
   } | null = null;
 
   const toGrid = (ev: PointerEvent | MouseEvent): [number, number] => {
@@ -103,7 +101,6 @@ export function attachBoardInput(svg: SVGSVGElement, getPuzzle: () => Puzzle, h:
 
   const finish = () => {
     if (!active) return;
-    clearTimeout(active.timer);
     active = null;
     h.onGestureEnd?.();
   };
@@ -134,8 +131,6 @@ export function attachBoardInput(svg: SVGSVGElement, getPuzzle: () => Puzzle, h:
       lastCell: hit.cell,
       lastEdge: hit.edge,
       moved: false,
-      longPressed: false,
-      timer: 0,
     };
     h.onGestureStart?.();
     if (kind === 'edges') {
@@ -144,20 +139,11 @@ export function attachBoardInput(svg: SVGSVGElement, getPuzzle: () => Puzzle, h:
       h.onPaintCell?.(hit.cell, true);
     } else {
       h.onPathStart?.(hit.cell);
-      if (hit.edge >= 0) {
-        const a = active;
-        a.timer = window.setTimeout(() => {
-          if (active !== a || a.moved) return;
-          a.longPressed = true;
-          navigator.vibrate?.(15);
-          h.onSecondaryEdge?.(hit.edge);
-        }, LONG_PRESS_MS);
-      }
     }
   };
 
   const onMove = (ev: PointerEvent) => {
-    if (!active || ev.pointerId !== active.id || active.longPressed) return;
+    if (!active || ev.pointerId !== active.id) return;
     const p = getPuzzle();
     const [x, y] = toGrid(ev);
     if (active.kind === 'edges') {
@@ -177,7 +163,6 @@ export function attachBoardInput(svg: SVGSVGElement, getPuzzle: () => Puzzle, h:
     const inside = Math.min(fx, 1 - fx, fy, 1 - fy) >= ENTER_MARGIN || x < 0 || y < 0 || x >= p.w || y >= p.h;
     if (!inside) return;
     active.moved = true;
-    clearTimeout(active.timer);
     if (active.kind === 'cells') {
       active.lastCell = hit.cell;
       h.onPaintCell?.(hit.cell, false);
@@ -195,7 +180,7 @@ export function attachBoardInput(svg: SVGSVGElement, getPuzzle: () => Puzzle, h:
   const onUp = (ev: PointerEvent) => {
     if (!active || ev.pointerId !== active.id) return;
     const a = active;
-    if (a.kind === 'path' && !a.moved && !a.longPressed) {
+    if (a.kind === 'path' && !a.moved) {
       if (a.start.edge >= 0) h.onTapEdge?.(a.start.edge);
       else h.onTapCell?.(a.start.cell);
     }

@@ -10,8 +10,6 @@ export interface Progress {
   xMarks: number[];
 }
 
-type Tool = 'line' | 'x';
-
 export class PlayView {
   readonly el: HTMLElement;
   /** Called after every change to the player's marks. */
@@ -21,7 +19,6 @@ export class PlayView {
   private segments = new Set<number>();
   private xMarks = new Set<number>();
   private history = new History<Progress>();
-  private tool: Tool = 'line';
   /** Full check result shown after pressing Check, until the next change. */
   private shownCheck: CheckResult | null = null;
   private solved = false;
@@ -30,13 +27,11 @@ export class PlayView {
   private status: HTMLElement;
   private undoBtn: HTMLButtonElement;
   private redoBtn: HTMLButtonElement;
-  private toolBtns: Record<Tool, HTMLButtonElement>;
 
   // Per-gesture state.
   private before: Progress | null = null;
   private changed = false;
   private trail: number[] = [];
-  private paintAdd = true;
 
   constructor() {
     this.el = document.createElement('section');
@@ -45,12 +40,6 @@ export class PlayView {
       <div class="board-wrap"><svg class="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Puzzle board"></svg></div>
       <p class="status" role="status" aria-live="polite"></p>
       <div class="toolbar">
-        <div class="toolbar-row">
-          <div class="segmented" role="group" aria-label="Drawing tool">
-            <button class="seg-btn" data-tool="line" aria-pressed="true">${ICONS.line}<span>Line</span></button>
-            <button class="seg-btn" data-tool="x" aria-pressed="false">${ICONS.x}<span>X mark</span></button>
-          </div>
-        </div>
         <div class="toolbar-row">
           <button class="btn" data-act="undo" aria-label="Undo">${ICONS.undo}</button>
           <button class="btn" data-act="redo" aria-label="Redo">${ICONS.redo}</button>
@@ -62,19 +51,14 @@ export class PlayView {
     this.status = this.el.querySelector('.status')!;
     this.undoBtn = this.el.querySelector('[data-act=undo]')!;
     this.redoBtn = this.el.querySelector('[data-act=redo]')!;
-    this.toolBtns = {
-      line: this.el.querySelector('[data-tool=line]')!,
-      x: this.el.querySelector('[data-tool=x]')!,
-    };
 
-    for (const t of ['line', 'x'] as Tool[]) this.toolBtns[t].addEventListener('click', () => this.setTool(t));
     this.undoBtn.addEventListener('click', () => this.undo());
     this.redoBtn.addEventListener('click', () => this.redo());
     this.el.querySelector('[data-act=clear]')!.addEventListener('click', () => this.clear());
     this.el.querySelector('[data-act=check]')!.addEventListener('click', () => this.check());
 
     attachBoardInput(this.svg, () => this.puzzle, {
-      kind: () => (this.tool === 'x' ? 'edges' : 'path'),
+      kind: () => 'path',
       onGestureStart: () => {
         this.before = this.snapshot();
         this.changed = false;
@@ -85,13 +69,9 @@ export class PlayView {
         this.trail = [cell];
       },
       onStep: (from, to) => this.step(from, to),
-      onTapEdge: (e) => this.toggleSegment(e),
+      // Tapping a border (or right-clicking it) toggles an X there.
+      onTapEdge: (e) => this.toggleX(e),
       onSecondaryEdge: (e) => this.toggleX(e),
-      onPaintEdge: (e, first) => {
-        if (!this.canMark(e)) return;
-        if (first) this.paintAdd = !this.xMarks.has(e);
-        this.setX(e, this.paintAdd);
-      },
     });
   }
 
@@ -108,6 +88,10 @@ export class PlayView {
 
   get progress(): Progress {
     return this.snapshot();
+  }
+
+  get isSolved(): boolean {
+    return this.solved;
   }
 
   handleKey(ev: KeyboardEvent): boolean {
@@ -130,12 +114,6 @@ export class PlayView {
   private restore(s: Progress) {
     this.segments = new Set(s.segments);
     this.xMarks = new Set(s.xMarks);
-  }
-
-  private setTool(t: Tool) {
-    this.tool = t;
-    for (const k of ['line', 'x'] as Tool[]) this.toolBtns[k].setAttribute('aria-pressed', String(k === t));
-    this.render();
   }
 
   /** A border can hold an X if a segment could ever go there. */
@@ -165,11 +143,6 @@ export class PlayView {
     }
     this.changed = true;
     this.render();
-  }
-
-  private toggleSegment(e: number) {
-    if (!canPlace(this.puzzle, e) || this.puzzle.givens.has(e)) return;
-    this.setSegment(e, !this.segments.has(e));
   }
 
   private toggleX(e: number) {
@@ -268,10 +241,9 @@ export class PlayView {
   }
 
   private hint(): string {
-    if (this.tool === 'x') return 'Tap or drag along borders to mark where the path cannot go.';
     const p = this.puzzle;
     const goal = p.mode === 'cycle' ? 'Draw one loop through every open tile.' : 'Draw one path through every open tile.';
     const ends = p.mode === 'path' && p.endpoints.length ? ' The path must end in the circled tile' + (p.endpoints.length > 1 ? 's.' : '.') : '';
-    return goal + ends + ' Long-press a border for an X.';
+    return goal + ends + ' Tap a border to mark it with an X.';
   }
 }

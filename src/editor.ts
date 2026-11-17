@@ -29,7 +29,7 @@ const TOOL_HINT: Record<Tool, string> = {
 export class EditorView {
   readonly el: HTMLElement;
   /** Called after every change to the puzzle. */
-  onChange?: (p: Puzzle) => void;
+  readonly changeListeners: ((p: Puzzle) => void)[] = [];
   /** Called when the user asks to play the puzzle. */
   onPlay?: () => void;
 
@@ -151,6 +151,7 @@ export class EditorView {
     this.history.clear();
     this.clearMessage();
     this.render();
+    for (const fn of this.changeListeners) fn(this.puzzle);
   }
 
   /** Show a message under the board until the next edit. */
@@ -222,7 +223,7 @@ export class EditorView {
   private afterChange() {
     this.clearMessage();
     this.render();
-    this.onChange?.(this.puzzle);
+    for (const fn of this.changeListeners) fn(this.puzzle);
   }
 
   private undo() {
