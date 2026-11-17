@@ -26,7 +26,7 @@ The app opens on a sample puzzle in the **Play** tab.
 - **Tap an empty border** between two tiles to mark it with an X (the path does not go there). Tap again to clear it. Right-click toggles an X with a mouse.
 - Segments can't enter black tiles or cross walls. Loops and branches are allowed while you work; they are highlighted in red.
 - **Undo / Redo** (or Ctrl+Z / Ctrl+Shift+Z), **Clear**, and **Check**, which highlights missed tiles and bad ends.
-- The board turns green when the puzzle is solved.
+- The board turns green when the puzzle is solved, and a **Solved!** sheet shows your time and your past times for that puzzle (fastest first). **Play again** starts a fresh attempt. The time is tracked from when the puzzle is loaded (Clear starts it over), only while Play is on screen; it isn't shown while you play unless you turn on **Show timer** in Settings.
 
 ## Creating (Create tab)
 
@@ -43,7 +43,7 @@ The app opens on a sample puzzle in the **Play** tab.
 - **Share** button (top right): send a link with the phone's share sheet or copy it, export or import JSON, or paste a link or code to open a puzzle. Links look like `…/#p=CODE`. The puzzle format is versioned 0.x while the app is pre-release (currently 0.5); older 0.x links still open.
 - **Library** button: save the current puzzle under a name, then reopen, edit or delete saved puzzles. Progress on saved puzzles is kept automatically. The current puzzle, your progress and any unsaved editor work are restored when you come back.
 
-- **Settings** button (gear): turn the faint checkerboard shading on or off. Settings are remembered on this device.
+- **Settings** button (gear): checkerboard shading (on by default) and **Show timer** (off by default). Settings are remembered on this device.
 
 Everything is stored locally in your browser; nothing is sent anywhere.
 

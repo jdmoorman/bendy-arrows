@@ -29,14 +29,17 @@ export interface Session {
 const LIBRARY_KEY = 'hamiltonian.library.v1';
 const SESSION_KEY = 'hamiltonian.session.v1';
 const SETTINGS_KEY = 'hamiltonian.settings.v1';
+const TIMES_KEY = 'hamiltonian.times.v1';
 
 /** Per-device display preferences. */
 export interface Settings {
   /** Shade alternate tiles faintly. */
   checkerboard: boolean;
+  /** Show the solve timer while playing. */
+  showTimer: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { checkerboard: true };
+export const DEFAULT_SETTINGS: Settings = { checkerboard: true, showTimer: false };
 
 export interface KeyValueStore {
   getItem(key: string): string | null;
@@ -112,6 +115,18 @@ export class Storage {
     const e = this.get(id);
     if (!e || e.code !== code) return;
     this.put({ ...e, progress, solved: solved || !!e.solved, updated: Date.now() });
+  }
+
+  /** Solve times for a puzzle (by share code), as stored. */
+  loadTimes(code: string): { ms: number; at: number }[] {
+    const all = this.read<Record<string, { ms: number; at: number }[]>>(TIMES_KEY, {});
+    const list = all && typeof all === 'object' ? all[code] : undefined;
+    return Array.isArray(list) ? list.filter((t) => t && typeof t.ms === 'number' && typeof t.at === 'number') : [];
+  }
+
+  saveTimes(code: string, times: { ms: number; at: number }[]): void {
+    const all = this.read<Record<string, { ms: number; at: number }[]>>(TIMES_KEY, {});
+    this.write(TIMES_KEY, { ...(all && typeof all === 'object' ? all : {}), [code]: times });
   }
 
   loadSettings(): Settings {

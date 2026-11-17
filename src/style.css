@@ -737,3 +737,66 @@ select {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ---------- Solved sheet ---------- */
+.solved-time {
+  margin: 4px 0 0;
+  text-align: center;
+  font-size: 3rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--success);
+}
+
+.solved-sub {
+  margin: 0 0 6px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.times {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.time-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.time-row.current {
+  outline: 2px solid var(--success);
+  font-weight: 600;
+}
+
+.time-rank {
+  width: 2ch;
+  color: var(--text-muted);
+}
+
+.time-value {
+  flex: 1;
+}
+
+.time-date {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.play-timer {
+  margin: 0;
+  text-align: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}

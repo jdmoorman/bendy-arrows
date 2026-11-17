@@ -1,4 +1,5 @@
 import { History } from './history';
+import { formatTime, SolveTimer } from './timer';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
 import { cellEdges, edgeBetween, isUsableEdge, modeOf, type Puzzle } from './model';
@@ -8,6 +9,10 @@ import { canPlace, checkSolution, type CheckResult } from './rules';
 export interface Progress {
   segments: number[];
   xMarks: number[];
+  /** Time spent on the current attempt so far (never shown while playing). */
+  elapsedMs?: number;
+  /** The current attempt has already been solved and its time recorded. */
+  recorded?: boolean;
 }
 
 /** Describe the puzzle's fixed ends for the hint line. */
@@ -19,6 +24,13 @@ export class PlayView {
   readonly el: HTMLElement;
   /** Called after every change to the player's marks. */
   onProgress?: (progress: Progress, solved: boolean) => void;
+  /** Called once per attempt when the puzzle is solved, with the solve time. */
+  onSolved?: (elapsedMs: number) => void;
+
+  private timer = new SolveTimer();
+  private recorded = false;
+  private timerEl!: HTMLElement;
+  private timerTick = 0;
 
   private puzzle!: Puzzle;
   private segments = new Set<number>();
@@ -50,6 +62,7 @@ export class PlayView {
     this.el = document.createElement('section');
     this.el.className = 'view play-view';
     this.el.innerHTML = `
+      <p class="play-timer hidden" aria-label="Solve time"></p>
       <div class="board-wrap"><svg class="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Puzzle board"></svg></div>
       <p class="status" role="status" aria-live="polite"></p>
       <div class="toolbar">
@@ -61,6 +74,7 @@ export class PlayView {
         </div>
       </div>`;
     this.svg = this.el.querySelector('svg')!;
+    this.timerEl = this.el.querySelector('.play-timer')!;
     this.status = this.el.querySelector('.status')!;
     this.undoBtn = this.el.querySelector('[data-act=undo]')!;
     this.redoBtn = this.el.querySelector('[data-act=redo]')!;
@@ -118,11 +132,44 @@ export class PlayView {
     this.history.clear();
     this.shownCheck = null;
     this.solved = checkSolution(p, this.segments).solved;
+    // A puzzle that opens already solved does not get a new time.
+    this.recorded = !!progress?.recorded || this.solved;
+    this.timer.reset(progress?.elapsedMs ?? 0, this.recorded);
     this.render();
   }
 
+  /** Start a new attempt: empty board and a fresh timer. */
+  playAgain(): void {
+    this.segments.clear();
+    this.xMarks.clear();
+    this.history.clear();
+    this.shownCheck = null;
+    this.solved = false;
+    this.recorded = false;
+    this.timer.reset(0);
+    this.render();
+    this.onProgress?.(this.progress, false);
+  }
+
+  /** Show or hide the running solve time (hidden by default). */
+  setShowTimer(show: boolean): void {
+    this.timerEl.classList.toggle('hidden', !show);
+    clearInterval(this.timerTick);
+    if (show) {
+      const update = () => (this.timerEl.textContent = formatTime(this.timer.elapsed));
+      update();
+      this.timerTick = window.setInterval(update, 500);
+    }
+  }
+
+  /** Whether the play view is in front of the player (so the timer may run). */
+  setActive(active: boolean): void {
+    this.timer.setActive(active);
+  }
+
+  /** Marks plus the attempt's timing, for saving. */
   get progress(): Progress {
-    return this.snapshot();
+    return { ...this.snapshot(), elapsedMs: Math.round(this.timer.elapsed), recorded: this.recorded };
   }
 
   get isSolved(): boolean {
@@ -216,8 +263,14 @@ export class PlayView {
     const wasSolved = this.solved;
     this.solved = checkSolution(this.puzzle, this.segments).solved;
     if (this.solved && !wasSolved) navigator.vibrate?.([30, 60, 30]);
+    const firstSolve = this.solved && !this.recorded;
+    if (firstSolve) {
+      this.timer.stop();
+      this.recorded = true;
+    }
     this.render();
-    this.onProgress?.(this.snapshot(), this.solved);
+    this.onProgress?.(this.progress, this.solved);
+    if (firstSolve) this.onSolved?.(this.timer.elapsed);
   }
 
   private undo() {
@@ -234,8 +287,14 @@ export class PlayView {
     this.afterChange();
   }
 
+  /** Clear the board and start the attempt (and its timer) over. */
   private clear() {
-    if (!this.segments.size && !this.xMarks.size) return;
+    this.timer.reset(0);
+    this.recorded = false;
+    if (!this.segments.size && !this.xMarks.size) {
+      this.onProgress?.(this.progress, this.solved);
+      return;
+    }
     this.history.push(this.snapshot());
     this.segments.clear();
     this.xMarks.clear();

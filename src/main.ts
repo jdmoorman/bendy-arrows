@@ -10,6 +10,8 @@ import { SAMPLES, samplePuzzle } from './samples';
 import { openShareSheet, puzzleFromHash } from './share';
 import { openSettingsSheet, applySettings } from './settings-ui';
 import { Storage } from './storage';
+import { LocalLeaderboard } from './leaderboard';
+import { openSolvedSheet } from './solved-ui';
 import { applyTheme, DEFAULT_THEME } from './themes';
 import { toast } from './ui';
 
@@ -34,12 +36,14 @@ app.innerHTML = `
 
 const storage = new Storage();
 let settings = storage.loadSettings();
+const leaderboard = new LocalLeaderboard(storage);
 applySettings(settings);
 const views = app.querySelector('.views')!;
 const titleEl = app.querySelector<HTMLElement>('.app-title')!;
 const play = new PlayView();
 const editor = new EditorView();
 views.append(play.el, editor.el);
+play.setShowTimer(settings.showTimer);
 
 /** The puzzle currently loaded in the play view, and where it came from. */
 let playing: Puzzle = samplePuzzle();
@@ -57,6 +61,18 @@ function requestPlay() {
 
 editor.onPlay = requestPlay;
 attachUniquenessCheck(editor);
+
+play.onSolved = async (ms) => {
+  const code = playingCode;
+  const result = await leaderboard.record(code, ms);
+  if (code !== playingCode) return;
+  openSolvedSheet({ ms, result, boardTitle: leaderboard.title, onPlayAgain: () => play.playAgain() });
+};
+
+/** The timer runs only while Play is in front of the player. */
+function updateTimerActivity() {
+  play.setActive(tab === 'play' && document.visibilityState === 'visible');
+}
 
 play.onProgress = (progress, solved) => {
   if (libraryId) storage.updateProgress(libraryId, playingCode, progress, solved);
@@ -113,7 +129,9 @@ function setTab(t: Tab) {
     const saved = storage.findByCode(playingCode);
     libraryId = saved?.id;
     puzzleName = saved?.name;
-    play.load(playing, saved?.progress ?? play.progress);
+    // An edited puzzle is a new puzzle: keep the marks that still fit, but not the time.
+    const { segments, xMarks } = play.progress;
+    play.load(playing, saved?.progress ?? { segments, xMarks });
     updateHeader();
   }
   play.el.classList.toggle('hidden', t !== 'play');
@@ -121,6 +139,7 @@ function setTab(t: Tab) {
   for (const b of app.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
     b.setAttribute('aria-selected', String(b.dataset.tab === t));
   }
+  updateTimerActivity();
   saveSession();
 }
 
@@ -132,6 +151,7 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
   openSettingsSheet(settings, (s) => {
     settings = s;
     applySettings(s);
+    play.setShowTimer(s.showTimer);
     storage.saveSettings(s);
   });
 });
@@ -193,6 +213,7 @@ window.addEventListener('hashchange', () => {
 
 // Save progress when the page is hidden (phones often discard background tabs).
 document.addEventListener('visibilitychange', () => {
+  updateTimerActivity();
   if (document.visibilityState === 'hidden') saveSession();
 });
 
