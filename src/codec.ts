@@ -1,44 +1,38 @@
-import { cellCount, cellRC, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, portCount, portId, type Puzzle, type Size } from './model';
+import { cellCount, cellEnd, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, modeOf, portCount, portEnd, type End, type Puzzle } from './model';
 
 /**
  * Compact share code for a puzzle.
  *
  * Pre-release format versions are 0.x; the first byte holds the minor number.
  *   0.1  ends stored as tiles
- *   0.2  ends stored as frame ports (current)
+ *   0.2  ends stored as frame ports
+ *   0.3  each end is a tile or a frame port (current)
  *
- * Layout (0.2):
- *   byte 0      format minor version (2)
- *   byte 1      bit 0 = cycle mode, bits 1-2 = number of end ports
+ * Layout (0.3):
+ *   byte 0      format minor version (3)
+ *   byte 1      bit 0 = loop (no ends; informational), bits 1-2 = number of ends
  *   byte 2, 3   width, height
- *   2 bytes per end port (big-endian port index; entrance first)
+ *   2 bytes per end, big-endian, entrance first:
+ *               top bit set = tile end (low 15 bits = tile index),
+ *               top bit clear = frame port (port index)
  *   bitset: blocked cells, then walls, then givens (LSB first), padded to a byte
  * The bytes are base64url-encoded without padding.
  */
 
 /** Current puzzle format version (pre-release). */
-export const FORMAT_VERSION = '0.2';
-const VERSION_BYTE = 2;
-
-/**
- * Format 0.1 stored ends as tiles. Convert a boundary tile to a port on its
- * outer border (interior tiles have none and are dropped).
- */
-function legacyCellToPort(s: Size, cell: number): number {
-  const [r, c] = cellRC(s, cell);
-  if (r === 0) return portId(s, 'top', c);
-  if (c === s.w - 1) return portId(s, 'right', r);
-  if (r === s.h - 1) return portId(s, 'bottom', c);
-  if (c === 0) return portId(s, 'left', r);
-  return -1;
-}
+export const FORMAT_VERSION = '0.3';
+const VERSION_BYTE = 3;
+const CELL_FLAG = 0x8000;
 
 export function encodePuzzle(p: Puzzle): string {
   const n = cellCount(p);
   const e = edgeCount(p);
-  const endpoints = p.mode === 'path' ? p.endpoints.slice(0, 2) : [];
-  const header = [VERSION_BYTE, (p.mode === 'cycle' ? 1 : 0) | (endpoints.length << 1), p.w, p.h];
-  for (const c of endpoints) header.push(c >> 8, c & 0xff);
+  const endpoints = p.endpoints.slice(0, 2);
+  const header = [VERSION_BYTE, (endpoints.length ? 0 : 1) | (endpoints.length << 1), p.w, p.h];
+  for (const end of endpoints) {
+    const v = end.kind === 'cell' ? CELL_FLAG | end.cell : end.port;
+    header.push(v >> 8, v & 0xff);
+  }
 
   const bitCount = n + 2 * e;
   const bits = new Uint8Array(Math.ceil(bitCount / 8));
@@ -57,12 +51,13 @@ export function decodePuzzle(code: string): Puzzle {
   const bytes = fromBase64Url(code.trim());
   if (bytes.length < 4) throw new Error('Puzzle code is too short.');
   const version = bytes[0];
-  if (version !== 1 && version !== 2) throw new Error(`Unsupported puzzle format 0.${version}.`);
+  if (version < 1 || version > VERSION_BYTE) throw new Error(`Unsupported puzzle format 0.${version}.`);
   const flags = bytes[1];
   const w = bytes[2];
   const h = bytes[3];
   checkSize(w, h);
-  const p = createPuzzle(w, h, flags & 1 ? 'cycle' : 'path');
+  // The puzzle type follows from the ends, so the loop flag is not needed.
+  const p = createPuzzle(w, h);
   const n = cellCount(p);
   const e = edgeCount(p);
   const nEnd = (flags >> 1) & 3;
@@ -70,13 +65,15 @@ export function decodePuzzle(code: string): Puzzle {
   for (let i = 0; i < nEnd; i++) {
     const v = (bytes[off] << 8) | bytes[off + 1];
     off += 2;
-    if (version === 1) { // format 0.1: a tile
-      if (!(v < n)) throw new Error('Puzzle code has an end outside the grid.');
-      const port = legacyCellToPort(p, v);
-      if (port >= 0) p.endpoints.push(port);
+    // 0.1 stored tiles, 0.2 ports, 0.3 either (flagged).
+    const isCell = version === 1 || (version >= 3 && (v & CELL_FLAG) !== 0);
+    const index = version >= 3 ? v & ~CELL_FLAG : v;
+    if (isCell) {
+      if (!(index < n)) throw new Error('Puzzle code has an end outside the grid.');
+      p.endpoints.push(cellEnd(index));
     } else {
-      if (!(v < portCount(p))) throw new Error('Puzzle code has an end outside the frame.');
-      p.endpoints.push(v);
+      if (!(index < portCount(p))) throw new Error('Puzzle code has an end outside the frame.');
+      p.endpoints.push(portEnd(index));
     }
   }
   const bitCount = n + 2 * e;
@@ -92,14 +89,18 @@ export interface PuzzleJson {
   format: 'hamiltonian-puzzle';
   /** Format version, e.g. "0.2". */
   version: string;
+  /** Informational: "path" when there are ends, else "cycle". Ignored on import. */
   mode: 'path' | 'cycle';
   width: number;
   height: number;
   blocked: number[];
   walls: number[];
   givens: number[];
-  /** End ports, entrance first (format 0.1 stored tiles instead). */
-  endpoints: number[];
+  /**
+   * Ends, entrance first: {"cell": i} or {"port": i}. (Format 0.1 files list
+   * tile indices and 0.2 files list port indices as plain numbers.)
+   */
+  endpoints: ({ cell: number } | { port: number })[];
   code: string;
 }
 
@@ -108,13 +109,13 @@ export function puzzleToJson(p: Puzzle): PuzzleJson {
   return {
     format: 'hamiltonian-puzzle',
     version: FORMAT_VERSION,
-    mode: p.mode,
+    mode: modeOf(p),
     width: p.w,
     height: p.h,
     blocked: sorted(p.blocked),
     walls: sorted(p.walls),
     givens: sorted(p.givens),
-    endpoints: p.mode === 'path' ? [...p.endpoints] : [],
+    endpoints: p.endpoints.map((e) => (e.kind === 'cell' ? { cell: e.cell } : { port: e.port })),
     code: encodePuzzle(p),
   };
 }
@@ -129,7 +130,7 @@ export function puzzleFromJson(value: unknown): Puzzle {
   const w = Number(j.width);
   const h = Number(j.height);
   checkSize(w, h);
-  const p = createPuzzle(w, h, j.mode === 'cycle' ? 'cycle' : 'path');
+  const p = createPuzzle(w, h);
   const n = cellCount(p);
   const e = edgeCount(p);
   const ints = (xs: unknown, max: number, what: string): number[] => {
@@ -143,18 +144,24 @@ export function puzzleFromJson(value: unknown): Puzzle {
   ints(j.blocked, n, 'blocked').forEach((c) => p.blocked.add(c));
   ints(j.walls, e, 'walls').forEach((x) => p.walls.add(x));
   ints(j.givens, e, 'givens').forEach((x) => p.givens.add(x));
-  if (p.mode === 'path') {
-    p.endpoints =
-      isLegacy(j.version)
-        ? ints(j.endpoints, n, 'endpoints').map((c) => legacyCellToPort(p, c)).filter((x) => x >= 0).slice(0, 2)
-        : ints(j.endpoints, portCount(p), 'endpoints').slice(0, 2);
-  }
+  p.endpoints = parseEnds(j.endpoints, j.version, n, portCount(p)).slice(0, 2);
   return p;
 }
 
-/** Format 0.1 (also written as the number 1 by early builds). */
-function isLegacy(v: unknown): boolean {
-  return v === '0.1' || v === 1;
+function parseEnds(xs: unknown, version: unknown, cells: number, ports: number): End[] {
+  if (xs === undefined) return [];
+  if (!Array.isArray(xs)) throw new Error('"endpoints" must be a list.');
+  const legacyCells = version === '0.1' || version === 1;
+  const check = (i: unknown, max: number): number => {
+    if (!Number.isInteger(i) || (i as number) < 0 || (i as number) >= max) throw new Error('"endpoints" contains an invalid index.');
+    return i as number;
+  };
+  return xs.map((x): End => {
+    if (typeof x === 'number') return legacyCells ? cellEnd(check(x, cells)) : portEnd(check(x, ports));
+    if (x && typeof x === 'object' && 'cell' in x) return cellEnd(check((x as { cell: unknown }).cell, cells));
+    if (x && typeof x === 'object' && 'port' in x) return portEnd(check((x as { port: unknown }).port, ports));
+    throw new Error('"endpoints" contains an invalid end.');
+  });
 }
 
 function checkSize(w: number, h: number) {

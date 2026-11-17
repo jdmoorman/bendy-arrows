@@ -1,6 +1,6 @@
 import { decodePuzzle, encodePuzzle, puzzleFromJson, puzzleToJson } from './codec';
 import { ICONS } from './icons';
-import type { Puzzle } from './model';
+import { modeOf, type Puzzle } from './model';
 import { el, openSheet, toast } from './ui';
 
 /** Link that opens this puzzle in the app. */
@@ -52,7 +52,7 @@ function download(filename: string, text: string) {
 }
 
 function fileName(p: Puzzle, name?: string) {
-  const base = (name || `${p.mode === 'cycle' ? 'loop' : 'path'}-${p.w}x${p.h}`).replace(/[^\w.-]+/g, '-').toLowerCase();
+  const base = (name || `${modeOf(p) === 'cycle' ? 'loop' : 'path'}-${p.w}x${p.h}`).replace(/[^\w.-]+/g, '-').toLowerCase();
   return `${base}.json`;
 }
 

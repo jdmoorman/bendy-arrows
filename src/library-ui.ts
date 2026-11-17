@@ -1,6 +1,6 @@
 import { decodePuzzle, encodePuzzle } from './codec';
 import { ICONS } from './icons';
-import { openCells, type Puzzle } from './model';
+import { modeOf, openCells, type Puzzle } from './model';
 import type { Progress } from './play';
 import { SAMPLES } from './samples';
 import { newId, type LibraryEntry, type Storage } from './storage';
@@ -19,11 +19,11 @@ export interface LibraryContext {
 }
 
 export function defaultName(p: Puzzle): string {
-  return `${p.mode === 'cycle' ? 'Loop' : 'Path'} ${p.w}×${p.h}`;
+  return `${modeOf(p) === 'cycle' ? 'Loop' : 'Path'} ${p.w}×${p.h}`;
 }
 
 function describe(p: Puzzle): string {
-  return `${p.mode === 'cycle' ? 'Loop' : 'Path'} · ${p.w}×${p.h} · ${openCells(p).length} tiles`;
+  return `${modeOf(p) === 'cycle' ? 'Loop' : 'Path'} · ${p.w}×${p.h} · ${openCells(p).length} tiles`;
 }
 
 export function openLibrarySheet(ctx: LibraryContext): void {

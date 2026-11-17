@@ -19,10 +19,10 @@ export type ThemeTokens = Record<
   | 'grid-line'
   | 'wall'
   | 'path'
+  | 'path-solved'
   | 'given'
   | 'xmark'
   | 'end'
-  | 'end-arrow'
   | 'error'
   | 'error-fill'
   | 'success'
@@ -42,15 +42,15 @@ export const THEMES = {
     accent: '#5eb8ff',
     'accent-text': '#08121c',
     tile: '#1d2230',
-    'tile-alt': '#1d2230',
+    'tile-alt': '#191e2a',
     'tile-blocked': '#05070a',
     'grid-line': '#2f3749',
     wall: '#000000',
     path: '#5eb8ff',
+    'path-solved': '#5ee0a0',
     given: '#c9a6ff',
     xmark: '#ff8a65',
-    end: '#000000',
-    'end-arrow': '#e6e9f0',
+    end: '#e6e9f0',
     error: '#ff5c7a',
     'error-fill': 'rgba(255, 92, 122, 0.18)',
     success: '#5ee0a0',
@@ -67,15 +67,15 @@ export const THEMES = {
     accent: '#2563eb',
     'accent-text': '#ffffff',
     tile: '#ffffff',
-    'tile-alt': '#ffffff',
+    'tile-alt': '#f1f3f6',
     'tile-blocked': '#000000',
     'grid-line': '#c4c9d2',
     wall: '#000000',
-    path: '#2563eb',
+    path: '#8ab4f8',
+    'path-solved': '#8fd9ac',
     given: '#7c3aed',
-    xmark: '#e2552b',
+    xmark: '#000000',
     end: '#000000',
-    'end-arrow': '#000000',
     error: '#d92d4b',
     'error-fill': 'rgba(217, 45, 75, 0.14)',
     success: '#139a5b',

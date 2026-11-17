@@ -1,13 +1,13 @@
 import { describe, expect, test } from 'vitest';
 import { decodePuzzle, encodePuzzle, puzzleFromJson, puzzleToJson } from '../src/codec';
-import { createPuzzle, edgeBetween, portId, puzzlesEqual } from '../src/model';
+import { cellEnd, createPuzzle, edgeBetween, modeOf, portEnd, portId, puzzlesEqual } from '../src/model';
 
 function sample() {
-  const p = createPuzzle(7, 5, 'path');
+  const p = createPuzzle(7, 5);
   p.blocked.add(3).add(17).add(34);
   p.walls.add(edgeBetween(p, 0, 1)).add(edgeBetween(p, 8, 15)).add(edgeBetween(p, 26, 27));
   p.givens.add(edgeBetween(p, 10, 11));
-  p.endpoints = [portId(p, 'bottom', 4), portId(p, 'left', 1)];
+  p.endpoints = [portEnd(portId(p, 'bottom', 4)), cellEnd(30)];
   return p;
 }
 
@@ -20,7 +20,7 @@ describe('codec', () => {
   });
 
   test('cycle mode and large grids round-trip', () => {
-    const p = createPuzzle(30, 30, 'cycle');
+    const p = createPuzzle(30, 30);
     p.blocked.add(899);
     p.walls.add(0);
     expect(puzzlesEqual(p, decodePuzzle(encodePuzzle(p)))).toBe(true);
@@ -30,17 +30,33 @@ describe('codec', () => {
     expect(encodePuzzle(sample())).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 
-  test('format 0.1 codes still open, converting edge-tile ends to ports', () => {
-    // 3x3 path in format 0.1 with ends at tile 0 (corner) and tile 4 (interior, dropped).
+  test('format 0.1 codes still open with tile ends', () => {
+    // 3x3 path in format 0.1 with ends at tile 0 and tile 4.
     const bytes = [1, 2 << 1, 3, 3, 0, 0, 0, 4, 0, 0, 0, 0, 0];
     const code = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const q = decodePuzzle(code);
-    expect(q.mode).toBe('path');
-    expect(q.endpoints).toEqual([portId(q, 'top', 0)]);
+    expect(modeOf(q)).toBe('path');
+    expect(q.endpoints).toEqual([cellEnd(0), cellEnd(4)]);
+  });
+
+  test('a legacy "path" with no ends opens as a loop', () => {
+    // Format 0.2 header: path flag (bit 0 clear) but no ends.
+    const bytes = [2, 0, 2, 2, 0, 0];
+    expect(modeOf(decodePuzzle(btoa(String.fromCharCode(...bytes)).replace(/=+$/, '')))).toBe('cycle');
+    const j = { ...puzzleToJson(createPuzzle(3, 3)), mode: 'path', endpoints: [] };
+    expect(modeOf(puzzleFromJson(j))).toBe('cycle');
   });
 
   test('JSON carries a 0.x format version', () => {
-    expect(puzzleToJson(sample()).version).toBe('0.2');
+    expect(puzzleToJson(sample()).version).toBe('0.3');
+  });
+
+  test('format 0.2 codes and JSON open with frame ends', () => {
+    const bytes = [2, 1 << 1, 3, 3, 0, 5, 0, 0, 0, 0, 0];
+    const q = decodePuzzle(btoa(String.fromCharCode(...bytes)).replace(/=+$/, ''));
+    expect(q.endpoints).toEqual([portEnd(5)]);
+    const j = { ...puzzleToJson(createPuzzle(3, 3)), version: '0.2', endpoints: [2, 7] };
+    expect(puzzleFromJson(j).endpoints).toEqual([portEnd(2), portEnd(7)]);
   });
 
   test('rejects garbage', () => {

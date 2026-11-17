@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createPuzzle, edgeBetween, edgeCells, edgeCount, neighbors, portCell, portCount, portId, portSide, resizePuzzle } from '../src/model';
+import { createPuzzle, edgeBetween, edgeCells, edgeCount, neighbors, cellEnd, portCell, portCount, portEnd, portId, portSide, resizePuzzle } from '../src/model';
 
 describe('model', () => {
   test('edge ids round-trip through edgeCells/edgeBetween', () => {
@@ -29,11 +29,13 @@ describe('model', () => {
     p.blocked.add(8); // (2,2)
     p.blocked.add(4); // (1,1)
     p.walls.add(edgeBetween(p, 0, 1));
-    p.endpoints = [portId(p, 'left', 0), portId(p, 'right', 2)];
+    p.endpoints = [portEnd(portId(p, 'left', 0)), portEnd(portId(p, 'right', 2))];
     const q = resizePuzzle(p, 2, 2);
     expect([...q.blocked]).toEqual([3]);
     expect([...q.walls]).toEqual([edgeBetween(q, 0, 1)]);
-    expect(q.endpoints).toEqual([portId(q, 'left', 0)]);
+    expect(q.endpoints).toEqual([portEnd(portId(q, 'left', 0))]);
+    p.endpoints = [cellEnd(3), cellEnd(8)]; // (1,0) survives, (2,2) does not
+    expect(resizePuzzle(p, 2, 2).endpoints).toEqual([cellEnd(2)]);
   });
 
   test('ports cover the frame clockwise and map to edge tiles', () => {

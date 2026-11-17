@@ -4,7 +4,7 @@ import { createPuzzle, puzzlesEqual } from '../src/model';
 import { puzzleFromHash, puzzleFromText } from '../src/share';
 
 describe('share parsing', () => {
-  const p = createPuzzle(5, 4, 'cycle');
+  const p = createPuzzle(5, 4);
   p.blocked.add(3);
   const code = encodePuzzle(p);
 

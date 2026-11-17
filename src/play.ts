@@ -1,13 +1,22 @@
 import { History } from './history';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
-import { edgeBetween, isUsableEdge, type Puzzle } from './model';
+import { edgeBetween, isUsableEdge, modeOf, type Puzzle } from './model';
 import { padFor, renderBoard } from './render';
 import { canPlace, checkSolution, type CheckResult } from './rules';
 
 export interface Progress {
   segments: number[];
   xMarks: number[];
+}
+
+/** Describe the puzzle's fixed ends for the hint line. */
+function endsHint(p: Puzzle): string {
+  const ports = p.endpoints.filter((e) => e.kind === 'port').length;
+  const tiles = p.endpoints.length - ports;
+  if (tiles === 0) return ports > 1 ? 'enter and leave at the arrows' : 'end at the arrow';
+  if (ports === 0) return tiles > 1 ? 'start and end in the ringed tiles' : 'end in the ringed tile';
+  return 'run between the arrow and the ringed tile';
 }
 
 export class PlayView {
@@ -243,8 +252,8 @@ export class PlayView {
 
   private hint(): string {
     const p = this.puzzle;
-    const goal = p.mode === 'cycle' ? 'Draw one loop through every open tile.' : 'Draw one path through every open tile.';
-    const ends = p.mode === 'path' && p.endpoints.length ? ' The path must ' + (p.endpoints.length > 1 ? 'enter and leave at the arrows.' : 'end at the arrow.') : '';
+    const goal = modeOf(p) === 'cycle' ? 'Draw one loop through every open tile.' : 'Draw one path through every open tile.';
+    const ends = p.endpoints.length ? ` The path must ${endsHint(p)}.` : '';
     return goal + ends + ' Tap a border to mark it with an X.';
   }
 }

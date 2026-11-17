@@ -19,7 +19,6 @@
 export type Mode = 'path' | 'cycle';
 
 export interface Puzzle {
-  mode: Mode;
   w: number;
   h: number;
   /** Black tiles the path does not visit. */
@@ -27,12 +26,29 @@ export interface Puzzle {
   /** Black edges the path may not cross. */
   walls: Set<number>;
   /**
-   * Path mode only: up to two ports (outer borders of the frame, see portCell)
-   * where the path must enter and leave. The first is the entrance.
+   * Up to two ends, each either a tile where the path must start/stop or a
+   * port (outer border of the frame, see portCell) where it enters or leaves.
+   * The first is the entrance. A puzzle with ends is a path puzzle; with none
+   * it is a loop (see modeOf).
    */
-  endpoints: number[];
+  endpoints: End[];
   /** Segments that are part of the solution and given to the player. */
   givens: Set<number>;
+}
+
+/** A fixed end of the path: a tile, or a border segment on the outer frame. */
+export type End = { kind: 'cell'; cell: number } | { kind: 'port'; port: number };
+
+export function cellEnd(cell: number): End {
+  return { kind: 'cell', cell };
+}
+
+export function portEnd(port: number): End {
+  return { kind: 'port', port };
+}
+
+export function endsEqual(a: End, b: End): boolean {
+  return a.kind === 'cell' ? b.kind === 'cell' && a.cell === b.cell : b.kind === 'port' && a.port === b.port;
 }
 
 export interface Size {
@@ -43,18 +59,22 @@ export interface Size {
 export const MIN_SIZE = 1;
 export const MAX_SIZE = 30;
 
-export function createPuzzle(w: number, h: number, mode: Mode = 'path'): Puzzle {
-  return { mode, w, h, blocked: new Set(), walls: new Set(), endpoints: [], givens: new Set() };
+/** Path puzzles have ends; a puzzle without ends is a loop. */
+export function modeOf(p: Puzzle): Mode {
+  return p.endpoints.length > 0 ? 'path' : 'cycle';
+}
+
+export function createPuzzle(w: number, h: number): Puzzle {
+  return { w, h, blocked: new Set(), walls: new Set(), endpoints: [], givens: new Set() };
 }
 
 export function clonePuzzle(p: Puzzle): Puzzle {
   return {
-    mode: p.mode,
     w: p.w,
     h: p.h,
     blocked: new Set(p.blocked),
     walls: new Set(p.walls),
-    endpoints: [...p.endpoints],
+    endpoints: p.endpoints.map((e) => ({ ...e })),
     givens: new Set(p.givens),
   };
 }
@@ -163,9 +183,14 @@ export function portCell(s: Size, port: number): number {
   }
 }
 
+/** The tile an end belongs to. */
+export function endTile(s: Size, end: End): number {
+  return end.kind === 'cell' ? end.cell : portCell(s, end.port);
+}
+
 /** Tiles where the path must end (path mode). */
 export function endpointCells(p: Puzzle): number[] {
-  return p.mode === 'path' ? p.endpoints.slice(0, 2).map((port) => portCell(p, port)) : [];
+  return p.endpoints.slice(0, 2).map((e) => endTile(p, e));
 }
 
 export function isOpen(p: Puzzle, cell: number): boolean {
@@ -196,7 +221,7 @@ export function isUsableEdge(p: Puzzle, e: number): boolean {
  * The grid is anchored at the top-left corner.
  */
 export function resizePuzzle(p: Puzzle, w: number, h: number): Puzzle {
-  const out = createPuzzle(w, h, p.mode);
+  const out = createPuzzle(w, h);
   const mapCell = (cell: number): number => {
     const [r, c] = cellRC(p, cell);
     return r < h && c < w ? r * w + c : -1;
@@ -219,27 +244,30 @@ export function resizePuzzle(p: Puzzle, w: number, h: number): Puzzle {
     const n = mapEdge(e);
     if (n >= 0) out.givens.add(n);
   }
-  // Ports stay on the same side of the frame.
-  out.endpoints = p.endpoints
-    .map((port) => {
-      const [side, i] = portSide(p, port);
+  // Tile ends keep their tile; ports stay on the same side of the frame.
+  out.endpoints = [];
+  for (const end of p.endpoints) {
+    if (end.kind === 'cell') {
+      const c = mapCell(end.cell);
+      if (c >= 0) out.endpoints.push(cellEnd(c));
+    } else {
+      const [side, i] = portSide(p, end.port);
       const limit = side === 'top' || side === 'bottom' ? w : h;
-      return i < limit ? portId(out, side, i) : -1;
-    })
-    .filter((port) => port >= 0);
+      if (i < limit) out.endpoints.push(portEnd(portId(out, side, i)));
+    }
+  }
   return out;
 }
 
 export function puzzlesEqual(a: Puzzle, b: Puzzle): boolean {
   const setEq = (x: Set<number>, y: Set<number>) => x.size === y.size && [...x].every((v) => y.has(v));
   return (
-    a.mode === b.mode &&
     a.w === b.w &&
     a.h === b.h &&
     setEq(a.blocked, b.blocked) &&
     setEq(a.walls, b.walls) &&
     setEq(a.givens, b.givens) &&
     a.endpoints.length === b.endpoints.length &&
-    a.endpoints.every((v, i) => v === b.endpoints[i])
+    a.endpoints.every((v, i) => endsEqual(v, b.endpoints[i]))
   );
 }

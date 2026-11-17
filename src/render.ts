@@ -26,7 +26,7 @@ export interface RenderOptions {
 
 /** Margin to use for a puzzle: room for end arrows when it has (or may get) ends. */
 export function padFor(p: Puzzle, editing = false): number {
-  return editing || (p.mode === 'path' && p.endpoints.length > 0) ? PORT_PAD : PAD;
+  return editing || p.endpoints.some((e) => e.kind === 'port') ? PORT_PAD : PAD;
 }
 
 export function boardSize(p: Puzzle, pad = PAD): { width: number; height: number } {
@@ -68,17 +68,20 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   };
   const line = (x1: number, y1: number, x2: number, y2: number, cls: string) =>
     `<line class="${cls}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
-  const segmentLine = (e: number, cls: string) => {
-    const [a, b] = edgeCells(p, e);
-    const [x1, y1] = center(a);
-    const [x2, y2] = center(b);
-    return line(x1, y1, x2, y2, cls);
-  };
+  /** One SVG path per continuous run of edges (closed runs are closed paths). */
+  const strokes = (edges: Iterable<number>, cls: string): string =>
+    edgeRuns(p, edges)
+      .map(({ cells, closed }) => {
+        const d = cells.map((c, i) => `${i ? 'L' : 'M'}${center(c).join(' ')}`).join('');
+        return `<path class="${cls}" d="${d}${closed ? 'Z' : ''}"/>`;
+      })
+      .join('');
 
   const parts: string[] = [];
   const n = cellCount(p);
   const E = edgeCount(p);
-  const ports = p.mode === 'path' ? p.endpoints.slice(0, 2) : [];
+  const ends = p.endpoints.slice(0, 2);
+  const ports = ends.flatMap((e) => (e.kind === 'port' ? [e.port] : []));
 
   // Tiles.
   parts.push('<g class="tiles">');
@@ -148,44 +151,38 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   parts.push(`<rect class="outer" x="${pad}" y="${pad}" width="${p.w * CELL}" height="${p.h * CELL}" rx="4"/>`);
   parts.push('</g>');
 
-  // Fixed ends: a path stub from the tile centre to the frame, and an arrow outside it.
-  if (ports.length) {
+  // Fixed ends. A frame end is a path stub from the tile centre through the
+  // frame with an arrow outside (in for the entrance, out for the exit);
+  // a tile end is a ring around the tile centre.
+  if (ends.length) {
     parts.push('<g class="ends">');
-    ports.forEach((port, i) => {
-      const { x, y, d } = portPoint(port);
-      const [cx, cy] = center(portCell(p, port));
-      parts.push(line(cx, cy, x, y, 'end-seg'));
-      parts.push(`<circle class="end-joint" cx="${cx}" cy="${cy}" r="11"/>`);
-      parts.push(arrow(x, y, d, i === 0 ? 'in' : 'out'));
+    ends.forEach((end, i) => {
+      if (end.kind === 'cell') {
+        const [cx, cy] = center(end.cell);
+        parts.push(`<circle class="end-ring" cx="${cx}" cy="${cy}" r="30"/>`);
+        return;
+      }
+      const { x, y, d } = portPoint(end.port);
+      parts.push(endMarker(center(portCell(p, end.port)), [x, y], d, i === 0 ? 'in' : 'out'));
     });
     parts.push('</g>');
   }
 
   if (o.ghost?.size) {
     parts.push('<g class="ghost">');
-    for (const e of o.ghost) parts.push(segmentLine(e, 'ghost-seg'));
+    parts.push(strokes(o.ghost, 'ghost-seg'));
     parts.push('</g>');
   }
 
-  // Path segments: givens beneath player segments.
+  // Path segments: givens beneath player segments. Each continuous run is one
+  // stroke with round joins, so corners are seamless.
+  const isErr = (e: number) => !!o.errorEdges?.has(e);
+  const player = [...(o.segments ?? [])].filter((e) => !p.givens.has(e));
   parts.push('<g class="segments">');
-  for (const e of p.givens) parts.push(segmentLine(e, o.errorEdges?.has(e) ? 'given-seg error' : 'given-seg'));
-  for (const e of o.segments ?? []) {
-    if (p.givens.has(e)) continue;
-    parts.push(segmentLine(e, o.errorEdges?.has(e) ? 'seg error' : 'seg'));
-  }
-  // Dots at tile centres touched by the path make joins look tidy.
-  const touched = new Map<number, boolean>(); // cell -> touched by a player segment
-  for (const e of p.givens) for (const c of edgeCells(p, e)) if (!touched.has(c)) touched.set(c, false);
-  for (const e of o.segments ?? []) {
-    if (p.givens.has(e)) continue;
-    for (const c of edgeCells(p, e)) touched.set(c, true);
-  }
-  for (const [c, byPlayer] of touched) {
-    const [x, y] = center(c);
-    const cls = o.errorCells?.has(c) ? 'joint error' : byPlayer ? 'joint' : 'joint given';
-    parts.push(`<circle class="${cls}" cx="${x}" cy="${y}" r="11"/>`);
-  }
+  parts.push(strokes([...p.givens].filter((e) => !isErr(e)), 'given-seg'));
+  parts.push(strokes([...p.givens].filter(isErr), 'given-seg error'));
+  parts.push(strokes(player.filter((e) => !isErr(e)), 'seg'));
+  parts.push(strokes(player.filter(isErr), 'seg error'));
   parts.push('</g>');
 
   // X marks.
@@ -205,17 +202,65 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
 }
 
 /**
- * Arrow outside the frame at border point (x, y) with outward direction d:
- * 'in' points toward the grid, 'out' points away from it.
+ * Split a set of edges into runs of tiles: maximal chains through tiles that
+ * have exactly two of the edges, plus closed loops. Branching tiles end runs.
  */
-function arrow(x: number, y: number, d: [number, number], dir: 'in' | 'out'): string {
+export function edgeRuns(p: Puzzle, edges: Iterable<number>): { cells: number[]; closed: boolean }[] {
+  const byCell = new Map<number, number[]>();
+  const list = [...edges];
+  for (const e of list) {
+    for (const c of edgeCells(p, e)) {
+      const l = byCell.get(c);
+      if (l) l.push(e);
+      else byCell.set(c, [e]);
+    }
+  }
+  const used = new Set<number>();
+  const runs: { cells: number[]; closed: boolean }[] = [];
+  const walk = (start: number, first: number) => {
+    const cells = [start];
+    let cur = start;
+    let e = first;
+    for (;;) {
+      used.add(e);
+      const [a, b] = edgeCells(p, e);
+      cur = a === cur ? b : a;
+      if (cur === start) return { cells, closed: true };
+      cells.push(cur);
+      const next = byCell.get(cur)!;
+      if (next.length !== 2) return { cells, closed: false };
+      const n = next[0] === e ? next[1] : next[0];
+      if (used.has(n)) return { cells, closed: false };
+      e = n;
+    }
+  };
+  // Open runs start at tiles that are not simple pass-throughs.
+  for (const [c, es] of byCell) {
+    if (es.length === 2) continue;
+    for (const e of es) if (!used.has(e)) runs.push(walk(c, e));
+  }
+  // Whatever is left forms closed loops.
+  for (const e of list) {
+    if (used.has(e)) continue;
+    runs.push(walk(edgeCells(p, e)[0], e));
+  }
+  return runs;
+}
+
+/**
+ * A frame end: one path-width stroke from the tile centre out through the
+ * frame at border point b (outward direction d), with an arrowhead on it
+ * outside the grid — pointing in at the entrance, out at the exit.
+ */
+function endMarker(c: [number, number], b: [number, number], d: [number, number], dir: 'in' | 'out'): string {
   const [dx, dy] = d;
-  const at = (t: number, side = 0): string => `${x + dx * t - dy * side},${y + dy * t + dx * side}`;
-  const half = 17;
-  // Distances are measured outward from the frame.
-  const [shaftFrom, shaftTo, tip, base] = dir === 'in' ? [56, 30, 8, 32] : [8, 32, 54, 30];
+  const at = (t: number, side = 0): string => `${b[0] + dx * t - dy * side},${b[1] + dy * t + dx * side}`;
+  const half = 29;
+  // Distances are measured outward from the frame. For 'in' the stroke runs
+  // past the head as a tail; for 'out' it ends under the head's base.
+  const [reach, tip, base] = dir === 'in' ? [50, 4, 30] : [26, 58, 24];
   return (
-    `<line class="end-arrow-shaft" x1="${x + dx * shaftFrom}" y1="${y + dy * shaftFrom}" x2="${x + dx * shaftTo}" y2="${y + dy * shaftTo}"/>` +
-    `<polygon class="end-arrow-head" points="${at(tip)} ${at(base, half)} ${at(base, -half)}"/>`
+    `<path class="end-seg" d="M${c[0]} ${c[1]}L${at(reach).replace(',', ' ')}"/>` +
+    `<polygon class="end-head" points="${at(tip)} ${at(base, half)} ${at(base, -half)}"/>`
   );
 }

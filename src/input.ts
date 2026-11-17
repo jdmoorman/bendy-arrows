@@ -1,4 +1,4 @@
-import { cellRC, edgeBetween, portId, type Puzzle } from './model';
+import { cellEnd, cellRC, edgeBetween, portEnd, portId, type End, type Puzzle } from './model';
 import { CELL, PAD } from './render';
 
 /**
@@ -12,10 +12,11 @@ import { CELL, PAD } from './render';
  *   - 'edges': every border the pointer comes nearest to is painted
  *              (onPaintEdge), starting with the one under the initial touch.
  *   - 'cells': every tile the pointer touches is painted (onPaintCell).
- *   - 'ports': a tap near the outer frame picks the nearest port (onTapPort).
+ *   - 'ends':  a tap inside the grid picks that tile; a tap outside it picks
+ *              the nearest frame border (port). Either way → onTapEnd.
  */
 
-export type DragKind = 'path' | 'edges' | 'cells' | 'ports';
+export type DragKind = 'path' | 'edges' | 'cells' | 'ends';
 
 export interface BoardHandlers {
   kind(): DragKind;
@@ -31,7 +32,7 @@ export interface BoardHandlers {
   onSecondaryEdge?(edge: number): void;
   onPaintEdge?(edge: number, first: boolean): void;
   onPaintCell?(cell: number, first: boolean): void;
-  onTapPort?(port: number): void;
+  onTapEnd?(end: End): void;
 }
 
 export interface Hit {
@@ -143,12 +144,14 @@ export function attachBoardInput(svg: SVGSVGElement, getPuzzle: () => Puzzle, h:
     }
     if (ev.button !== 0 || active) return;
     const kind = h.kind();
-    if (kind === 'ports') {
-      const port = portAt(p, x, y);
-      if (port < 0) return;
+    if (kind === 'ends') {
+      const inside = x >= 0 && y >= 0 && x < p.w && y < p.h;
+      const port = inside ? -1 : portAt(p, x, y);
+      const end = inside ? cellEnd(hitTest(p, x, y)!.cell) : port >= 0 ? portEnd(port) : null;
+      if (!end) return;
       ev.preventDefault();
       h.onGestureStart?.();
-      h.onTapPort?.(port);
+      h.onTapEnd?.(end);
       h.onGestureEnd?.();
       return;
     }

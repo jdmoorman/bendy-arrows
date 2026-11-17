@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, portCount, portId, type Puzzle } from '../src/model';
+import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, cellEnd, modeOf, portCount, portEnd, portId, endsEqual, type Puzzle } from '../src/model';
 import { checkSolution } from '../src/rules';
 import { parityCheck, solve } from '../src/solver';
 
@@ -25,44 +25,49 @@ function rng(seed: number) {
 
 describe('parity', () => {
   test('open 3x3 cannot be a loop', () => {
-    const r = parityCheck(createPuzzle(3, 3, 'cycle'));
+    const r = parityCheck(createPuzzle(3, 3));
     expect(r.ok).toBe(false);
     expect(r.a).toBe(5);
     expect(r.b).toBe(4);
   });
 
   test('open 3x3 path must end on A tiles', () => {
-    const p = createPuzzle(3, 3, 'path');
+    const p = createPuzzle(3, 3);
+    p.endpoints = [cellEnd(0)];
     expect(parityCheck(p).endColor).toBe(0);
-    p.endpoints = [portId(p, 'top', 1)];
+    p.endpoints = [portEnd(portId(p, 'top', 1))];
     expect(parityCheck(p).ok).toBe(false);
   });
 });
 
 describe('solve', () => {
   test('a 1xN strip has a unique path', () => {
-    const r = solve(createPuzzle(5, 1, 'path'));
+    const strip = createPuzzle(5, 1);
+    strip.endpoints = [cellEnd(0)];
+    const r = solve(strip);
     expect(r.status).toBe('unique');
     expect(r.solutions[0]).toHaveLength(4);
   });
 
   test('open 2x3 path has multiple solutions', () => {
-    expect(solve(createPuzzle(3, 2, 'path')).status).toBe('multiple');
+    const p = createPuzzle(3, 2);
+    p.endpoints = [cellEnd(0)];
+    expect(solve(p).status).toBe('multiple');
   });
 
   test('open 2x3 loop is unique', () => {
-    expect(solve(createPuzzle(3, 2, 'cycle')).status).toBe('unique');
+    expect(solve(createPuzzle(3, 2)).status).toBe('unique');
   });
 
   test('odd-parity loop reports none with a reason', () => {
-    const r = solve(createPuzzle(3, 3, 'cycle'));
+    const r = solve(createPuzzle(3, 3));
     expect(r.status).toBe('none');
     expect(r.reason).toMatch(/checkerboard/);
   });
 
   test('endpoints make a 2x2 path unique', () => {
-    const p = createPuzzle(2, 2, 'path');
-    p.endpoints = [portId(p, 'left', 0), portId(p, 'right', 0)];
+    const p = createPuzzle(2, 2);
+    p.endpoints = [portEnd(portId(p, 'left', 0)), cellEnd(1)];
     const r = solve(p);
     expect(r.status).toBe('unique');
     expect(checkSolution(p, r.solutions[0]).solved).toBe(true);
@@ -70,7 +75,8 @@ describe('solve', () => {
 
   test('walls can force uniqueness', () => {
     // 3x3 path; walls create a comb that only allows the snake.
-    const p = createPuzzle(3, 3, 'path');
+    const p = createPuzzle(3, 3);
+    p.endpoints = [cellEnd(0)];
     p.walls.add(edgeBetween(p, 3, 4)).add(edgeBetween(p, 4, 7)).add(edgeBetween(p, 1, 4));
     p.walls.add(edgeBetween(p, 0, 3));
     const r = solve(p);
@@ -79,7 +85,9 @@ describe('solve', () => {
   });
 
   test('aborts when over the node budget', () => {
-    const r = solve(createPuzzle(8, 8, 'path'), { nodeLimit: 1000, maxSolutions: 1e9 });
+    const p = createPuzzle(8, 8);
+    p.endpoints = [cellEnd(0)];
+    const r = solve(p, { nodeLimit: 1000, maxSolutions: 1e9 });
     expect(r.status).toBe('aborted');
   });
 
@@ -88,7 +96,7 @@ describe('solve', () => {
     for (let trial = 0; trial < 300; trial++) {
       const w = 2 + Math.floor(rand() * 3);
       const h = 2 + Math.floor(rand() * 2);
-      const p = createPuzzle(w, h, rand() < 0.5 ? 'path' : 'cycle');
+      const p = createPuzzle(w, h);
       const n = w * h;
       for (let c = 0; c < n; c++) if (rand() < 0.12) p.blocked.add(c);
       for (let e = 0; e < edgeCount(p); e++) {
@@ -96,16 +104,17 @@ describe('solve', () => {
         if (x < 0.12) p.walls.add(e);
         else if (x < 0.18 && isUsableEdge(p, e)) p.givens.add(e);
       }
-      if (p.mode === 'path') {
+      {
+        // 0 ends makes a loop puzzle; 1 or 2 make a path puzzle.
         const k = Math.floor(rand() * 3);
         for (let i = 0; i < k; i++) {
-          const port = Math.floor(rand() * portCount(p));
-          if (!p.endpoints.includes(port)) p.endpoints.push(port);
+          const end = rand() < 0.5 ? portEnd(Math.floor(rand() * portCount(p))) : cellEnd(Math.floor(rand() * n));
+          if (!p.endpoints.some((e) => endsEqual(e, end))) p.endpoints.push(end);
         }
       }
       const expected = bruteForceCount(p);
       const r = solve(p, { maxSolutions: 1e9 });
-      const ctx = JSON.stringify({ trial, w, h, mode: p.mode, blocked: [...p.blocked], walls: [...p.walls], givens: [...p.givens], endpoints: p.endpoints });
+      const ctx = JSON.stringify({ trial, w, h, mode: modeOf(p), blocked: [...p.blocked], walls: [...p.walls], givens: [...p.givens], endpoints: p.endpoints });
       expect(r.solutions.length, ctx).toBe(expected);
       for (const s of r.solutions) expect(checkSolution(p, s).solved, ctx).toBe(true);
     }

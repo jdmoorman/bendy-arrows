@@ -1,4 +1,4 @@
-import { cellCount, edgeCells, endpointCells, isUsableEdge, openCells, type Puzzle } from './model';
+import { cellCount, edgeCells, endpointCells, isUsableEdge, modeOf, openCells, type Puzzle } from './model';
 
 /**
  * Whether the player may draw a segment on this edge.
@@ -61,7 +61,7 @@ export function checkSolution(p: Puzzle, segments: Iterable<number>): CheckResul
 
   const badEnds = new Set<number>();
   const eps = endpointCells(p);
-  if (p.mode === 'cycle') {
+  if (modeOf(p) === 'cycle') {
     for (const c of ends) badEnds.add(c);
   } else if (eps.length > 0) {
     const allowed = new Set(eps);
@@ -107,9 +107,9 @@ export function checkSolution(p: Puzzle, segments: Iterable<number>): CheckResul
     // A connected piece with at least as many edges as cells contains a loop.
     const hasLoop = compEdges.size >= comp.length;
     const isSimpleLoop = comp.every((c) => degree[c] === 2);
-    if (hasLoop && p.mode === 'path') {
+    if (hasLoop && modeOf(p) === 'path') {
       for (const e of cycleEdges(comp, edgesByCell, p)) loopEdges.add(e);
-    } else if (isSimpleLoop && p.mode === 'cycle' && comp.length < open.length) {
+    } else if (isSimpleLoop && modeOf(p) === 'cycle' && comp.length < open.length) {
       // A closed loop that does not cover everything is a premature loop.
       for (const e of compEdges) loopEdges.add(e);
     }
@@ -122,7 +122,7 @@ export function checkSolution(p: Puzzle, segments: Iterable<number>): CheckResul
     branches.size === 0 &&
     badEnds.size === 0 &&
     loopEdges.size === 0 &&
-    (p.mode === 'cycle'
+    (modeOf(p) === 'cycle'
       ? pieces === 1 && ends.length === 0
       : open.length === 1
         ? segs.size === 0 && eps.every((c) => c === open[0])
@@ -174,12 +174,12 @@ function cycleEdges(comp: number[], edgesByCell: number[][], p: Puzzle): Set<num
 }
 
 function describe(p: Puzzle, r: Omit<CheckResult, 'message'>): string {
-  if (r.solved) return p.mode === 'cycle' ? 'Solved — one closed loop through every tile!' : 'Solved — one path through every tile!';
+  if (r.solved) return modeOf(p) === 'cycle' ? 'Solved — one closed loop through every tile!' : 'Solved — one path through every tile!';
   const issues: string[] = [];
   if (r.illegalEdges.size) issues.push('segments cross walls or black tiles');
   if (r.branches.size) issues.push(`${r.branches.size} tile(s) branch`);
-  if (r.loopEdges.size) issues.push(p.mode === 'path' ? 'the path contains a loop' : 'a loop closes too early');
-  if (r.badEnds.size) issues.push(p.mode === 'cycle' ? `${r.badEnds.size} loose end(s)` : 'path ends in the wrong place');
+  if (r.loopEdges.size) issues.push(modeOf(p) === 'path' ? 'the path contains a loop' : 'a loop closes too early');
+  if (r.badEnds.size) issues.push(modeOf(p) === 'cycle' ? `${r.badEnds.size} loose end(s)` : 'path ends in the wrong place');
   if (r.pieces > 1) issues.push(`${r.pieces} separate pieces`);
   if (r.unvisited.size) issues.push(`${r.unvisited.size} tile(s) not visited`);
   if (!issues.length) issues.push('not complete');

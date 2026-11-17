@@ -9,8 +9,11 @@ import {
   edgeTouchesBlocked,
   MAX_SIZE,
   MIN_SIZE,
+  modeOf,
   openCells,
-  portCell,
+  endTile,
+  endsEqual,
+  type End,
   resizePuzzle,
   type Puzzle,
 } from './model';
@@ -19,11 +22,11 @@ import { canPlace } from './rules';
 
 type Tool = 'tiles' | 'walls' | 'ends' | 'givens';
 
-const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ports', givens: 'path' };
+const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends', givens: 'path' };
 const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
   walls: 'Tap or drag along borders to add walls.',
-  ends: 'Tap the frame to add an entrance and exit — that makes it a path puzzle. With no ends it is a loop.',
+  ends: 'Tap a tile, or a dot on the frame, to add a path end (two make a path puzzle). With no ends it is a loop.',
   givens: 'Drag between tiles to give segments of the solution.',
 };
 
@@ -34,7 +37,7 @@ export class EditorView {
   /** Called when the user asks to play the puzzle. */
   onPlay?: () => void;
 
-  private puzzle: Puzzle = createPuzzle(6, 6, 'cycle');
+  private puzzle: Puzzle = createPuzzle(6, 6);
   private history = new History<Puzzle>();
   private tool: Tool = 'tiles';
   private ghost: Set<number> | null = null;
@@ -112,7 +115,7 @@ export class EditorView {
     this.undoBtn.addEventListener('click', () => this.undo());
     this.redoBtn.addEventListener('click', () => this.redo());
     q<HTMLButtonElement>('[data-act=clear]').addEventListener('click', () =>
-      this.edit((p) => createPuzzle(p.w, p.h, 'cycle')),
+      this.edit((p) => createPuzzle(p.w, p.h)),
     );
     q<HTMLButtonElement>('[data-act=play]').addEventListener('click', () => this.onPlay?.());
 
@@ -125,7 +128,7 @@ export class EditorView {
       },
       onGestureEnd: () => this.commitGesture(),
       onPaintCell: (cell, first) => this.paintCell(cell, first),
-      onTapPort: (port) => this.togglePort(port),
+      onTapEnd: (end) => this.toggleEnd(end),
       onPaintEdge: (e, first) => this.paintWall(e, first),
       onPathStart: (cell) => {
         this.trail = [cell];
@@ -187,11 +190,6 @@ export class EditorView {
     this.render();
   }
 
-  /** The puzzle type follows the ends: any end makes a path puzzle, none a loop. */
-  private syncMode() {
-    this.puzzle.mode = this.puzzle.endpoints.length > 0 ? 'path' : 'cycle';
-  }
-
   /**
    * Whether the puzzle can be played. A single end is not enough; if so, a
    * message asks for the second one.
@@ -246,9 +244,7 @@ export class EditorView {
     if (this.paintAdd === p.blocked.has(cell)) return;
     if (this.paintAdd) {
       p.blocked.add(cell);
-      const endsBefore = p.endpoints.length;
-      p.endpoints = p.endpoints.filter((port) => portCell(p, port) !== cell);
-      if (p.endpoints.length !== endsBefore) this.syncMode();
+      p.endpoints = p.endpoints.filter((end) => endTile(p, end) !== cell);
       for (const e of cellEdges(p, cell)) {
         p.givens.delete(e);
         p.walls.delete(e);
@@ -260,15 +256,14 @@ export class EditorView {
     this.render();
   }
 
-  /** Add an end at a port, or remove it if already there. Entrance is placed first. */
-  private togglePort(port: number) {
+  /** Add an end (tile or frame border), or remove it if already there. Entrance is placed first. */
+  private toggleEnd(end: End) {
     const p = this.puzzle;
-    if (p.blocked.has(portCell(p, port))) return;
-    const i = p.endpoints.indexOf(port);
+    if (p.blocked.has(endTile(p, end))) return;
+    const i = p.endpoints.findIndex((e) => endsEqual(e, end));
     if (i >= 0) p.endpoints.splice(i, 1);
-    else if (p.endpoints.length < 2) p.endpoints.push(port);
-    else p.endpoints[1] = port; // replace the exit
-    this.syncMode();
+    else if (p.endpoints.length < 2) p.endpoints.push(end);
+    else p.endpoints[1] = end; // replace the exit
     this.changed = true;
     this.render();
   }
@@ -347,7 +342,7 @@ export class EditorView {
       this.status.textContent = this.message;
     } else {
       const open = openCells(p).length;
-      this.status.textContent = `${p.mode === 'cycle' ? 'Loop' : 'Path'} · ${p.w}×${p.h} · ${open} open tiles. ${TOOL_HINT[this.tool]}`;
+      this.status.textContent = `${modeOf(p) === 'cycle' ? 'Loop' : 'Path'} · ${p.w}×${p.h} · ${open} open tiles. ${TOOL_HINT[this.tool]}`;
     }
   }
 }

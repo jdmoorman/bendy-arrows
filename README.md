@@ -31,7 +31,13 @@ The app opens on a sample puzzle in the **Play** tab.
 
 - **Tiles:** tap or drag to toggle black tiles.
 - **Walls:** tap or drag along borders to add or remove walls.
-- **Ends:** tap the outside frame to place where the path enters and leaves (up to two). A puzzle with ends is a **path** puzzle; with no ends it is a **loop** puzzle. If only one end is placed, Play asks for the second first. Each end is drawn as a black path stub through the frame with an arrow outside it, pointing in at the entrance and out at the exit. Tap an end again to remove it.
+- **Ends:** up to two, and each one can be either:
+  - a **tile end**: tap a tile, and it's drawn as a black ring;
+  - a **frame end**: tap a dot on the frame outside the grid, and it's drawn as a black path stub through the frame with an arrow outside it.
+
+  The first end is the entrance. A frame arrow points in at the entrance and out at the exit. Tap an end again to remove it.
+
+  A puzzle with ends is a **path** puzzle; with no ends it is a **loop** puzzle. If only one end is placed, Play asks for the second first.
 - **Givens:** drag between tiles to give away segments of the solution.
 - **Width × height** pickers (1 to 30).
 - **Check** runs the solver in the background and reports whether the puzzle has **no solution** (with a reason, such as a checkerboard parity mismatch), **exactly one**, or **more than one**. The eye button overlays the solutions it found.
@@ -39,7 +45,7 @@ The app opens on a sample puzzle in the **Play** tab.
 
 ## Sharing and saving
 
-- **Share** button (top right): send a link with the phone's share sheet or copy it, export or import JSON, or paste a link or code to open a puzzle. Links look like `…/#p=CODE`. The puzzle format is versioned 0.x while the app is pre-release (currently 0.2); older 0.1 links still open.
+- **Share** button (top right): send a link with the phone's share sheet or copy it, export or import JSON, or paste a link or code to open a puzzle. Links look like `…/#p=CODE`. The puzzle format is versioned 0.x while the app is pre-release (currently 0.3); older 0.1 and 0.2 links still open.
 - **Library** button: save the current puzzle under a name, then reopen, edit or delete saved puzzles. Progress on saved puzzles is kept automatically. The current puzzle, your progress and any unsaved editor work are restored when you come back.
 
 Everything is stored locally in your browser; nothing is sent anywhere.
