@@ -163,6 +163,10 @@ function fullTileBorders(p: Puzzle, state: LogicState, need: Int8Array): Set<num
 }
 
 /** Everything the rules can conclude from a state (each deduction is new). */
+/** Where Checkerboard balance and Number crossings look for areas to check. */
+export type AreaSource = 'cuts' | 'cuts3' | 'empty' | 'rects' | 'rooms';
+export const AREA_SOURCES: AreaSource[] = ['cuts', 'cuts3', 'empty', 'rects', 'rooms'];
+
 export interface LogicOptions {
   /** Only use Checkerboard balance on areas of at most this many tiles. */
   balanceMaxArea?: number;
@@ -171,6 +175,8 @@ export interface LogicOptions {
    * growing it each way the board could be turned or mirrored.
    */
   stopRoomsAtTies?: boolean;
+  /** Which kinds of area to check (all of them if missing). */
+  areaSources?: AreaSource[];
 }
 
 function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: LogicOptions = {}): Analysis {
@@ -208,8 +214,19 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
     deductions.push(...joinRules(p, state, need, closed, open.length, enabled));
   }
   if (enabled.has('noSeal')) deductions.push(...sealingEdges(p, state, need, closed));
+  const sources = new Set(opts.areaSources ?? AREA_SOURCES);
+  const maxArea = opts.balanceMaxArea ?? Infinity;
+  const stopAtTies = opts.stopRoomsAtTies ?? false;
   if (enabled.has('bottlenecks') || enabled.has('balance') || enabled.has('spacing')) {
-    const found = areaRules(p, state, need, closed, enabled, opts.balanceMaxArea ?? Infinity, opts.stopRoomsAtTies ?? false);
+    // Areas cut off by three borders are slow to find, so they wait for the pass below.
+    const found = areaRules(p, state, need, closed, enabled, maxArea, stopAtTies, new Set([...sources].filter((x) => x !== 'cuts3')));
+    if ('reason' in found) return { kind: 'contradiction', ...found };
+    deductions.push(...found);
+  }
+  // Last resort before the trial: areas cut off by three borders, only when nothing else applies.
+  if ((enabled.has('balance') || enabled.has('spacing')) && sources.has('cuts3') && !deductions.length) {
+    const areaOnly = new Set([...enabled].filter((r) => r === 'balance' || r === 'spacing'));
+    const found = areaRules(p, state, need, closed, areaOnly, maxArea, stopAtTies, new Set<AreaSource>(['cuts3']));
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
   }
@@ -580,6 +597,7 @@ function areaRules(
   enabled: Set<RuleId>,
   balanceMaxArea: number,
   stopRoomsAtTies: boolean,
+  use: Set<AreaSource>,
 ): Deduction[] | Contradiction {
   const n = cellCount(p);
   const cells = openCells(p);
@@ -847,7 +865,8 @@ function areaRules(
         });
       }
     }
-    {
+    // (The cut feeds Bottlenecks above whatever the area sources; balance only if asked.)
+    if (use.has('cuts')) {
       const bad = checkArea(side);
       if (bad) return bad;
     }
@@ -860,7 +879,7 @@ function areaRules(
     const empty = new Uint8Array(n);
     for (const c of cells) if (degree[c] === 0) empty[c] = 1;
     const done = new Uint8Array(n);
-    for (const c of cells) {
+    for (const c of use.has('empty') ? cells : []) {
       if (!empty[c] || done[c]) continue;
       const area = reach(c, [], empty);
       for (const t of area) done[t] = 1;
@@ -870,7 +889,7 @@ function areaRules(
     // ...and for rectangles of the board: every rectangle on a small board; on a big one,
     // those of up to RECT_AREA tiles plus the strips that run all the way across.
     const small = p.w * p.h <= SMALL_BOARD;
-    for (let rh = 1; rh <= p.h; rh++) {
+    for (let rh = 1; rh <= (use.has('rects') ? p.h : 0); rh++) {
       for (let rw = 1; rw <= p.w; rw++) {
         if (rh * rw < 2 || (rh === p.h && rw === p.w)) continue;
         if (!small && rh * rw > RECT_AREA && rw !== p.w && rh !== p.h) continue;
@@ -885,7 +904,7 @@ function areaRules(
       }
     }
     // ...and, on small boards, for every area cut off by exactly three borders.
-    if (cells.length <= SMALL_BOARD) {
+    if (use.has('cuts3') && cells.length <= SMALL_BOARD) {
       const seen3 = new Set<string>();
       for (let i = 0; i < edges.length; i++) {
         const f = edges[i];
@@ -961,7 +980,7 @@ function areaRules(
     // Candidates already looked at in this step (a tile can neighbour the room twice).
     const seenAt = new Int32Array(n);
     let stamp = 0;
-    for (const seed of cells) {
+    for (const seed of use.has('rooms') ? cells : []) {
       // The first reading order's room; the other orders can only differ after a tie.
       const first: number[] = [];
       let tied = false;

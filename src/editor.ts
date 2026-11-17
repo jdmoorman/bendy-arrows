@@ -21,7 +21,7 @@ import {
   type Puzzle,
 } from './model';
 import { padFor, renderBoard } from './render';
-import { ALL_RULES, applyStep, BASIC_RULES, findHint, RULES, rulesFor, type LogicOptions, type LogicState, type RuleId } from './logic';
+import { ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, RULES, rulesFor, type AreaSource, type LogicOptions, type LogicState, type RuleId } from './logic';
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
@@ -97,7 +97,7 @@ export class EditorView {
   /** Apply the chosen rules after every change, until they get stuck. */
   private autoLogic = new Storage().loadLogicRules()?.auto === true;
   /** Logic engine options: whether rooms stop growing at a tie. */
-  private logicOpts: LogicOptions = { stopRoomsAtTies: new Storage().loadLogicRules()?.stopRoomsAtTies === true };
+  private logicOpts: LogicOptions = loadLogicOptions(new Storage());
   private autoWorker: Worker | null = null;
   private autoId = 0;
 
@@ -422,7 +422,14 @@ export class EditorView {
     const body = document.createElement('div');
     body.className = 'sheet-stack';
     const save = () => {
-      this.storage.saveLogicRules({ enabled: [...this.logicRules], known: ALL_RULES, auto: this.autoLogic, stopRoomsAtTies: this.logicOpts.stopRoomsAtTies });
+      this.storage.saveLogicRules({
+        enabled: [...this.logicRules],
+        known: ALL_RULES,
+        auto: this.autoLogic,
+        stopRoomsAtTies: this.logicOpts.stopRoomsAtTies,
+        // Saved as the ones switched off, so a newly added kind of area starts on.
+        areaSourcesOff: AREA_SOURCES.filter((x) => !(this.logicOpts.areaSources ?? AREA_SOURCES).includes(x)),
+      });
       // A different choice of rules gets a fresh automatic run.
       if (this.autoLogic) this.runAutoLogic();
     };
@@ -505,17 +512,38 @@ export class EditorView {
           save();
         });
       }
-      body.append(document.createElement('hr'));
-      body.lastElementChild!.className = 'sheet-sep';
-      switchRow(
-        'Stop rooms at a tie',
-        'Checkerboard balance and Number crossings also look at "rooms", grown one tile at a time. On: a room stops growing when two tiles are equally good to add. Off: it is grown every way the board could be turned or mirrored.',
-        this.logicOpts.stopRoomsAtTies === true,
-        (on) => {
-          this.logicOpts = { ...this.logicOpts, stopRoomsAtTies: on };
-          save();
-        },
-      );
+      // Where Checkerboard balance and Number crossings look for areas.
+      if (rules.some((r) => r.id === 'balance' || r.id === 'spacing')) {
+        body.append(document.createElement('hr'));
+        body.lastElementChild!.className = 'sheet-sep';
+        const heading = document.createElement('p');
+        heading.className = 'field-label';
+        heading.textContent = 'Areas Checkerboard balance and Number crossings look at';
+        body.append(heading);
+        const sources = new Set(this.logicOpts.areaSources ?? AREA_SOURCES);
+        for (const src of AREA_SOURCES) {
+          const [label, hint] = AREA_SOURCE_TEXT[src];
+          switchRow(label, hint, sources.has(src), (on) => {
+            on ? sources.add(src) : sources.delete(src);
+            const list = AREA_SOURCES.filter((x) => sources.has(x));
+            this.logicOpts = { ...this.logicOpts, areaSources: list.length === AREA_SOURCES.length ? undefined : list };
+            save();
+            render();
+          });
+          if (src === 'rooms' && sources.has('rooms')) {
+            switchRow(
+              'Stop rooms at a tie',
+              'On: a room stops growing when two tiles are equally good to add. Off: it is grown every way the board could be turned or mirrored.',
+              this.logicOpts.stopRoomsAtTies === true,
+              (on) => {
+                this.logicOpts = { ...this.logicOpts, stopRoomsAtTies: on };
+                save();
+              },
+              'sub-rule',
+            );
+          }
+        }
+      }
     };
     render();
     openSheet('Logic rules', body);
@@ -727,6 +755,23 @@ export class EditorView {
  * The saved rule choices. Rules added since the choice was saved start on;
  * a choice saved before the list was recorded knew only the basic rules.
  */
+/** What each source of areas is called in the rules sheet, and what it means. */
+const AREA_SOURCE_TEXT: Record<AreaSource, [string, string]> = {
+  cuts: ['Cut off by one or two borders', 'Areas joined to the rest of the board by only one or two open borders.'],
+  cuts3: ['Cut off by three borders', 'Areas joined to the rest of the board by exactly three open borders (on boards of up to 100 tiles). Slow to find, so only used when nothing else applies.'],
+  empty: ['Empty areas', 'Each connected group of tiles that has no lines yet.'],
+  rects: ['Rectangles', 'Every rectangle of tiles (on boards over 100 tiles, those of up to 24 tiles, plus strips running all the way across).'],
+  rooms: ['Rooms', 'Grown one tile at a time from each tile, following walls and X marks, up to 30 tiles.'],
+};
+
+/** The logic options saved with the rule choice. */
+function loadLogicOptions(storage: Storage): LogicOptions {
+  const saved = storage.loadLogicRules();
+  const off = new Set(saved?.areaSourcesOff ?? []);
+  const sources = AREA_SOURCES.filter((x) => !off.has(x));
+  return { stopRoomsAtTies: saved?.stopRoomsAtTies === true, areaSources: sources.length < AREA_SOURCES.length ? sources : undefined };
+}
+
 function loadRuleChoice(storage: Storage): Set<RuleId> {
   const saved = storage.loadLogicRules();
   if (!saved) return new Set(ALL_RULES);

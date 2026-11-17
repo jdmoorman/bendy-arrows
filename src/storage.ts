@@ -144,23 +144,24 @@ export class Storage {
    * Enabled logic-helper rules and the rules that existed when they were
    * saved, or null if never saved. (Old saves are a plain list: `known` is missing.)
    */
-  loadLogicRules(): { enabled: string[]; known?: string[]; auto?: boolean; stopRoomsAtTies?: boolean } | null {
+  loadLogicRules(): { enabled: string[]; known?: string[]; auto?: boolean; stopRoomsAtTies?: boolean; areaSourcesOff?: string[] } | null {
     const r = this.read<unknown>(LOGIC_KEY, null);
     const strings = (x: unknown) => (Array.isArray(x) ? x.filter((y): y is string => typeof y === 'string') : []);
     if (Array.isArray(r)) return { enabled: strings(r) };
     if (r && typeof r === 'object' && 'enabled' in r) {
-      const o = r as { enabled: unknown; known?: unknown; auto?: unknown; stopRoomsAtTies?: unknown };
+      const o = r as { enabled: unknown; known?: unknown; auto?: unknown; stopRoomsAtTies?: unknown; areaSourcesOff?: unknown };
       return {
         enabled: strings(o.enabled),
         known: Array.isArray(o.known) ? strings(o.known) : undefined,
         auto: o.auto === true,
         stopRoomsAtTies: o.stopRoomsAtTies === true,
+        areaSourcesOff: Array.isArray(o.areaSourcesOff) ? strings(o.areaSourcesOff) : undefined,
       };
     }
     return null;
   }
 
-  saveLogicRules(choice: { enabled: string[]; known: string[]; auto?: boolean; stopRoomsAtTies?: boolean }): void {
+  saveLogicRules(choice: { enabled: string[]; known: string[]; auto?: boolean; stopRoomsAtTies?: boolean; areaSourcesOff?: string[] }): void {
     this.write(LOGIC_KEY, choice);
   }
 

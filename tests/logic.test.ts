@@ -383,3 +383,42 @@ describe('deduction areas', async () => {
     }
   });
 });
+
+describe('area sources', async () => {
+  const { deductions } = await import('../src/logic');
+  const { decodePuzzle } = await import('../src/codec');
+  const { edgeBetween: between } = await import('../src/model');
+  const { SAMPLES } = await import('../src/samples');
+  // Path 7×7 · walls: the bottom-row edge between columns 3 and 4 comes from an L-shaped room.
+  const p = decodePuzzle('BQQHBwACAAsAAAAAAAAAhBQAEAAALAAABA');
+  const target = between(p, 6 * 7 + 2, 6 * 7 + 3);
+  const draws = (opts: object) => deductions(p, empty(), ['balance'], opts).some((d) => d.segments.includes(target));
+  test('switching off rooms loses an area only rooms find', () => {
+    expect(draws({})).toBe(true);
+    expect(draws({ areaSources: ['cuts', 'empty', 'rects'] })).toBe(false);
+    expect(draws({ areaSources: [] })).toBe(false);
+  });
+  test('switching off cut-off areas leaves Bottlenecks alone', () => {
+    for (const s of SAMPLES.slice(0, 15)) {
+      const q = decodePuzzle(s.code);
+      const all = deductions(q, empty(), ['bottlenecks']).length;
+      expect(deductions(q, empty(), ['bottlenecks'], { areaSources: [] }).length, s.name).toBe(all);
+    }
+  });
+});
+
+describe('three-border cuts', async () => {
+  const { deductions, AREA_SOURCES } = await import('../src/logic');
+  const { decodePuzzle } = await import('../src/codec');
+  const { SAMPLES } = await import('../src/samples');
+  test('are only looked at when nothing else applies', () => {
+    const noCuts3 = AREA_SOURCES.filter((x) => x !== 'cuts3');
+    for (const s of SAMPLES.slice(0, 20)) {
+      const p = decodePuzzle(s.code);
+      const all = deductions(p, empty(), ALL_RULES);
+      const without = deductions(p, empty(), ALL_RULES, { areaSources: noCuts3 });
+      // Whenever anything else applies, the 3-border search adds nothing.
+      if (without.length) expect(all.length, s.name).toBe(without.length);
+    }
+  });
+});
