@@ -177,3 +177,78 @@ describe('solve with required segments', () => {
     }
   });
 });
+
+describe('solutionUnion', async () => {
+  const { solutionUnion } = await import('../src/solver');
+  /** The union of every solution, by listing them all (small boards only). */
+  const bruteUnion = (p: Puzzle) => [...new Set(solve(p, { maxSolutions: 1e9 }).solutions.flat())].sort((a, b) => a - b);
+  const cases: [string, () => Puzzle][] = [
+    ['open 4×4 loop', () => createPuzzle(4, 4)],
+    ['4×3 path between two corners', () => {
+      const p = createPuzzle(4, 3);
+      p.endpoints = [portEnd(portId(p, 'left', 0)), portEnd(portId(p, 'right', 2))];
+      return p;
+    }],
+    ['5×4 loop with a wall', () => {
+      const p = createPuzzle(5, 4);
+      p.walls.add(edgeBetween(p, 6, 7));
+      return p;
+    }],
+    ['4×4 path with checkpoints', () => {
+      const p = createPuzzle(4, 4);
+      p.checkpoints = [0, 5, 15];
+      return p;
+    }],
+  ];
+  for (const [name, make] of cases) {
+    test(`finds every line of every solution: ${name}`, () => {
+      const p = make();
+      const u = solutionUnion(p);
+      expect(u.unchecked).toEqual([]);
+      expect([...u.edges].sort((a, b) => a - b)).toEqual(bruteUnion(p));
+    });
+  }
+  test('a unique puzzle gives just its solution, and an impossible one gives nothing', () => {
+    const p = createPuzzle(2, 2);
+    expect(solutionUnion(p)).toMatchObject({ status: 'unique', unchecked: [] });
+    expect(solutionUnion(p).edges).toHaveLength(4);
+    const q = createPuzzle(3, 3); // a loop needs an even number of tiles
+    expect(solutionUnion(q)).toEqual({ status: 'none', edges: [], unchecked: [], suggestedWall: null });
+  });
+});
+
+describe('seeded solving', () => {
+  test('a seed changes which solution comes first, never whether it is valid', () => {
+    const p = createPuzzle(6, 6);
+    const firsts = new Set<string>();
+    for (let seed = 1; seed <= 12; seed++) {
+      const r = solve(p, { maxSolutions: 1, seed });
+      expect(r.solutions).toHaveLength(1);
+      expect(checkSolution(p, new Set(r.solutions[0])).solved).toBe(true);
+      firsts.add(r.solutions[0].join(','));
+    }
+    expect(firsts.size).toBeGreaterThan(1);
+  });
+});
+
+describe('suggested wall', async () => {
+  const { solutionUnion } = await import('../src/solver');
+  test('rules out the most solutions found, but never all of them', () => {
+    const p = createPuzzle(4, 4); // six loops
+    const u = solutionUnion(p);
+    expect(u.suggestedWall).not.toBeNull();
+    const s = u.suggestedWall!;
+    expect(s.rulesOut).toBeGreaterThan(0);
+    expect(s.rulesOut).toBeLessThan(s.found);
+    // Walling it off really leaves some solutions and removes the ones that used it.
+    const all = solve(p, { maxSolutions: 1e9 }).solutions;
+    const q = createPuzzle(4, 4);
+    q.walls.add(s.edge);
+    const left = solve(q, { maxSolutions: 1e9 }).solutions;
+    expect(left.length).toBe(all.filter((sol) => !sol.includes(s.edge)).length);
+    expect(left.length).toBeGreaterThan(0);
+  });
+  test('a unique puzzle gets no suggestion', () => {
+    expect(solutionUnion(createPuzzle(2, 2)).suggestedWall).toBeNull();
+  });
+});

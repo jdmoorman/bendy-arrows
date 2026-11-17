@@ -37,6 +37,7 @@ const DAILY_KEY = 'hamiltonian.daily.v1';
 const TABLE_KEY = 'hamiltonian.libtable.v1';
 const RATINGS_KEY = 'hamiltonian.ratings.v1';
 const HIDDEN_KEY = 'hamiltonian.hiddensamples.v1';
+const SHOW_SOLUTION_KEY = 'hamiltonian.showsolution.v1';
 
 /** Per-device display preferences. */
 export interface Settings {
@@ -182,6 +183,15 @@ export class Storage {
 
   saveLibraryTable(state: TableState): void {
     this.write(TABLE_KEY, state);
+  }
+
+  /** Whether the editor overlays the solution (or every line any solution uses). */
+  loadShowSolution(): boolean {
+    return this.read<unknown>(SHOW_SOLUTION_KEY, false) === true;
+  }
+
+  saveShowSolution(on: boolean): void {
+    this.write(SHOW_SOLUTION_KEY, on);
   }
 
   /** Codes of built-in samples deleted from this device's library. */

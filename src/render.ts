@@ -26,6 +26,8 @@ export interface RenderOptions {
   focusCells?: Set<number>;
   /** Segments and X marks to draw in the highlight colour (e.g. the latest logic step). */
   highlight?: Set<number>;
+  /** A border to suggest a wall on, drawn dashed on top. */
+  suggestWall?: number;
 }
 
 /** Margin to use for a puzzle: room for end arrows when it has (or may get) ends. */
@@ -225,6 +227,11 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
       parts.push(line(cx - s, cy - s, cx + s, cy + s, cls), line(cx - s, cy + s, cx + s, cy - s, cls));
     }
     parts.push('</g>');
+  }
+
+  if (o.suggestWall !== undefined) {
+    const [x1, y1, x2, y2] = borderLine(o.suggestWall);
+    parts.push(line(x1, y1, x2, y2, 'wall suggest'));
   }
 
   svg.innerHTML = parts.join('');

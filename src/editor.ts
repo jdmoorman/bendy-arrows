@@ -63,6 +63,7 @@ export class EditorView {
   private history = new History<Puzzle>();
   private tool: Tool = 'tiles';
   private ghost: Set<number> | null = null;
+  private suggestedWall: number | null = null;
   private message = '';
   private messageKind: '' | 'success' | 'error' = '';
 
@@ -543,9 +544,15 @@ export class EditorView {
     this.render();
   }
 
-  /** Overlay a solution faintly on the board until the next edit. */
+  /** Overlay solution lines faintly on the board (the uniqueness chip decides when). */
   showGhost(edges: Iterable<number> | null): void {
     this.ghost = edges ? new Set(edges) : null;
+    this.render();
+  }
+
+  /** Show a border where a wall would help, or null to hide it (the uniqueness chip decides). */
+  suggestWall(edge: number | null): void {
+    this.suggestedWall = edge;
     this.render();
   }
 
@@ -565,7 +572,6 @@ export class EditorView {
   private clearMessage() {
     this.message = '';
     this.messageKind = '';
-    this.ghost = null;
   }
 
   private setTool(t: Tool) {
@@ -717,6 +723,7 @@ export class EditorView {
       showBorderTargets: this.tool === 'walls',
       showPortTargets: this.tool === 'ends',
       ghost: this.ghost ?? undefined,
+      suggestWall: this.suggestedWall ?? undefined,
       segments: logic ? this.logic.segments : undefined,
       xMarks: logic ? this.logic.xs : undefined,
       highlight: logic ? this.logicFresh : undefined,

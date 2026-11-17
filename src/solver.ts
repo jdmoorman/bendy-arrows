@@ -1,4 +1,5 @@
-import { cellCount, cellRC, edgeBetween, edgeCells, endpointCells, isUsableEdge, modeOf, openCells, type Puzzle } from './model';
+import { ALL_RULES, runLogic } from './logic';
+import { cellCount, cellRC, clonePuzzle, edgeBetween, edgeCells, edgeCount, endpointCells, isUsableEdge, modeOf, openCells, type Puzzle } from './model';
 
 export type SolveStatus = 'none' | 'unique' | 'multiple' | 'aborted';
 
@@ -23,6 +24,8 @@ export interface SolveOptions {
   onProgress?: (nodes: number) => void;
   /** Only accept solutions that use all of these segments (e.g. what the player has drawn). */
   mustUse?: Iterable<number>;
+  /** Break ties between equally good moves in a random order from this seed, to find varied solutions. */
+  seed?: number;
 }
 
 export interface ParityResult {
@@ -149,6 +152,14 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   let nextCp = 0;
 
   const done = () => aborted || found.size >= maxSolutions;
+  // Seeded random numbers (xorshift) for varied tie-breaking.
+  let seedState = (opts.seed ?? 0) | 0 || 0x9e3779b9;
+  const rand = opts.seed === undefined ? null : () => {
+    seedState ^= seedState << 13;
+    seedState ^= seedState >>> 17;
+    seedState ^= seedState << 5;
+    return (seedState >>> 0) / 4294967296;
+  };
 
   const record = (closing: boolean) => {
     const edges: number[] = [];
@@ -239,7 +250,14 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
       forced = g;
     }
     const candidates = forced >= 0 ? [forced] : adj[cur].filter((nb) => !visited[nb]);
-    if (candidates.length > 1) candidates.sort((x, y) => onwardCount(x) - onwardCount(y));
+    if (candidates.length > 1) {
+      // Shuffle first so the (stable) sort breaks ties randomly, when asked to.
+      if (rand) for (let i = candidates.length - 1; i > 0; i--) {
+        const j = Math.floor(rand() * (i + 1));
+        [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+      }
+      candidates.sort((x, y) => onwardCount(x) - onwardCount(y));
+    }
     for (const next of candidates) {
       if (visited[next]) continue;
       if (endpoints.length === 2 && next === endpoints[1] && visitedCount + 1 < openCount) continue;
@@ -294,4 +312,111 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   if (solutions.length === 0) return result('none', 'No solution exists.', solutions, nodes);
   if (solutions.length === 1) return result('unique', 'The puzzle has exactly one solution.', solutions, nodes);
   return result('multiple', 'The puzzle has more than one solution.', solutions, nodes);
+}
+
+export interface UnionResult {
+  /** The first solve's verdict (unique, multiple, none or aborted). */
+  status: SolveStatus;
+  /** Every border used by at least one solution found. */
+  edges: number[];
+  /** Borders whose search hit the node limit, so it isn't known whether a solution uses them. */
+  unchecked: number[];
+  /**
+   * The border a wall on which would rule out the most of the solutions found while
+   * keeping at least one of them, or null (unique, none, or nothing to suggest).
+   */
+  suggestedWall: { edge: number; rulesOut: number; found: number } | null;
+}
+
+/**
+ * Every line that belongs to at least one solution.
+ *
+ * 1. Solve once (that's the verdict: unique, multiple, none or aborted).
+ *    Then run the logic rules (all but the trial) until they stall: they hold for every
+ *    solution, so their lines go into every search below as required, and their X marks
+ *    become walls (no solution uses them, so those borders need no search at all).
+ * 2. Sample: quick solves that break ties in random orders, each finding a different
+ *    solution and marking its lines, until ten in a row add nothing new.
+ * 3. For each border still unmarked, look for a solution that must use it: a few quick
+ *    randomised tries, then one bounded full search. A border whose search runs out of
+ *    steps is reported as unchecked rather than guessed.
+ * `onUpdate` sees the lines found so far as they grow.
+ */
+export function solutionUnion(
+  p: Puzzle,
+  opts: {
+    nodeLimit?: number;
+    perEdgeNodeLimit?: number;
+    onUpdate?: (edges: number[]) => void;
+    shouldAbort?: () => boolean;
+    /** Seed the searches with what the logic rules deduce (default true; off for comparison). */
+    useLogic?: boolean;
+  } = {},
+): UnionResult {
+  const first = solve(p, { maxSolutions: 2, nodeLimit: opts.nodeLimit, shouldAbort: opts.shouldAbort });
+  const used = new Set(first.solutions.flat());
+  if (first.status !== 'multiple') return { status: first.status, edges: [...used], unchecked: [], suggestedWall: null };
+  // Every distinct solution found, and how many of them use each border (for the suggestion).
+  const seen = new Set<string>();
+  const uses = new Map<number, number>();
+  const count = (sol: number[]) => {
+    const key = sol.join(',');
+    if (seen.has(key)) return;
+    seen.add(key);
+    for (const e of sol) uses.set(e, (uses.get(e) ?? 0) + 1);
+  };
+  for (const sol of first.solutions) count(sol);
+  // What every solution must do, from the logic rules: required lines, and X'd borders as walls.
+  let required: number[] = [];
+  let q = p;
+  if (opts.useLogic ?? true) {
+    const logic = runLogic(p, ALL_RULES.filter((r) => r !== 'trial'));
+    if (!logic.contradiction) {
+      required = [...logic.state.segments];
+      q = clonePuzzle(p);
+      for (const x of logic.state.xs) q.walls.add(x);
+      for (const e of required) used.add(e);
+    }
+  }
+  const report = () => opts.onUpdate?.([...used]);
+  const add = (sol: number[] | undefined) => {
+    if (sol) count(sol);
+    const before = used.size;
+    for (const x of sol ?? []) used.add(x);
+    if (used.size > before) report();
+    return used.size > before;
+  };
+  report();
+  // 2. Random samples.
+  for (let seed = 1, quiet = 0; seed <= 200 && quiet < 10 && !opts.shouldAbort?.(); seed++) {
+    quiet = add(solve(q, { maxSolutions: 1, mustUse: required, seed, nodeLimit: 20_000 }).solutions[0]) ? 0 : quiet + 1;
+  }
+  // 3. One search per border still unmarked.
+  const unchecked: number[] = [];
+  for (let e = 0; e < edgeCount(p); e++) {
+    // Borders the logic X'd are walls in q: no solution uses them.
+    if (used.has(e) || !isUsableEdge(q, e)) continue;
+    if (opts.shouldAbort?.()) {
+      unchecked.push(e);
+      continue;
+    }
+    let settled = false;
+    for (let seed = 1; seed <= 4 && !settled; seed++) {
+      const r = solve(q, { maxSolutions: 1, mustUse: [...required, e], seed, nodeLimit: 50_000 });
+      if (r.solutions.length) settled = add(r.solutions[0]) || true;
+      else if (r.status === 'none') settled = true; // no solution uses it
+    }
+    if (settled) continue;
+    const r = solve(q, { maxSolutions: 1, mustUse: [...required, e], nodeLimit: opts.perEdgeNodeLimit ?? 500_000, shouldAbort: opts.shouldAbort });
+    if (r.solutions.length) add(r.solutions[0]);
+    else if (r.status === 'aborted') unchecked.push(e);
+  }
+  // Suggest the wall that rules out the most solutions found but not all of them (a border
+  // every found solution uses would most likely leave no solution at all).
+  let suggestedWall: UnionResult['suggestedWall'] = null;
+  for (const [edge, n] of uses) {
+    if (n >= seen.size) continue;
+    if (!suggestedWall || n > suggestedWall.rulesOut) suggestedWall = { edge, rulesOut: n, found: seen.size };
+  }
+  return { status: first.status, edges: [...used], unchecked, suggestedWall };
 }
