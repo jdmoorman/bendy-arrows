@@ -111,3 +111,13 @@ describe('solve', () => {
     }
   });
 });
+
+describe('samples', async () => {
+  const { SAMPLES } = await import('../src/samples');
+  const { decodePuzzle } = await import('../src/codec');
+  for (const s of SAMPLES) {
+    test(`${s.name} is unique`, () => {
+      expect(solve(decodePuzzle(s.code)).status).toBe('unique');
+    });
+  }
+});
