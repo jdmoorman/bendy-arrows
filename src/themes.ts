@@ -1,6 +1,7 @@
 /**
  * Colour themes. Every colour in the app comes from one of these CSS custom
- * properties; adding a theme means adding one entry to `THEMES`.
+ * properties; adding a theme means adding one entry to `THEMES`. Light is the
+ * default; dark is kept for a future theme picker.
  */
 
 export type ThemeTokens = Record<
@@ -20,7 +21,8 @@ export type ThemeTokens = Record<
   | 'path'
   | 'given'
   | 'xmark'
-  | 'endpoint'
+  | 'end'
+  | 'end-arrow'
   | 'error'
   | 'error-fill'
   | 'success'
@@ -47,7 +49,8 @@ export const THEMES = {
     path: '#5eb8ff',
     given: '#c9a6ff',
     xmark: '#ff8a65',
-    endpoint: '#ffd166',
+    end: '#000000',
+    'end-arrow': '#e6e9f0',
     error: '#ff5c7a',
     'error-fill': 'rgba(255, 92, 122, 0.18)',
     success: '#5ee0a0',
@@ -55,33 +58,34 @@ export const THEMES = {
     hover: 'rgba(94, 184, 255, 0.18)',
   },
   light: {
-    bg: '#f4f5f8',
+    bg: '#f2f3f5',
     surface: '#ffffff',
-    'surface-2': '#eceef3',
-    border: '#d3d7e0',
-    text: '#1a1e27',
-    'text-muted': '#5d6578',
-    accent: '#1f6fd1',
+    'surface-2': '#e8eaee',
+    border: '#d0d4dc',
+    text: '#15181e',
+    'text-muted': '#5b6271',
+    accent: '#2563eb',
     'accent-text': '#ffffff',
     tile: '#ffffff',
     'tile-alt': '#ffffff',
-    'tile-blocked': '#1a1e27',
-    'grid-line': '#c9ced9',
-    wall: '#1a1e27',
-    path: '#1f6fd1',
+    'tile-blocked': '#000000',
+    'grid-line': '#c4c9d2',
+    wall: '#000000',
+    path: '#2563eb',
     given: '#7c3aed',
-    xmark: '#d9480f',
-    endpoint: '#c98a00',
-    error: '#d6264b',
-    'error-fill': 'rgba(214, 38, 75, 0.14)',
-    success: '#16955d',
-    ghost: 'rgba(22, 149, 93, 0.4)',
-    hover: 'rgba(31, 111, 209, 0.12)',
+    xmark: '#e2552b',
+    end: '#000000',
+    'end-arrow': '#000000',
+    error: '#d92d4b',
+    'error-fill': 'rgba(217, 45, 75, 0.14)',
+    success: '#139a5b',
+    ghost: 'rgba(19, 154, 91, 0.38)',
+    hover: 'rgba(37, 99, 235, 0.1)',
   },
 } satisfies Record<string, ThemeTokens>;
 
 export type ThemeName = keyof typeof THEMES;
-export const DEFAULT_THEME: ThemeName = 'dark';
+export const DEFAULT_THEME: ThemeName = 'light';
 
 export function applyTheme(name: ThemeName, root: HTMLElement = document.documentElement): void {
   const tokens: ThemeTokens = THEMES[name] ?? THEMES[DEFAULT_THEME];

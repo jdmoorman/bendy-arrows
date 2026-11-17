@@ -8,6 +8,12 @@
  *   - horizontal edges join (r, c) and (r, c + 1): id = r * (w - 1) + c,
  *     for 0 <= id < h * (w - 1)
  *   - vertical edges join (r, c) and (r + 1, c): id = h * (w - 1) + r * w + c
+ *
+ * Ports are the borders on the outside frame, numbered clockwise in groups:
+ *   top    (0, c) .......... port = c
+ *   right  (r, w - 1) ...... port = w + r
+ *   bottom (h - 1, c) ...... port = w + h + c
+ *   left   (r, 0) .......... port = 2w + h + r
  */
 
 export type Mode = 'path' | 'cycle';
@@ -20,7 +26,10 @@ export interface Puzzle {
   blocked: Set<number>;
   /** Black edges the path may not cross. */
   walls: Set<number>;
-  /** Path mode only: up to two cells where the path must end. */
+  /**
+   * Path mode only: up to two ports (outer borders of the frame, see portCell)
+   * where the path must enter and leave. The first is the entrance.
+   */
   endpoints: number[];
   /** Segments that are part of the solution and given to the player. */
   givens: Set<number>;
@@ -112,6 +121,53 @@ export function cellEdges(s: Size, cell: number): number[] {
   return neighbors(s, cell).map((n) => edgeBetween(s, cell, n));
 }
 
+export type Side = 'top' | 'right' | 'bottom' | 'left';
+
+export function portCount({ w, h }: Size): number {
+  return 2 * (w + h);
+}
+
+export function portId({ w, h }: Size, side: Side, i: number): number {
+  switch (side) {
+    case 'top':
+      return i;
+    case 'right':
+      return w + i;
+    case 'bottom':
+      return w + h + i;
+    case 'left':
+      return 2 * w + h + i;
+  }
+}
+
+/** Side of the frame a port is on, and its column (top/bottom) or row (left/right). */
+export function portSide({ w, h }: Size, port: number): [Side, number] {
+  if (port < w) return ['top', port];
+  if (port < w + h) return ['right', port - w];
+  if (port < 2 * w + h) return ['bottom', port - w - h];
+  return ['left', port - 2 * w - h];
+}
+
+/** The tile just inside a port. */
+export function portCell(s: Size, port: number): number {
+  const [side, i] = portSide(s, port);
+  switch (side) {
+    case 'top':
+      return i;
+    case 'right':
+      return i * s.w + s.w - 1;
+    case 'bottom':
+      return (s.h - 1) * s.w + i;
+    case 'left':
+      return i * s.w;
+  }
+}
+
+/** Tiles where the path must end (path mode). */
+export function endpointCells(p: Puzzle): number[] {
+  return p.mode === 'path' ? p.endpoints.slice(0, 2).map((port) => portCell(p, port)) : [];
+}
+
 export function isOpen(p: Puzzle, cell: number): boolean {
   return !p.blocked.has(cell);
 }
@@ -120,6 +176,12 @@ export function openCells(p: Puzzle): number[] {
   const out: number[] = [];
   for (let i = 0; i < cellCount(p); i++) if (!p.blocked.has(i)) out.push(i);
   return out;
+}
+
+/** Whether either tile beside this edge is black. */
+export function edgeTouchesBlocked(p: Puzzle, e: number): boolean {
+  const [a, b] = edgeCells(p, e);
+  return p.blocked.has(a) || p.blocked.has(b);
 }
 
 /** Whether the path may use this edge at all (both tiles open, no wall). */
@@ -157,7 +219,14 @@ export function resizePuzzle(p: Puzzle, w: number, h: number): Puzzle {
     const n = mapEdge(e);
     if (n >= 0) out.givens.add(n);
   }
-  out.endpoints = p.endpoints.map(mapCell).filter((c) => c >= 0);
+  // Ports stay on the same side of the frame.
+  out.endpoints = p.endpoints
+    .map((port) => {
+      const [side, i] = portSide(p, port);
+      const limit = side === 'top' || side === 'bottom' ? w : h;
+      return i < limit ? portId(out, side, i) : -1;
+    })
+    .filter((port) => port >= 0);
   return out;
 }
 
@@ -170,6 +239,7 @@ export function puzzlesEqual(a: Puzzle, b: Puzzle): boolean {
     setEq(a.blocked, b.blocked) &&
     setEq(a.walls, b.walls) &&
     setEq(a.givens, b.givens) &&
-    setEq(new Set(a.endpoints), new Set(b.endpoints))
+    a.endpoints.length === b.endpoints.length &&
+    a.endpoints.every((v, i) => v === b.endpoints[i])
   );
 }

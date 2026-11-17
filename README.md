@@ -31,15 +31,15 @@ The app opens on a sample puzzle in the **Play** tab.
 
 - **Tiles:** tap or drag to toggle black tiles.
 - **Walls:** tap or drag along borders to add or remove walls.
-- **Ends** (path puzzles only): tap up to two tiles where the path must end.
+- **Ends:** tap the outside frame to place where the path enters and leaves (up to two). A puzzle with ends is a **path** puzzle; with no ends it is a **loop** puzzle. If only one end is placed, Play asks for the second first. Each end is drawn as a black path stub through the frame with an arrow outside it, pointing in at the entrance and out at the exit. Tap an end again to remove it.
 - **Givens:** drag between tiles to give away segments of the solution.
-- **Path / Loop** switch and **width × height** pickers (1 to 30).
+- **Width × height** pickers (1 to 30).
 - **Check** runs the solver in the background and reports whether the puzzle has **no solution** (with a reason, such as a checkerboard parity mismatch), **exactly one**, or **more than one**. The eye button overlays the solutions it found.
 - **Play** switches to the Play tab with your puzzle.
 
 ## Sharing and saving
 
-- **Share** button (top right): send a link with the phone's share sheet or copy it, export or import JSON, or paste a link or code to open a puzzle. Links look like `…/#p=CODE`.
+- **Share** button (top right): send a link with the phone's share sheet or copy it, export or import JSON, or paste a link or code to open a puzzle. Links look like `…/#p=CODE`. The puzzle format is versioned 0.x while the app is pre-release (currently 0.2); older 0.1 links still open.
 - **Library** button: save the current puzzle under a name, then reopen, edit or delete saved puzzles. Progress on saved puzzles is kept automatically. The current puzzle, your progress and any unsaved editor work are restored when you come back.
 
 Everything is stored locally in your browser; nothing is sent anywhere.
@@ -69,4 +69,4 @@ The solver stops after finding two solutions, which is enough to decide uniquene
 | `src/render.ts`, `src/input.ts` | SVG board and pointer/touch gestures |
 | `src/play.ts`, `src/editor.ts` | Play and Create views |
 | `src/share.ts`, `src/library-ui.ts`, `src/storage.ts` | Sharing, library and localStorage |
-| `src/themes.ts` | Colour themes (dark by default; add a theme by adding a token map) |
+| `src/themes.ts` | Colour themes (light by default, dark also defined; add a theme by adding a token map) |

@@ -1,4 +1,4 @@
-import { cellCount, cellRC, edgeBetween, edgeCells, isUsableEdge, openCells, type Puzzle } from './model';
+import { cellCount, cellRC, edgeBetween, edgeCells, endpointCells, isUsableEdge, openCells, type Puzzle } from './model';
 
 export type SolveStatus = 'none' | 'unique' | 'multiple' | 'aborted';
 
@@ -56,14 +56,14 @@ export function parityCheck(p: Puzzle): ParityResult {
     return { ok: false, a, b, endColor: null, reason: `A path's checkerboard counts can differ by at most one, but there are ${counts}.` };
   }
   const endColor: 0 | 1 | null = a === b ? null : a > b ? 0 : 1;
-  const eps = p.endpoints.slice(0, 2);
+  const eps = endpointCells(p);
   if (endColor !== null) {
     const name = endColor === 0 ? 'A' : 'B';
     if (eps.some((c) => colorOf(p, c) !== endColor)) {
-      return { ok: false, a, b, endColor, reason: `With ${counts}, both path ends must be on ${name} tiles, but an endpoint is not.` };
+      return { ok: false, a, b, endColor, reason: `With ${counts}, both path ends must be on ${name} tiles, but an end arrow is beside a ${name === 'A' ? 'B' : 'A'} tile.` };
     }
   } else if (eps.length === 2 && colorOf(p, eps[0]) === colorOf(p, eps[1])) {
-    return { ok: false, a, b, endColor, reason: `With ${counts}, the path ends must be on different colours, but both endpoints share one.` };
+    return { ok: false, a, b, endColor, reason: `With ${counts}, the path ends must be on different colours, but both end arrows are beside the same colour.` };
   }
   return { ok: true, a, b, endColor, reason: `Checkerboard counts are consistent (${counts}).` };
 }
@@ -75,7 +75,7 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   const open = openCells(p);
   const openCount = open.length;
   const isCycle = p.mode === 'cycle';
-  const endpoints = isCycle ? [] : p.endpoints.slice(0, 2);
+  const endpoints = endpointCells(p);
 
   const result = (status: SolveStatus, reason: string, solutions: number[][] = [], nodes = 0): SolveResult => ({
     status,
@@ -86,9 +86,9 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
 
   // --- Quick structural checks -------------------------------------------
   if (openCount === 0) return result('none', 'There are no open tiles.');
-  for (const c of endpoints) if (p.blocked.has(c)) return result('none', 'An endpoint is on a black tile.');
+  for (const c of endpoints) if (p.blocked.has(c)) return result('none', 'An end arrow leads into a black tile.');
   if (endpoints.length === 2 && endpoints[0] === endpoints[1] && openCount > 1) {
-    return result('none', 'Both endpoints are on the same tile.');
+    return result('none', 'Both end arrows lead into the same tile.');
   }
   for (const g of p.givens) {
     if (!isUsableEdge(p, g)) return result('none', 'A given segment crosses a wall or touches a black tile.');
@@ -119,7 +119,7 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
     if (adj[c].length === 0) return result('none', 'A tile is completely walled off.');
     if (isCycle && adj[c].length < 2) return result('none', 'A tile has only one way in or out, so it cannot be on a loop.');
   }
-  for (const c of endpoints) if (givenAt[c].length > 1) return result('none', 'An endpoint has two given segments.');
+  for (const c of endpoints) if (givenAt[c].length > 1) return result('none', 'A tile with an end arrow has two given segments.');
   const deadEnds = open.filter((c) => adj[c].length === 1);
   if (!isCycle) {
     if (deadEnds.length > 2) return result('none', `${deadEnds.length} tiles have only one way in or out, but a path has only two ends.`);

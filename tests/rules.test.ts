@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createPuzzle, edgeBetween } from '../src/model';
+import { createPuzzle, edgeBetween, portId } from '../src/model';
 import { canPlace, checkSolution } from '../src/rules';
 import { pathEdges } from './helpers';
 
@@ -58,9 +58,11 @@ describe('checkSolution — path mode', () => {
 
   test('enforces fixed endpoints', () => {
     const p = createPuzzle(3, 3, 'path');
-    p.endpoints = [0, 2];
+    p.endpoints = [portId(p, 'top', 0), portId(p, 'top', 2)];
     expect(checkSolution(p, pathEdges(p, snake3x3)).solved).toBe(false);
-    p.endpoints = [8];
+    p.endpoints = [portId(p, 'left', 0), portId(p, 'bottom', 2)];
+    expect(checkSolution(p, pathEdges(p, snake3x3)).solved).toBe(true);
+    p.endpoints = [portId(p, 'right', 2)];
     expect(checkSolution(p, pathEdges(p, snake3x3)).solved).toBe(true);
   });
 

@@ -6,23 +6,24 @@ import {
   clonePuzzle,
   createPuzzle,
   edgeBetween,
+  edgeTouchesBlocked,
   MAX_SIZE,
   MIN_SIZE,
   openCells,
+  portCell,
   resizePuzzle,
-  type Mode,
   type Puzzle,
 } from './model';
-import { renderBoard } from './render';
+import { padFor, renderBoard } from './render';
 import { canPlace } from './rules';
 
 type Tool = 'tiles' | 'walls' | 'ends' | 'givens';
 
-const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'cells', givens: 'path' };
+const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ports', givens: 'path' };
 const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
   walls: 'Tap or drag along borders to add walls.',
-  ends: 'Tap tiles to mark where the path must end (up to two).',
+  ends: 'Tap the frame to add an entrance and exit — that makes it a path puzzle. With no ends it is a loop.',
   givens: 'Drag between tiles to give segments of the solution.',
 };
 
@@ -33,7 +34,7 @@ export class EditorView {
   /** Called when the user asks to play the puzzle. */
   onPlay?: () => void;
 
-  private puzzle: Puzzle = createPuzzle(6, 6);
+  private puzzle: Puzzle = createPuzzle(6, 6, 'cycle');
   private history = new History<Puzzle>();
   private tool: Tool = 'tiles';
   private ghost: Set<number> | null = null;
@@ -47,7 +48,6 @@ export class EditorView {
   private widthSel: HTMLSelectElement;
   private heightSel: HTMLSelectElement;
   private toolBtns: Record<Tool, HTMLButtonElement>;
-  private modeBtns: Record<Mode, HTMLButtonElement>;
   /** Extra controls appended by other modules (e.g. the uniqueness check). */
   readonly actions: HTMLElement;
 
@@ -74,10 +74,6 @@ export class EditorView {
           </div>
         </div>
         <div class="toolbar-row settings-row">
-          <div class="segmented mode-switch" role="group" aria-label="Puzzle type">
-            <button class="seg-btn" data-mode="path">Path</button>
-            <button class="seg-btn" data-mode="cycle">Loop</button>
-          </div>
           <label class="size-picker">
             <span class="sr-only">Width</span>
             <select data-size="w" aria-label="Width">${sizeOptions}</select>
@@ -108,17 +104,15 @@ export class EditorView {
       ends: q('[data-tool=ends]'),
       givens: q('[data-tool=givens]'),
     };
-    this.modeBtns = { path: q('[data-mode=path]'), cycle: q('[data-mode=cycle]') };
 
     for (const t of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[t].addEventListener('click', () => this.setTool(t));
-    for (const m of Object.keys(this.modeBtns) as Mode[]) this.modeBtns[m].addEventListener('click', () => this.setMode(m));
     const onSize = () => this.edit((p) => resizePuzzle(p, +this.widthSel.value, +this.heightSel.value));
     this.widthSel.addEventListener('change', onSize);
     this.heightSel.addEventListener('change', onSize);
     this.undoBtn.addEventListener('click', () => this.undo());
     this.redoBtn.addEventListener('click', () => this.redo());
     q<HTMLButtonElement>('[data-act=clear]').addEventListener('click', () =>
-      this.edit((p) => createPuzzle(p.w, p.h, p.mode)),
+      this.edit((p) => createPuzzle(p.w, p.h, 'cycle')),
     );
     q<HTMLButtonElement>('[data-act=play]').addEventListener('click', () => this.onPlay?.());
 
@@ -131,6 +125,7 @@ export class EditorView {
       },
       onGestureEnd: () => this.commitGesture(),
       onPaintCell: (cell, first) => this.paintCell(cell, first),
+      onTapPort: (port) => this.togglePort(port),
       onPaintEdge: (e, first) => this.paintWall(e, first),
       onPathStart: (cell) => {
         this.trail = [cell];
@@ -187,21 +182,26 @@ export class EditorView {
   }
 
   private setTool(t: Tool) {
-    if (t === 'ends' && this.puzzle.mode === 'cycle') t = 'tiles';
     this.tool = t;
     for (const k of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[k].setAttribute('aria-pressed', String(k === t));
     this.render();
   }
 
-  private setMode(m: Mode) {
-    if (m === this.puzzle.mode) return;
-    this.edit((p) => {
-      const q = clonePuzzle(p);
-      q.mode = m;
-      if (m === 'cycle') q.endpoints = [];
-      return q;
-    });
-    if (m === 'cycle' && this.tool === 'ends') this.setTool('tiles');
+  /** The puzzle type follows the ends: any end makes a path puzzle, none a loop. */
+  private syncMode() {
+    this.puzzle.mode = this.puzzle.endpoints.length > 0 ? 'path' : 'cycle';
+  }
+
+  /**
+   * Whether the puzzle can be played. A single end is not enough; if so, a
+   * message asks for the second one.
+   */
+  checkPlayable(): boolean {
+    if (this.puzzle.endpoints.length === 1) {
+      this.setMessage('Place a second end on the frame first — a path needs an entrance and an exit.', 'error');
+      return false;
+    }
+    return true;
   }
 
   /** Apply a whole-puzzle change as one undoable step. */
@@ -242,27 +242,33 @@ export class EditorView {
 
   private paintCell(cell: number, first: boolean) {
     const p = this.puzzle;
-    if (this.tool === 'ends') {
-      if (!first || p.mode !== 'path' || p.blocked.has(cell)) return;
-      const i = p.endpoints.indexOf(cell);
-      if (i >= 0) p.endpoints.splice(i, 1);
-      else {
-        p.endpoints.push(cell);
-        if (p.endpoints.length > 2) p.endpoints.shift();
-      }
-      this.changed = true;
-      this.render();
-      return;
-    }
     if (first) this.paintAdd = !p.blocked.has(cell);
     if (this.paintAdd === p.blocked.has(cell)) return;
     if (this.paintAdd) {
       p.blocked.add(cell);
-      p.endpoints = p.endpoints.filter((c) => c !== cell);
-      for (const e of cellEdges(p, cell)) p.givens.delete(e);
+      const endsBefore = p.endpoints.length;
+      p.endpoints = p.endpoints.filter((port) => portCell(p, port) !== cell);
+      if (p.endpoints.length !== endsBefore) this.syncMode();
+      for (const e of cellEdges(p, cell)) {
+        p.givens.delete(e);
+        p.walls.delete(e);
+      }
     } else {
       p.blocked.delete(cell);
     }
+    this.changed = true;
+    this.render();
+  }
+
+  /** Add an end at a port, or remove it if already there. Entrance is placed first. */
+  private togglePort(port: number) {
+    const p = this.puzzle;
+    if (p.blocked.has(portCell(p, port))) return;
+    const i = p.endpoints.indexOf(port);
+    if (i >= 0) p.endpoints.splice(i, 1);
+    else if (p.endpoints.length < 2) p.endpoints.push(port);
+    else p.endpoints[1] = port; // replace the exit
+    this.syncMode();
     this.changed = true;
     this.render();
   }
@@ -271,6 +277,8 @@ export class EditorView {
     const p = this.puzzle;
     if (on === p.walls.has(e)) return;
     if (on) {
+      // Black tiles are already walled on every side.
+      if (edgeTouchesBlocked(p, e)) return;
       p.walls.add(e);
       p.givens.delete(e);
     } else {
@@ -323,11 +331,11 @@ export class EditorView {
   render(): void {
     const p = this.puzzle;
     renderBoard(this.svg, p, {
+      pad: padFor(p, true),
       showBorderTargets: this.tool === 'walls',
+      showPortTargets: this.tool === 'ends',
       ghost: this.ghost ?? undefined,
     });
-    for (const m of Object.keys(this.modeBtns) as Mode[]) this.modeBtns[m].setAttribute('aria-pressed', String(m === p.mode));
-    this.toolBtns.ends.disabled = p.mode === 'cycle';
     this.widthSel.value = String(p.w);
     this.heightSel.value = String(p.h);
     this.undoBtn.disabled = !this.history.canUndo;

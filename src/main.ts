@@ -45,7 +45,13 @@ let puzzleName: string | undefined;
 let tab: Tab = 'play';
 let ready = false;
 
-editor.onPlay = () => setTab('play');
+/** Switch to Play at the user's request, unless the puzzle being edited isn't ready. */
+function requestPlay() {
+  if (tab === 'edit' && !editor.checkPlayable()) return;
+  setTab('play');
+}
+
+editor.onPlay = requestPlay;
 attachUniquenessCheck(editor);
 
 play.onProgress = (progress, solved) => {
@@ -115,7 +121,7 @@ function setTab(t: Tab) {
 }
 
 for (const b of app.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
-  b.addEventListener('click', () => setTab(b.dataset.tab as Tab));
+  b.addEventListener('click', () => (b.dataset.tab === 'play' ? requestPlay() : setTab('edit')));
 }
 
 app.querySelector('[data-act=share]')!.addEventListener('click', () => {

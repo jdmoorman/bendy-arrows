@@ -1,4 +1,4 @@
-import { cellCount, edgeCells, isUsableEdge, openCells, type Puzzle } from './model';
+import { cellCount, edgeCells, endpointCells, isUsableEdge, openCells, type Puzzle } from './model';
 
 /**
  * Whether the player may draw a segment on this edge.
@@ -60,16 +60,17 @@ export function checkSolution(p: Puzzle, segments: Iterable<number>): CheckResul
   }
 
   const badEnds = new Set<number>();
+  const eps = endpointCells(p);
   if (p.mode === 'cycle') {
     for (const c of ends) badEnds.add(c);
-  } else if (p.endpoints.length > 0) {
-    const allowed = new Set(p.endpoints);
+  } else if (eps.length > 0) {
+    const allowed = new Set(eps);
     for (const c of ends) {
       // With one fixed endpoint the other end is free, but only one free end may exist.
-      if (!allowed.has(c) && p.endpoints.length === 2) badEnds.add(c);
+      if (!allowed.has(c) && eps.length === 2) badEnds.add(c);
     }
-    if (p.endpoints.length === 1) {
-      const free = ends.filter((c) => c !== p.endpoints[0]);
+    if (eps.length === 1) {
+      const free = ends.filter((c) => c !== eps[0]);
       if (free.length > 1) for (const c of free) badEnds.add(c);
     }
   }
@@ -124,8 +125,8 @@ export function checkSolution(p: Puzzle, segments: Iterable<number>): CheckResul
     (p.mode === 'cycle'
       ? pieces === 1 && ends.length === 0
       : open.length === 1
-        ? segs.size === 0 && (p.endpoints.length === 0 || p.endpoints.every((c) => c === open[0]))
-        : pieces === 1 && ends.length === 2 && p.endpoints.every((c) => ends.includes(c)));
+        ? segs.size === 0 && eps.every((c) => c === open[0])
+        : pieces === 1 && ends.length === 2 && eps.every((c) => ends.includes(c)));
 
   return {
     solved,

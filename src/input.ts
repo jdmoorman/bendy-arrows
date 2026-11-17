@@ -1,4 +1,4 @@
-import { edgeBetween, cellRC, type Puzzle } from './model';
+import { cellRC, edgeBetween, portId, type Puzzle } from './model';
 import { CELL, PAD } from './render';
 
 /**
@@ -12,9 +12,10 @@ import { CELL, PAD } from './render';
  *   - 'edges': every border the pointer comes nearest to is painted
  *              (onPaintEdge), starting with the one under the initial touch.
  *   - 'cells': every tile the pointer touches is painted (onPaintCell).
+ *   - 'ports': a tap near the outer frame picks the nearest port (onTapPort).
  */
 
-export type DragKind = 'path' | 'edges' | 'cells';
+export type DragKind = 'path' | 'edges' | 'cells' | 'ports';
 
 export interface BoardHandlers {
   kind(): DragKind;
@@ -30,6 +31,7 @@ export interface BoardHandlers {
   onSecondaryEdge?(edge: number): void;
   onPaintEdge?(edge: number, first: boolean): void;
   onPaintCell?(cell: number, first: boolean): void;
+  onTapPort?(port: number): void;
 }
 
 export interface Hit {
@@ -68,6 +70,26 @@ export function hitTest(p: Puzzle, x: number, y: number, tolerance = EDGE_TOLERA
   return { cell, edge: edgeBetween(p, cell, cands[0][1]), edgeDist: cands[0][0] };
 }
 
+/**
+ * The frame border (port) nearest a point in tile units, or -1 if the point
+ * is more than `reach` tiles inside the frame.
+ */
+export function portAt(p: Puzzle, x: number, y: number, reach = 1): number {
+  const dists: [number, 'top' | 'right' | 'bottom' | 'left'][] = [
+    [y, 'top'],
+    [p.w - x, 'right'],
+    [p.h - y, 'bottom'],
+    [x, 'left'],
+  ];
+  dists.sort((a, b) => a[0] - b[0]);
+  const [dist, side] = dists[0];
+  if (dist > reach) return -1;
+  const along = side === 'top' || side === 'bottom' ? x : y;
+  const limit = side === 'top' || side === 'bottom' ? p.w : p.h;
+  if (along < 0 || along >= limit) return -1; // beyond a corner
+  return portId(p, side, Math.floor(along));
+}
+
 /** Next tile one orthogonal step from `from` toward `to`. */
 export function stepToward(p: Puzzle, from: number, to: number): number {
   const [r1, c1] = cellRC(p, from);
@@ -93,7 +115,8 @@ export function attachBoardInput(svg: SVGSVGElement, getPuzzle: () => Puzzle, h:
     const ctm = svg.getScreenCTM();
     if (!ctm) return [-1, -1];
     const pt = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(ctm.inverse());
-    return [(pt.x - PAD) / CELL, (pt.y - PAD) / CELL];
+    const pad = Number(svg.dataset.pad ?? PAD);
+    return [(pt.x - pad) / CELL, (pt.y - pad) / CELL];
   };
 
   const clampHit = (p: Puzzle, x: number, y: number, tol: number): Hit =>
@@ -120,6 +143,15 @@ export function attachBoardInput(svg: SVGSVGElement, getPuzzle: () => Puzzle, h:
     }
     if (ev.button !== 0 || active) return;
     const kind = h.kind();
+    if (kind === 'ports') {
+      const port = portAt(p, x, y);
+      if (port < 0) return;
+      ev.preventDefault();
+      h.onGestureStart?.();
+      h.onTapPort?.(port);
+      h.onGestureEnd?.();
+      return;
+    }
     const hit = hitTest(p, x, y, kind === 'edges' ? Infinity : EDGE_TOLERANCE);
     if (!hit) return;
     ev.preventDefault();

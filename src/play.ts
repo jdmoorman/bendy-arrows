@@ -2,7 +2,7 @@ import { History } from './history';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
 import { edgeBetween, isUsableEdge, type Puzzle } from './model';
-import { renderBoard } from './render';
+import { padFor, renderBoard } from './render';
 import { canPlace, checkSolution, type CheckResult } from './rules';
 
 export interface Progress {
@@ -223,6 +223,7 @@ export class PlayView {
       for (const c of full.badEnds) errorCells.add(c);
     }
     renderBoard(this.svg, this.puzzle, {
+      pad: padFor(this.puzzle),
       segments: this.segments,
       xMarks: this.xMarks,
       errorCells,
@@ -243,7 +244,7 @@ export class PlayView {
   private hint(): string {
     const p = this.puzzle;
     const goal = p.mode === 'cycle' ? 'Draw one loop through every open tile.' : 'Draw one path through every open tile.';
-    const ends = p.mode === 'path' && p.endpoints.length ? ' The path must end in the circled tile' + (p.endpoints.length > 1 ? 's.' : '.') : '';
+    const ends = p.mode === 'path' && p.endpoints.length ? ' The path must ' + (p.endpoints.length > 1 ? 'enter and leave at the arrows.' : 'end at the arrow.') : '';
     return goal + ends + ' Tap a border to mark it with an X.';
   }
 }

@@ -1,7 +1,7 @@
-/* Colours come from theme tokens set by src/themes.ts (dark by default). */
+/* Colours come from theme tokens set by src/themes.ts (light by default). */
 :root {
-  --bg: #0f1218;
-  --text: #e6e9f0;
+  --bg: #f2f3f5;
+  --text: #15181e;
   --radius: 12px;
   --tap: 44px;
   --gap: 8px;
@@ -139,7 +139,7 @@ select {
   background: var(--surface);
   color: var(--text);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
 /* ---------- Board ---------- */
@@ -230,10 +230,24 @@ select {
   fill: var(--error);
 }
 
-.endpoint {
-  fill: none;
-  stroke: var(--endpoint);
-  stroke-width: 8;
+.end-seg {
+  stroke: var(--end);
+  stroke-width: 22;
+  stroke-linecap: round;
+}
+.end-joint {
+  fill: var(--end);
+}
+.end-arrow-shaft {
+  stroke: var(--end-arrow);
+  stroke-width: 11;
+  stroke-linecap: round;
+}
+.end-arrow-head {
+  fill: var(--end-arrow);
+  stroke: var(--end-arrow);
+  stroke-width: 4;
+  stroke-linejoin: round;
 }
 
 .xmark {
@@ -458,7 +472,7 @@ select {
 }
 
 .sheet::backdrop {
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 0, 0, 0.4);
 }
 
 @media (min-width: 600px) {
@@ -547,7 +561,7 @@ select {
   padding: 10px 16px;
   border-radius: 14px;
   text-align: center;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
   background: var(--text);
   color: var(--bg);
   font-size: 0.92rem;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createPuzzle, edgeBetween, edgeCells, edgeCount, neighbors, resizePuzzle } from '../src/model';
+import { createPuzzle, edgeBetween, edgeCells, edgeCount, neighbors, portCell, portCount, portId, portSide, resizePuzzle } from '../src/model';
 
 describe('model', () => {
   test('edge ids round-trip through edgeCells/edgeBetween', () => {
@@ -29,10 +29,21 @@ describe('model', () => {
     p.blocked.add(8); // (2,2)
     p.blocked.add(4); // (1,1)
     p.walls.add(edgeBetween(p, 0, 1));
-    p.endpoints = [0, 8];
+    p.endpoints = [portId(p, 'left', 0), portId(p, 'right', 2)];
     const q = resizePuzzle(p, 2, 2);
     expect([...q.blocked]).toEqual([3]);
     expect([...q.walls]).toEqual([edgeBetween(q, 0, 1)]);
-    expect(q.endpoints).toEqual([0]);
+    expect(q.endpoints).toEqual([portId(q, 'left', 0)]);
+  });
+
+  test('ports cover the frame clockwise and map to edge tiles', () => {
+    const s = { w: 3, h: 2 };
+    expect(portCount(s)).toBe(10);
+    const cells = Array.from({ length: 10 }, (_, i) => portCell(s, i));
+    expect(cells).toEqual([0, 1, 2, 2, 5, 3, 4, 5, 0, 3]);
+    for (let i = 0; i < 10; i++) {
+      const [side, k] = portSide(s, i);
+      expect(portId(s, side, k)).toBe(i);
+    }
   });
 });

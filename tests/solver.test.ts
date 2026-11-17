@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, type Puzzle } from '../src/model';
+import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, portCount, portId, type Puzzle } from '../src/model';
 import { checkSolution } from '../src/rules';
 import { parityCheck, solve } from '../src/solver';
 
@@ -34,7 +34,7 @@ describe('parity', () => {
   test('open 3x3 path must end on A tiles', () => {
     const p = createPuzzle(3, 3, 'path');
     expect(parityCheck(p).endColor).toBe(0);
-    p.endpoints = [1];
+    p.endpoints = [portId(p, 'top', 1)];
     expect(parityCheck(p).ok).toBe(false);
   });
 });
@@ -62,7 +62,7 @@ describe('solve', () => {
 
   test('endpoints make a 2x2 path unique', () => {
     const p = createPuzzle(2, 2, 'path');
-    p.endpoints = [0, 1];
+    p.endpoints = [portId(p, 'left', 0), portId(p, 'right', 0)];
     const r = solve(p);
     expect(r.status).toBe('unique');
     expect(checkSolution(p, r.solutions[0]).solved).toBe(true);
@@ -99,8 +99,8 @@ describe('solve', () => {
       if (p.mode === 'path') {
         const k = Math.floor(rand() * 3);
         for (let i = 0; i < k; i++) {
-          const c = Math.floor(rand() * n);
-          if (!p.endpoints.includes(c)) p.endpoints.push(c);
+          const port = Math.floor(rand() * portCount(p));
+          if (!p.endpoints.includes(port)) p.endpoints.push(port);
         }
       }
       const expected = bruteForceCount(p);
