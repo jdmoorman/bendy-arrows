@@ -1,5 +1,7 @@
 import { decodePuzzle, encodePuzzle } from './codec';
 import { ICONS } from './icons';
+import { dailyName, dailyOptions, dateKey } from './daily';
+import { generateInBackground } from './generator-client';
 import { modeOf, openCells, type Puzzle } from './model';
 import type { Progress } from './play';
 import { SAMPLES } from './samples';
@@ -77,6 +79,42 @@ export function openLibrarySheet(ctx: LibraryContext): void {
     });
     body.append(el('p', 'field-label', existing ? 'This puzzle is saved as' : 'Save this puzzle'), nameInput, saveRow);
     if (!storage.available) body.append(el('p', 'field-label', 'Browser storage is unavailable, so saving is disabled.'));
+
+    // --- Daily puzzle ---
+    body.append(el('hr', 'sheet-sep'), el('p', 'field-label', 'Daily puzzle'));
+    const date = dateKey();
+    const daily = el('ul', 'lib-list');
+    const dailyLi = el('li', 'lib-item');
+    const dailyBtn = el('button', 'lib-main');
+    const dailyTitle = el('span', 'lib-name');
+    dailyTitle.textContent = dailyName(date);
+    const dailyCode = storage.loadDaily(date);
+    const dailySaved = dailyCode ? storage.findByCode(dailyCode) : undefined;
+    const dailyMeta = el('span', 'lib-meta', dailySaved?.solved ? '<span class="lib-solved">Solved</span>' : 'A new puzzle every day');
+    dailyBtn.append(dailyTitle, dailyMeta);
+    dailyBtn.addEventListener('click', async () => {
+      const open = (code: string) => {
+        const saved = storage.findByCode(code);
+        sheet.close();
+        ctx.onOpen({ puzzle: decodePuzzle(code), progress: saved?.progress, id: saved?.id, name: saved?.name ?? dailyName(date) }, 'play');
+      };
+      const cached = storage.loadDaily(date);
+      if (cached) return open(cached);
+      dailyBtn.disabled = true;
+      dailyMeta.innerHTML = '<span class="spinner" aria-hidden="true"></span> Making today’s puzzle…';
+      try {
+        const { puzzle } = await generateInBackground(dailyOptions(date)).result;
+        const code = encodePuzzle(puzzle);
+        storage.saveDaily(date, code);
+        open(code);
+      } catch {
+        dailyBtn.disabled = false;
+        dailyMeta.textContent = 'Couldn’t make today’s puzzle. Tap to try again.';
+      }
+    });
+    dailyLi.append(dailyBtn);
+    daily.append(dailyLi);
+    body.append(daily);
 
     // --- Saved puzzles ---
     body.append(el('hr', 'sheet-sep'), el('p', 'field-label', 'Your puzzles'));

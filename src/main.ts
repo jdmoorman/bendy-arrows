@@ -137,8 +137,10 @@ function setTab(t: Tab) {
     libraryId = saved?.id;
     puzzleName = saved?.name;
     // An edited puzzle is a new puzzle: keep the marks that still fit, but not the time.
+    // A replaced, resized or turned puzzle starts with an empty board.
     const { segments, xMarks } = play.progress;
-    play.load(playing, saved?.progress ?? { segments, xMarks });
+    play.load(playing, saved?.progress ?? (editor.marksStillFit ? { segments, xMarks } : undefined));
+    editor.marksStillFit = true;
     updateHeader();
   }
   play.el.classList.toggle('hidden', t !== 'play');
@@ -199,6 +201,7 @@ function openLibrary() {
 }
 
 app.querySelector('[data-act=library]')!.addEventListener('click', openLibrary);
+editor.onSave = openLibrary;
 
 document.addEventListener('keydown', (ev) => {
   const target = ev.target as HTMLElement | null;
@@ -248,6 +251,8 @@ function start() {
   if (session?.tab === 'edit' && session.editorCode && sessionPuzzle && puzzlesEqual(playing, sessionPuzzle)) {
     try {
       editor.load(decodePuzzle(session.editorCode));
+      // We can't tell how much it was changed before the reload, so don't carry marks over.
+      editor.marksStillFit = false;
     } catch {
       /* ignore stale editor state */
     }

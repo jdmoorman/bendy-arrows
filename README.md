@@ -38,7 +38,7 @@ The app opens on a sample puzzle in the **Play** tab.
 - **Ends:** tap a dot on the frame outside the grid to place the entrance, then the exit. Each is drawn as a black stub through the frame: the entrance ends in the arrow's tail, the exit in its head. Tap an end again to remove it. Ends can only go on the frame; for a fixed tile inside the grid, use checkpoints. With ends or checkpoints it is a **path** puzzle; with neither it is a **loop** puzzle. If only one end is placed, Play asks for the second first.
 - **Checkpoints:** tap tiles to place numbered circles 1, 2, 3… in order. The path must start at 1, pass through every number in order and finish at the highest one, while filling every tile. Tap a number to remove it (higher numbers move down). A puzzle uses either ends or checkpoints, not both — placing one kind removes the other. Play needs at least two checkpoints.
 - **Width × height** pickers (1 to 30), and buttons to **rotate left / right** and **flip horizontally / vertically**. Black tiles, walls, ends and checkpoints all move with the grid, and each change can be undone.
-- **Logic:** a helper that shows how far simple reasoning gets. **Step** applies one round of the chosen rules (the new lines and X marks are highlighted) and can be pressed repeatedly; **Reset** starts over; **Rules** is a checklist of which rules to use:
+- **Logic** (the Rules / Reset / Step buttons, always shown next to the solution check chip): a helper that shows how far simple reasoning gets. **Step** applies one round of the chosen rules (the new lines and X marks are highlighted) and can be pressed repeatedly; **Reset** starts over; **Rules** is a checklist of which rules to use:
   - **Corners** — a tile with only two ways out, at a right angle, uses both.
   - **Passages** — a tile walled in on opposite sides gets a straight line.
   - **Continue** — a tile whose remaining ways out are exactly what it still needs takes them (including a path end with only one way out).
@@ -55,11 +55,18 @@ The app opens on a sample puzzle in the **Play** tab.
   It reports when it's stuck, when logic alone solves the puzzle, or when it finds a contradiction. Editing the puzzle resets it.
 - The puzzle is **checked automatically** in the background after every edit. A chip shows **Unique**, **No solution**, **2+ solutions** or **Too big**; tap it for the explanation (e.g. a checkerboard parity mismatch). Tapping **Unique** shows the solution (tap again to hide it); with 2+ solutions, the eye button steps through the ones it found.
 - **Play** switches to the Play tab with your puzzle.
+- **Save** (disk button) opens the library's save form for the puzzle you're editing.
+- **New puzzle** (+ button) starts a **blank** grid of any size, or **generates** one:
+  - **Type:** loop, path (frame ends) or numbers (checkpoints).
+  - **Difficulty**, rated with the logic rules: **Easy** — the basic rules solve it; **Medium** — it needs the advanced rules; **Hard** — unique, but beyond all the rules. If no puzzle of that difficulty turns up, you get the closest one and a note saying so.
+  - **Clues:** walls and black tiles, walls only, or tiles only.
+  - **Size** (4–12; follows the difficulty until you pick one), **Minimal clues** (drop every wall, tile and number that isn't needed), and a **seed**: the same options and seed always give the same puzzle.
+  - Layouts that are symmetric are thrown away, so neither half of the board just repeats the other.
 
 ## Sharing and saving
 
 - **Share** button (top right): send a link with the phone's share sheet or copy it, export or import JSON, or paste a link or code to open a puzzle. Links look like `…/#p=CODE`. The puzzle format is versioned 0.x while the app is pre-release (currently 0.5); older 0.x links still open.
-- **Library** button: save the current puzzle under a name, then reopen, edit or delete saved puzzles. Progress on saved puzzles is kept automatically. The current puzzle, your progress and any unsaved editor work are restored when you come back.
+- **Library** button: today's **Daily puzzle** (the same for everyone on a given date, made by the generator), then save the current puzzle under a name, then reopen, edit or delete saved puzzles. Progress on saved puzzles is kept automatically. The current puzzle, your progress and any unsaved editor work are restored when you come back.
 
 - **Settings** button (gear): checkerboard shading (on by default), **Show timer** (off by default) and **Auto-check** (on by default), which highlights mistakes such as branches, early loops and numbers out of order as you play. Settings are remembered on this device.
 
@@ -90,4 +97,6 @@ The solver stops after finding two solutions, which is enough to decide uniquene
 | `src/render.ts`, `src/input.ts` | SVG board and pointer/touch gestures |
 | `src/play.ts`, `src/editor.ts` | Play and Create views |
 | `src/share.ts`, `src/library-ui.ts`, `src/storage.ts` | Sharing, library and localStorage |
+| `src/generator.ts`, `src/new-puzzle-ui.ts`, `src/daily.ts` | Puzzle generator (`generator.worker.ts` runs it off the main thread), New puzzle sheet, daily puzzle |
+| `src/logic.ts` | Logic rules for the helper, hints and difficulty ratings |
 | `src/themes.ts` | Colour themes (light by default, dark also defined; add a theme by adding a token map) |

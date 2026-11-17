@@ -23,16 +23,16 @@ import { padFor, renderBoard } from './render';
 import { ALL_RULES, applyStep, BASIC_RULES, logicStep, RULES, rulesFor, type LogicState, type RuleId } from './logic';
 import { Storage } from './storage';
 import { openSheet } from './ui';
+import { openNewPuzzleSheet } from './new-puzzle-ui';
 
-type Tool = 'tiles' | 'walls' | 'ends' | 'checkpoints' | 'logic';
+type Tool = 'tiles' | 'walls' | 'ends' | 'checkpoints';
 
-const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends', checkpoints: 'cells', logic: 'cells' };
+const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends', checkpoints: 'cells' };
 const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
   walls: 'Tap or drag along borders to add walls.',
   ends: 'Tap a dot on the frame to add the entrance, then the exit. With no ends or checkpoints it is a loop.',
   checkpoints: 'Tap tiles to number them 1, 2, 3… The path must run through them in order. Tap a number to remove it.',
-  logic: 'Press Step to apply one round of the chosen simple rules. Press again to keep going.',
 };
 
 const EXCLUSIVE_NOTE = {
@@ -46,6 +46,13 @@ export class EditorView {
   readonly changeListeners: ((p: Puzzle) => void)[] = [];
   /** Called when the user asks to play the puzzle. */
   onPlay?: () => void;
+  /** Called when the Save button is pressed. */
+  onSave?: () => void;
+  /**
+   * False once the puzzle has been replaced (New puzzle), resized or turned
+   * since it was loaded: the player's marks on the old one no longer mean anything.
+   */
+  marksStillFit = true;
 
   private puzzle: Puzzle = createPuzzle(6, 6);
   private history = new History<Puzzle>();
@@ -88,19 +95,13 @@ export class EditorView {
       <div class="board-wrap"><svg class="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Puzzle editor board"></svg></div>
       <p class="status" role="status" aria-live="polite"></p>
       <div class="toolbar">
-        <div class="toolbar-row">
+        <div class="toolbar-row tool-row">
           <div class="segmented" role="group" aria-label="Editing tool">
             <button class="seg-btn" data-tool="tiles">Tiles</button>
             <button class="seg-btn" data-tool="walls">Walls</button>
             <button class="seg-btn" data-tool="ends">Ends</button>
             <button class="seg-btn" data-tool="checkpoints">Checkpoints</button>
-            <button class="seg-btn" data-tool="logic">Logic</button>
           </div>
-        </div>
-        <div class="toolbar-row logic-row hidden">
-          <button class="btn" data-logic="rules">${ICONS.list}<span>Rules</span></button>
-          <button class="btn" data-logic="reset">${ICONS.undo}<span>Reset</span></button>
-          <button class="btn primary" data-logic="step">${ICONS.step}<span>Step</span></button>
         </div>
         <div class="toolbar-row settings-row">
           <label class="size-picker">
@@ -115,11 +116,17 @@ export class EditorView {
           <button class="btn icon-only" data-transform="flipH" aria-label="Flip horizontally" title="Flip horizontally">${ICONS.flipH}</button>
           <button class="btn icon-only" data-transform="flipV" aria-label="Flip vertically" title="Flip vertically">${ICONS.flipV}</button>
         </div>
+        <div class="toolbar-row logic-row">
+          <button class="btn" data-logic="rules" aria-label="Logic rules">${ICONS.list}<span>Rules</span></button>
+          <button class="btn" data-logic="reset" aria-label="Reset logic">${ICONS.undo}<span>Reset</span></button>
+          <button class="btn" data-logic="step" aria-label="Logic step">${ICONS.step}<span>Step</span></button>
+          <span class="editor-actions"></span>
+        </div>
         <div class="toolbar-row actions-row">
           <button class="btn" data-act="undo" aria-label="Undo">${ICONS.undo}</button>
           <button class="btn" data-act="redo" aria-label="Redo">${ICONS.redo}</button>
-          <button class="btn" data-act="clear" aria-label="Clear puzzle">${ICONS.clear}</button>
-          <span class="editor-actions"></span>
+          <button class="btn" data-act="new" aria-label="New puzzle" title="New puzzle">${ICONS.plus}</button>
+          <button class="btn" data-act="save" aria-label="Save to the library" title="Save">${ICONS.save}</button>
           <button class="btn primary" data-act="play">${ICONS.play}<span>Play</span></button>
         </div>
       </div>`;
@@ -136,11 +143,13 @@ export class EditorView {
       walls: q('[data-tool=walls]'),
       ends: q('[data-tool=ends]'),
       checkpoints: q('[data-tool=checkpoints]'),
-      logic: q('[data-tool=logic]'),
     };
 
     for (const t of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[t].addEventListener('click', () => this.setTool(t));
-    const onSize = () => this.edit((p) => resizePuzzle(p, +this.widthSel.value, +this.heightSel.value));
+    const onSize = () => {
+      this.marksStillFit = false;
+      this.edit((p) => resizePuzzle(p, +this.widthSel.value, +this.heightSel.value));
+    };
     this.widthSel.addEventListener('change', onSize);
     this.heightSel.addEventListener('change', onSize);
     q<HTMLButtonElement>('[data-logic=step]').addEventListener('click', () => this.stepLogic());
@@ -151,13 +160,32 @@ export class EditorView {
     });
     q<HTMLButtonElement>('[data-logic=rules]').addEventListener('click', () => this.openRulesSheet());
     for (const b of this.el.querySelectorAll<HTMLButtonElement>('[data-transform]')) {
-      b.addEventListener('click', () => this.edit((p) => transformPuzzle(p, b.dataset.transform as Transform)));
+      b.addEventListener('click', () => {
+        this.marksStillFit = false;
+        this.edit((p) => transformPuzzle(p, b.dataset.transform as Transform));
+      });
     }
     this.undoBtn.addEventListener('click', () => this.undo());
     this.redoBtn.addEventListener('click', () => this.redo());
-    q<HTMLButtonElement>('[data-act=clear]').addEventListener('click', () =>
-      this.edit((p) => createPuzzle(p.w, p.h)),
+    q<HTMLButtonElement>('[data-act=new]').addEventListener('click', () =>
+      openNewPuzzleSheet({
+        storage: this.storage,
+        w: this.puzzle.w,
+        h: this.puzzle.h,
+        onBlank: (w, h) => {
+          this.marksStillFit = false;
+          this.edit(() => createPuzzle(w, h));
+        },
+        onGenerated: (p, { options, difficulty }) => {
+          this.marksStillFit = false;
+          this.edit(() => p);
+          const kind = { loop: 'loop', path: 'path', checkpoints: 'numbers' }[options.type];
+          const note = difficulty === options.difficulty ? '' : ` (no ${options.difficulty} one turned up, so this is the closest)`;
+          this.setMessage(`Generated a ${difficulty} ${kind} puzzle${note} · seed ${options.seed}`, 'success');
+        },
+      }),
     );
+    q<HTMLButtonElement>('[data-act=save]').addEventListener('click', () => this.onSave?.());
     q<HTMLButtonElement>('[data-act=play]').addEventListener('click', () => this.onPlay?.());
 
     attachBoardInput(this.svg, () => this.puzzle, {
@@ -181,6 +209,7 @@ export class EditorView {
 
   load(p: Puzzle): void {
     this.puzzle = clonePuzzle(p);
+    this.marksStillFit = true;
     this.resetLogic();
     this.history.clear();
     this.clearMessage();
@@ -298,8 +327,6 @@ export class EditorView {
 
   private setTool(t: Tool) {
     this.tool = t;
-    this.el.querySelector('.settings-row')!.classList.toggle('hidden', t === 'logic');
-    this.el.querySelector('.logic-row')!.classList.toggle('hidden', t !== 'logic');
     for (const k of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[k].setAttribute('aria-pressed', String(k === t));
     this.render();
   }
@@ -365,7 +392,6 @@ export class EditorView {
       if (first) this.toggleCheckpoint(cell);
       return;
     }
-    if (this.tool === 'logic') return; // the board is read-only while using the logic helper
     if (first) this.paintAdd = !p.blocked.has(cell);
     if (this.paintAdd === p.blocked.has(cell)) return;
     if (this.paintAdd) {
@@ -440,7 +466,8 @@ export class EditorView {
 
   render(): void {
     const p = this.puzzle;
-    const logic = this.tool === 'logic';
+    // The logic helper's marks show until the next edit.
+    const logic = this.logicSteps > 0 || this.logicBad.length > 0;
     renderBoard(this.svg, p, {
       pad: padFor(p, true),
       showBorderTargets: this.tool === 'walls',
@@ -462,8 +489,7 @@ export class EditorView {
       this.status.textContent = this.message;
     } else {
       const open = openCells(p).length;
-      this.status.textContent = `${modeOf(p) === 'cycle' ? 'Loop' : 'Path'} · ${p.w}×${p.h} · ${open} open tiles. ${TOOL_HINT[this.tool]}`;
-      if (logic && this.logicNote) this.status.textContent = this.logicNote;
+      this.status.textContent = this.logicNote || `${modeOf(p) === 'cycle' ? 'Loop' : 'Path'} · ${p.w}×${p.h} · ${open} open tiles. ${TOOL_HINT[this.tool]}`;
     }
   }
 }

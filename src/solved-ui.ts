@@ -20,7 +20,7 @@ const dateFmt = new Intl.DateTimeFormat(undefined, {
   minute: '2-digit',
 });
 
-/** Shown when a puzzle is solved: the time, its rank, and the leaderboard. */
+/** Shown when a puzzle is solved: the time and the leaderboard. */
 export function openSolvedSheet(opts: {
   ms: number;
   result: RecordResult;
@@ -34,11 +34,7 @@ export function openSolvedSheet(opts: {
 
   const time = el('p', 'solved-time');
   time.textContent = formatDuration(opts.ms);
-  const sub = el('p', 'solved-sub');
-  if (entries.length === 1) sub.textContent = 'Your first solve of this puzzle.';
-  else if (index === 0) sub.textContent = `New personal best! Previous best ${formatDuration(entries[1].ms)}.`;
-  else sub.textContent = `#${index + 1} of ${entries.length} — best ${formatDuration(entries[0].ms)}.`;
-  body.append(time, sub);
+  body.append(time);
 
   body.append(el('p', 'field-label', opts.boardTitle));
   const list = el('ol', 'times');

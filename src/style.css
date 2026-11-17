@@ -756,11 +756,6 @@ select {
   color: var(--success);
 }
 
-.solved-sub {
-  margin: 0 0 6px;
-  text-align: center;
-  color: var(--text-muted);
-}
 
 .times {
   list-style: none;
@@ -794,7 +789,9 @@ select {
 .time-value {
   flex: 1;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 8px;
 }
 
 .time-help {
@@ -835,11 +832,28 @@ select {
 
 .logic-row .btn {
   flex: 1 1 0;
+  min-width: 0;
+  padding: 0 8px;
+}
+.logic-row .btn.icon-only {
+  flex: 0 0 var(--tap);
+  padding: 0;
 }
 
-/* Five editor tools share one row on a phone. */
+/* Logic helper and the solution check share a row; drop the icons when it's tight. */
+@media (max-width: 480px) {
+  .logic-row > .btn svg {
+    display: none;
+  }
+}
+
+/* The editing tools share one row on a phone. */
 .toolbar-row .segmented .seg-btn {
   padding: 0 6px;
+}
+.tool-row > .segmented {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .status.hint {
@@ -963,12 +977,39 @@ select {
     grid-area: toolbar;
     padding: 0 12px 0 0;
   }
-  /* Undo, redo, clear and the eye on one row; the check chip and Play below. */
-  .editor-view .actions-row {
-    flex-wrap: wrap;
+}
+
+/* Generator sheet. */
+.seed-row > .btn.icon-only {
+  flex: 0 0 var(--tap);
+}
+.gen-status:empty {
+  display: none;
+}
+
+/* Very narrow phones: let the size picker and the turn/flip buttons give a little. */
+@media (max-width: 380px) {
+  .settings-row > .btn.icon-only {
+    flex: 0 1 var(--tap);
+    min-width: 34px;
   }
-  .editor-view .actions-row > .btn.primary,
-  .editor-view .editor-actions > .validity {
-    flex: 1 1 40%;
+  .settings-row .size-picker {
+    min-width: 0;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+  .settings-row .size-picker select {
+    min-width: 40px;
+    padding: 6px 4px;
+  }
+}
+@media (max-width: 340px) {
+  .actions-row > .btn:not(.primary) {
+    flex: 0 1 var(--tap);
+    min-width: 34px;
+    padding: 0;
+  }
+  .actions-row > .btn.primary svg {
+    display: none;
   }
 }

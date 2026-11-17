@@ -31,6 +31,8 @@ const SESSION_KEY = 'hamiltonian.session.v1';
 const SETTINGS_KEY = 'hamiltonian.settings.v1';
 const TIMES_KEY = 'hamiltonian.times.v1';
 const LOGIC_KEY = 'hamiltonian.logic.v1';
+const GENERATOR_KEY = 'hamiltonian.generator.v1';
+const DAILY_KEY = 'hamiltonian.daily.v1';
 
 /** Per-device display preferences. */
 export interface Settings {
@@ -149,6 +151,26 @@ export class Storage {
 
   saveLogicRules(choice: { enabled: string[]; known: string[] }): void {
     this.write(LOGIC_KEY, choice);
+  }
+
+  /** The generator's last-used options (checked by the caller). */
+  loadGeneratorOptions(): Record<string, unknown> | null {
+    const o = this.read<unknown>(GENERATOR_KEY, null);
+    return o && typeof o === 'object' ? (o as Record<string, unknown>) : null;
+  }
+
+  saveGeneratorOptions(o: object): void {
+    this.write(GENERATOR_KEY, o);
+  }
+
+  /** The daily puzzle, if one was made for `date` (YYYY-MM-DD). */
+  loadDaily(date: string): string | null {
+    const d = this.read<{ date?: unknown; code?: unknown } | null>(DAILY_KEY, null);
+    return d && d.date === date && typeof d.code === 'string' ? d.code : null;
+  }
+
+  saveDaily(date: string, code: string): void {
+    this.write(DAILY_KEY, { date, code });
   }
 
   loadSettings(): Settings {
