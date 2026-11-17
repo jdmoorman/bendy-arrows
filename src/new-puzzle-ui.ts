@@ -23,7 +23,8 @@ const TYPES: [GenType, string][] = [
   ['path', 'Path'],
   ['checkpoints', 'Numbers'],
 ];
-const DIFFS: [Difficulty, string][] = [
+const DIFFS: [Difficulty | 'any', string][] = [
+  ['any', 'Any'],
   ['easy', 'Easy'],
   ['medium', 'Medium'],
   ['hard', 'Hard'],
@@ -38,6 +39,12 @@ const CLUES: [ClueKind, string][] = [
 /** The last-used options, and whether the size was picked by hand. */
 type Saved = Omit<GenOptions, 'seed'> & { sizeChosen: boolean };
 
+/** The usual size for a difficulty ('any' gets the medium size). */
+const sizeFor = (d: Difficulty | 'any') => DEFAULT_SIZE[d === 'any' ? 'medium' : d];
+
+/** Choices for the obstacle limit. */
+const MAX_OBSTACLE_CHOICES = 30;
+
 function savedOptions(storage: Storage): Saved {
   const o = storage.loadGeneratorOptions() ?? {};
   const oneOf = <T extends string>(v: unknown, list: [T, string][], d: T): T => (list.some(([k]) => k === v) ? (v as T) : d);
@@ -47,9 +54,10 @@ function savedOptions(storage: Storage): Saved {
     type: oneOf(o.type, TYPES, 'path'),
     difficulty,
     clues: oneOf(o.clues, CLUES, 'mixed'),
-    w: size(o.w, DEFAULT_SIZE[difficulty]),
-    h: size(o.h, DEFAULT_SIZE[difficulty]),
+    w: size(o.w, sizeFor(difficulty)),
+    h: size(o.h, sizeFor(difficulty)),
     minimal: typeof o.minimal === 'boolean' ? o.minimal : true,
+    maxObstacles: typeof o.maxObstacles === 'number' && o.maxObstacles >= 0 ? o.maxObstacles : undefined,
     sizeChosen: o.sizeChosen === true,
   };
 }
@@ -133,6 +141,20 @@ export function openNewPuzzleSheet(ctx: NewPuzzleContext): void {
   });
   minimal.append(minimalText, minimalInput);
 
+  // Sparsity: at most this many walls and black tiles.
+  const maxRow = el('label', 'switch-row');
+  const maxText = el('span', 'switch-text');
+  maxText.append(document.createTextNode('Max obstacles'), Object.assign(el('small'), { textContent: 'At most this many walls and black tiles (ends and numbers don’t count)' }));
+  const maxSelect = el('select', 'max-obstacles') as HTMLSelectElement;
+  maxSelect.setAttribute('aria-label', 'Max obstacles');
+  maxSelect.innerHTML = `<option value="">Any</option>${Array.from({ length: MAX_OBSTACLE_CHOICES + 1 }, (_, i) => `<option>${i}</option>`).join('')}`;
+  maxSelect.value = o.maxObstacles === undefined ? '' : String(o.maxObstacles);
+  maxSelect.addEventListener('change', () => {
+    o.maxObstacles = maxSelect.value === '' ? undefined : Number(maxSelect.value);
+    save();
+  });
+  maxRow.append(maxText, maxSelect);
+
   const seedInput = el('input', 'text-input seed-input') as HTMLInputElement;
   seedInput.inputMode = 'numeric';
   seedInput.setAttribute('aria-label', 'Seed');
@@ -194,7 +216,7 @@ export function openNewPuzzleSheet(ctx: NewPuzzleContext): void {
       o.difficulty = v;
       // Follow the difficulty's usual size until the size is chosen by hand.
       if (!o.sizeChosen) {
-        o.w = o.h = DEFAULT_SIZE[v];
+        o.w = o.h = sizeFor(v);
         genSize.set(o.w, o.h);
       }
       save();
@@ -205,6 +227,7 @@ export function openNewPuzzleSheet(ctx: NewPuzzleContext): void {
     }),
     genSize.el,
     minimal,
+    maxRow,
     el('p', 'field-label', 'Seed (the same options and seed always give the same puzzle)'),
     seedRow,
     status,

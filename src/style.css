@@ -1036,3 +1036,61 @@ select {
 .xmark.error {
   stroke: var(--error);
 }
+
+.max-obstacles {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  min-width: 64px;
+  text-align: center;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.lib-sym {
+  color: var(--error);
+}
+
+/* Library sections fold away. */
+.lib-fold {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.lib-fold > summary {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lib-fold > .lib-list,
+.lib-fold > .empty-note {
+  padding: 0 8px 8px;
+}
+.lib-fold > summary {
+  list-style: none;
+}
+.lib-fold > summary::-webkit-details-marker {
+  display: none;
+}
+.lib-fold > summary > span:first-child::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 10px 2px 0;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+.lib-fold[open] > summary > span:first-child::before {
+  transform: rotate(45deg);
+}

@@ -5,6 +5,7 @@ import { generateInBackground } from './generator-client';
 import { modeOf, openCells, type Puzzle } from './model';
 import type { Progress } from './play';
 import { SAMPLES } from './samples';
+import { symmetryOf } from './symmetry';
 import { newId, type LibraryEntry, type Storage } from './storage';
 import { el, openSheet, toast } from './ui';
 
@@ -46,11 +47,19 @@ function markSolved(li: HTMLElement, main: HTMLElement, n: number): void {
   main.after(badge);
 }
 
+/** A note on symmetric puzzles. */
+function symmetryNote(p: Puzzle): string {
+  return symmetryOf(p) ? ' · <span class="lib-sym">Symmetric</span>' : '';
+}
+
 export function openLibrarySheet(ctx: LibraryContext): void {
   const { storage } = ctx;
   const body = el('div', 'sheet-stack');
   const sheet = openSheet('Library', body);
   const code = encodePuzzle(ctx.current);
+
+  // Your own puzzles start open; the sample sections start folded.
+  const openFolds = new Set(storage.loadLibraryFolds() ?? ['saved']);
 
   const render = () => {
     body.replaceChildren();
@@ -98,6 +107,25 @@ export function openLibrarySheet(ctx: LibraryContext): void {
     body.append(el('p', 'field-label', existing ? 'This puzzle is saved as' : 'Save this puzzle'), nameInput, saveRow);
     if (!storage.available) body.append(el('p', 'field-label', 'Browser storage is unavailable, so saving is disabled.'));
 
+    /**
+     * A collapsible section; its header says how many puzzles it holds and how
+     * many are solved. Which sections are open is remembered.
+     */
+    function fold(key: string, title: string, items: (readonly [string, boolean | undefined])[]): HTMLElement {
+      const d = el('details', 'lib-fold');
+      d.open = openFolds.has(key);
+      const solved = items.filter(([code, flag]) => solveCount(storage, code, flag) > 0).length;
+      const count = `${items.length} puzzle${items.length === 1 ? '' : 's'}${solved ? ` · ${solved} solved` : ''}`;
+      d.append(el('summary', '', `<span>${title}</span><span class="lib-meta">${count}</span>`));
+      d.addEventListener('toggle', () => {
+        if (d.open) openFolds.add(key);
+        else openFolds.delete(key);
+        storage.saveLibraryFolds([...openFolds]);
+      });
+      body.append(d);
+      return d;
+    }
+
     // --- Daily puzzle ---
     body.append(el('hr', 'sheet-sep'), el('p', 'field-label', 'Daily puzzle'));
     const date = dateKey();
@@ -136,9 +164,9 @@ export function openLibrarySheet(ctx: LibraryContext): void {
     body.append(daily);
 
     // --- Saved puzzles ---
-    body.append(el('hr', 'sheet-sep'), el('p', 'field-label', 'Your puzzles'));
     const entries = storage.list();
-    if (!entries.length) body.append(el('p', 'empty-note', 'Nothing saved yet.'));
+    const savedFold = fold('saved', 'Your puzzles', entries.map((e) => [e.code, e.solved] as const));
+    if (!entries.length) savedFold.append(el('p', 'empty-note', 'Nothing saved yet.'));
     const list = el('ul', 'lib-list');
     for (const e of entries) {
       let p: Puzzle;
@@ -154,7 +182,7 @@ export function openLibrarySheet(ctx: LibraryContext): void {
       title.textContent = e.name;
       const solves = solveCount(storage, e.code, e.solved);
       const state = solves ? '' : e.progress?.segments.length ? ' · In progress' : ' · New';
-      main.append(title, el('span', 'lib-meta', `${describe(p)}${state}`));
+      main.append(title, el('span', 'lib-meta', `${describe(p)}${symmetryNote(p)}${state}`));
       main.addEventListener('click', () => {
         sheet.close();
         ctx.onOpen({ puzzle: p, progress: e.progress, id: e.id, name: e.name }, 'play');
@@ -177,13 +205,21 @@ export function openLibrarySheet(ctx: LibraryContext): void {
       markSolved(li, main, solves);
       list.append(li);
     }
-    body.append(list);
+    savedFold.append(list);
 
-    // --- Samples, grouped by difficulty ---
-    for (const [level, heading] of [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['veryhard', 'Very hard']] as const) {
-      body.append(el('hr', 'sheet-sep'), el('p', 'field-label', `${heading} samples`));
+    // --- Samples, grouped by difficulty, then special collections ---
+    const LEVEL_NAMES = { easy: 'Easy', medium: 'Medium', hard: 'Hard', veryhard: 'Very hard' } as const;
+    const sections: [string, typeof SAMPLES][] = [
+      ...(['easy', 'medium', 'hard', 'veryhard'] as const).map(
+        (level) => [`${LEVEL_NAMES[level]} samples`, SAMPLES.filter((x) => !x.group && x.level === level)] as [string, typeof SAMPLES],
+      ),
+      ['Sparse: one obstacle or none', SAMPLES.filter((x) => x.group === 'one')],
+    ];
+    for (const [heading, list] of sections) {
+      const key = heading;
+      const section = fold(key, heading, list.map((x) => [x.code, false] as const));
       const samples = el('ul', 'lib-list');
-      for (const s of SAMPLES.filter((x) => x.level === level)) {
+      for (const s of list) {
         const p = decodePuzzle(s.code);
         const li = el('li', 'lib-item');
         const main = el('button', 'lib-main');
@@ -193,7 +229,8 @@ export function openLibrarySheet(ctx: LibraryContext): void {
         const solves = solveCount(storage, s.code, saved?.solved);
         const state = !solves && saved?.progress?.segments.length ? ' · In progress' : '';
         // The name already says the type and size.
-        main.append(title, el('span', 'lib-meta', `${openCells(p).length} tiles${state}`));
+        const level = s.group ? ` · ${LEVEL_NAMES[s.level]}` : '';
+        main.append(title, el('span', 'lib-meta', `${openCells(p).length} tiles${level}${symmetryNote(p)}${state}`));
         main.addEventListener('click', () => {
           sheet.close();
           ctx.onOpen({ puzzle: p, progress: saved?.progress, id: saved?.id, name: saved?.name ?? s.name }, 'play');
@@ -202,7 +239,7 @@ export function openLibrarySheet(ctx: LibraryContext): void {
         markSolved(li, main, solves);
         samples.append(li);
       }
-      body.append(samples);
+      section.append(samples);
     }
   };
   render();

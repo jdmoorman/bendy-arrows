@@ -33,6 +33,7 @@ const TIMES_KEY = 'hamiltonian.times.v1';
 const LOGIC_KEY = 'hamiltonian.logic.v1';
 const GENERATOR_KEY = 'hamiltonian.generator.v1';
 const DAILY_KEY = 'hamiltonian.daily.v1';
+const FOLDS_KEY = 'hamiltonian.libfolds.v1';
 
 /** Per-device display preferences. */
 export interface Settings {
@@ -163,6 +164,16 @@ export class Storage {
 
   saveGeneratorOptions(o: object): void {
     this.write(GENERATOR_KEY, o);
+  }
+
+  /** Which library sections are open, or null if never changed. */
+  loadLibraryFolds(): string[] | null {
+    const f = this.read<unknown>(FOLDS_KEY, null);
+    return Array.isArray(f) ? f.filter((x): x is string => typeof x === 'string') : null;
+  }
+
+  saveLibraryFolds(open: string[]): void {
+    this.write(FOLDS_KEY, open);
   }
 
   /** The daily puzzle, if one was made for `date` (YYYY-MM-DD). */

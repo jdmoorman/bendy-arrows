@@ -261,3 +261,46 @@ describe('hint choice', async () => {
     expect(tried).toBeGreaterThan(5);
   });
 });
+
+describe('more rules', async () => {
+  const { SAMPLES } = await import('../src/samples');
+  const { decodePuzzle } = await import('../src/codec');
+  const { RATING_RULES } = await import('../src/generator');
+  const { rulesFor } = await import('../src/logic');
+
+  test('no sealed areas: a line that would wall tiles off gets an X', () => {
+    // 4x4 loop: the top-left pair 0,1 can only be reached through 0-4 and 1-5. Tiles 4 and 5
+    // each already have one line, so joining them would fill both and seal 0,1 off.
+    const p = createPuzzle(4, 4);
+    p.walls.add(edgeBetween(p, 1, 2));
+    const state: LogicState = { segments: new Set([edgeBetween(p, 4, 8), edgeBetween(p, 5, 6)]), xs: new Set() };
+    expect(logicStep(p, state, ['noSeal']).xs).toContain(edgeBetween(p, 4, 5));
+  });
+
+  test('number crossings: an area the numbers go in and out of uses every way across', () => {
+    // 4x3: numbers alternate between the left column and the rest, so the path crosses
+    // the left column's edge at least 3 times — and it has exactly 3 ways across.
+    const p = createPuzzle(4, 3);
+    p.checkpoints = [0, 3, 8, 11];
+    const step = logicStep(p, empty(), ['spacing']);
+    expect(step.segments).toEqual(expect.arrayContaining([edgeBetween(p, 0, 1), edgeBetween(p, 4, 5), edgeBetween(p, 8, 9)]));
+  });
+
+  test('number crossings only shows for puzzles with three or more numbers', () => {
+    const p = createPuzzle(4, 3);
+    expect(rulesFor(p).some((r) => r.id === 'spacing')).toBe(false);
+    p.checkpoints = [0, 3, 8];
+    expect(rulesFor(p).some((r) => r.id === 'spacing')).toBe(true);
+  });
+
+  test('the one-step trial finds a correct mark where the other rules stall', () => {
+    const s = SAMPLES.find((x) => x.level === 'veryhard')!;
+    const p = decodePuzzle(s.code);
+    const sol = new Set(solve(p).solutions[0]);
+    const state = runToEnd(p, RATING_RULES).state;
+    const step = logicStep(p, state, ['trial']);
+    expect(step.segments.length + step.xs.length).toBeGreaterThan(0);
+    for (const e of step.segments) expect(sol.has(e)).toBe(true);
+    for (const e of step.xs) expect(sol.has(e)).toBe(false);
+  });
+});

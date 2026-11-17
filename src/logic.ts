@@ -6,7 +6,18 @@ import { cellCount, cellEdges, edgeCells, edgeCount, endpointCells, isHorizontal
  * conclude from them, and applies all of it at once.
  */
 
-export type RuleId = 'corners' | 'passages' | 'continue' | 'noLoops' | 'noFinish' | 'order' | 'bottlenecks' | 'balance';
+export type RuleId =
+  | 'corners'
+  | 'passages'
+  | 'continue'
+  | 'noLoops'
+  | 'noFinish'
+  | 'order'
+  | 'noSeal'
+  | 'bottlenecks'
+  | 'balance'
+  | 'spacing'
+  | 'trial';
 
 export interface RuleInfo {
   id: RuleId;
@@ -38,6 +49,11 @@ export const RULES: RuleInfo[] = [
     appliesTo: (p) => p.checkpoints.length >= 3,
   },
   {
+    id: 'noSeal',
+    label: 'No sealed areas',
+    hint: 'X out a border whose line would wall off tiles the path could then never reach.',
+  },
+  {
     id: 'bottlenecks',
     label: 'Bottlenecks',
     hint: 'An area reachable through only two borders uses both (or just one, when one end of the path is inside).',
@@ -46,6 +62,17 @@ export const RULES: RuleInfo[] = [
     id: 'balance',
     label: 'Checkerboard balance',
     hint: 'The path alternates colours, so it crosses into an area on its commoner colour twice as many extra times as that colour has extra tiles — and a balanced area equally often on each.',
+  },
+  {
+    id: 'spacing',
+    label: 'Number crossings',
+    hint: 'Going through the numbers in order, the path must cross into and out of an area each time the next number is on the other side.',
+    appliesTo: (p) => p.checkpoints.length >= 3,
+  },
+  {
+    id: 'trial',
+    label: 'One-step trial',
+    hint: 'Try a line (or an X) on a border and apply the easy rules: if that breaks the puzzle, the border gets the opposite. Used only when nothing else applies.',
   },
 ];
 
@@ -173,10 +200,16 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
   if (enabled.has('noFinish') || enabled.has('order')) {
     deductions.push(...joinRules(p, state, need, closed, open.length, enabled));
   }
-  if (enabled.has('bottlenecks') || enabled.has('balance')) {
+  if (enabled.has('noSeal')) deductions.push(...sealingEdges(p, state, need, closed));
+  if (enabled.has('bottlenecks') || enabled.has('balance') || enabled.has('spacing')) {
     const found = areaRules(p, state, need, closed, enabled, opts.balanceMaxArea ?? Infinity);
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
+  }
+  // The trial is a last resort: only when nothing simpler applies.
+  if (enabled.has('trial') && !deductions.length && open.length <= TRIAL_MAX_TILES) {
+    const d = trialDeduction(p, state, need, closed);
+    if (d) deductions.push(d);
   }
   return { kind: 'open', deductions };
 }
@@ -229,7 +262,7 @@ export function logicStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>,
 }
 
 /** Simplest rules first: the order hints are chosen in. */
-export const HINT_ORDER: RuleId[] = ['corners', 'passages', 'continue', 'noLoops', 'noFinish', 'order', 'bottlenecks', 'balance'];
+export const HINT_ORDER: RuleId[] = ['corners', 'passages', 'continue', 'noLoops', 'noFinish', 'order', 'noSeal', 'bottlenecks', 'balance', 'spacing', 'trial'];
 
 const TOO_MANY = 'Something is off: the highlighted tile has more lines than the path can use there.';
 const TOO_FEW = 'Something is off: the highlighted tile has too few ways in or out left — check the X marks around it.';
@@ -610,7 +643,9 @@ function areaRules(
     }
     if (!sOpen.length && !wOpen.length) return null;
     const target = 2 * diff - endS + endW; // shaded crossings minus white crossings
-    const minCrossings = needSum % 2 ? 1 : 2;
+    const parityMin = needSum % 2 ? 1 : 2;
+    const numbersMin = enabled.has('spacing') ? numberCrossings(inArea, needSum) : 0;
+    const minCrossings = Math.max(parityMin, numbersMin);
     const sMinBalance = Math.max(sDrawn, wDrawn + target);
     const sMin = Math.max(sMinBalance, Math.ceil((minCrossings + target) / 2));
     const sMax = Math.min(sDrawn + sOpen.length, wDrawn + wOpen.length + target);
@@ -651,7 +686,14 @@ function areaRules(
       n === 0
         ? 'so it must cross into the area on shaded tiles exactly as often as on white tiles'
         : `so it must cross into the area on ${more} tiles ${2 * n} more time${2 * n === 1 ? '' : 's'} than on ${less} tiles`;
-    const entry = sMin > sMinBalance ? (minCrossings === 1 ? ' It has to get into the area at least once.' : ' It has to get into the area and back out.') : '';
+    const entry =
+      sMin <= sMinBalance
+        ? ''
+        : numbersMin > parityMin
+          ? ` Visiting the numbers in order, it has to cross the area's edge at least ${numbersMin} times.`
+          : minCrossings === 1
+            ? ' It has to get into the area at least once.'
+            : ' It has to get into the area and back out.';
     out.push({
       rule: 'balance',
       cell: Math.min(...area),
@@ -662,6 +704,60 @@ function areaRules(
     });
     return null;
   };
+
+  /**
+   * Going through the numbers in order, every time the next number is on the
+   * other side of the area's edge the path must cross it: at least this many
+   * crossings (rounded up to the parity the area's ends need).
+   */
+  function numberCrossings(inArea: Set<number>, needSum: number): number {
+    const cps = p.checkpoints;
+    if (cps.length < 3) return 0;
+    let t = 0;
+    for (let i = 1; i < cps.length; i++) if (inArea.has(cps[i]) !== inArea.has(cps[i - 1])) t++;
+    if (t % 2 !== needSum % 2) t++;
+    return t;
+  }
+
+  /** Number crossings: an area the numbers need crossed more often than it has ways across. */
+  const spacing = (area: number[]): Contradiction | null => {
+    if (area.length < 2 || area.length >= cells.length) return null;
+    const inArea = new Set(area);
+    const needSum = area.reduce((s, c) => s + need[c], 0);
+    const min = numberCrossings(inArea, needSum);
+    if (min < 2) return null;
+    let drawn = 0;
+    const open: number[] = [];
+    for (const t of area) {
+      for (const e of adj[t]) {
+        if (inArea.has(other(e, t))) continue;
+        if (state.segments.has(e)) drawn++;
+        else open.push(e);
+      }
+    }
+    if (drawn + open.length < min) {
+      return {
+        cell: Math.min(...area),
+        cells: area,
+        reason: 'The numbers need an area crossed more often than it can be.',
+        hint: 'Something is off: going through the numbers in order, the path would have to cross the edge of the highlighted area more often than it has ways across — check the X marks around it.',
+      };
+    }
+    if (!open.length || drawn + open.length > min) return null;
+    out.push({
+      rule: 'spacing',
+      cell: Math.min(...area),
+      cells: area,
+      segments: open,
+      xs: [],
+      why: `Going through the numbers in order, the path has to cross the edge of the highlighted area at least ${min} times, and it only has ${min} ways across — so it uses them all.`,
+    });
+    return null;
+  };
+
+  /** Try the area rules that look at a whole area. */
+  const checkArea = (area: number[]): Contradiction | null =>
+    (enabled.has('balance') ? balance(area) : null) ?? (enabled.has('spacing') ? spacing(area) : null);
 
   // Cuts of one or two borders.
   const bridges0 = bridges(n, cells, adj, other, -1);
@@ -718,14 +814,14 @@ function areaRules(
         });
       }
     }
-    if (enabled.has('balance')) {
-      const bad = balance(side);
+    {
+      const bad = checkArea(side);
       if (bad) return bad;
     }
   }
 
   // Checkerboard balance for each empty area (tiles with no lines yet).
-  if (enabled.has('balance')) {
+  if (enabled.has('balance') || enabled.has('spacing')) {
     const degree = new Int32Array(n);
     for (const e of state.segments) for (const c of edgeCells(p, e)) degree[c]++;
     const empty = new Uint8Array(n);
@@ -735,7 +831,7 @@ function areaRules(
       if (!empty[c] || done[c]) continue;
       const area = reach(c, [], empty);
       for (const t of area) done[t] = 1;
-      const bad = balance(area);
+      const bad = checkArea(area);
       if (bad) return bad;
     }
     // ...and for rectangles of the board: every rectangle on a small board; on a big one,
@@ -749,7 +845,7 @@ function areaRules(
           for (let c0 = 0; c0 + rw <= p.w; c0++) {
             const area: number[] = [];
             for (let r = r0; r < r0 + rh; r++) for (let c = c0; c < c0 + rw; c++) if (!p.blocked.has(r * p.w + c)) area.push(r * p.w + c);
-            const bad = balance(area);
+            const bad = checkArea(area);
             if (bad) return bad;
           }
         }
@@ -771,7 +867,7 @@ function areaRules(
             seen3.add(key);
             const side = sideOf([f, g, h]);
             if (!side) continue;
-            const bad = balance(side);
+            const bad = checkArea(side);
             if (bad) return bad;
           }
         }
@@ -806,7 +902,7 @@ function areaRules(
         if (best < 0) break;
         area.push(best);
         inArea[best] = 1;
-        const bad = balance(area);
+        const bad = checkArea(area);
         if (bad) {
           for (const t of area) inArea[t] = 0;
           return bad;
@@ -816,4 +912,162 @@ function areaRules(
     }
   }
   return out;
+}
+
+/** The one-step trial only runs on boards up to this many tiles (it is slow). */
+const TRIAL_MAX_TILES = 150;
+
+/** Empty, usable borders that are neither X'd nor closed by a full tile. */
+function openBorders(p: Puzzle, state: LogicState, closed: Set<number>): number[] {
+  const out: number[] = [];
+  for (let e = 0; e < edgeCount(p); e++) {
+    if (isUsableEdge(p, e) && !state.xs.has(e) && !state.segments.has(e) && !closed.has(e)) out.push(e);
+  }
+  return out;
+}
+
+/**
+ * No sealed areas: borders whose line would leave some tiles unreachable.
+ * Drawing it can fill its two tiles, which closes their other borders; if
+ * the tiles the path still needs then fall apart into separate groups, that
+ * line can't be in the answer.
+ */
+function sealingEdges(p: Puzzle, state: LogicState, need: Int8Array, closed: Set<number>): Deduction[] {
+  const n = cellCount(p);
+  const cells = openCells(p);
+  const degree = new Int32Array(n);
+  for (const e of state.segments) for (const c of edgeCells(p, e)) degree[c]++;
+  const usable: number[][] = Array.from({ length: n }, () => []);
+  for (let e = 0; e < edgeCount(p); e++) {
+    if (!isUsableEdge(p, e) || state.xs.has(e)) continue;
+    const [a, b] = edgeCells(p, e);
+    usable[a].push(e);
+    usable[b].push(e);
+  }
+  const out: Deduction[] = [];
+  const seen = new Uint8Array(n);
+  for (const e of openBorders(p, state, closed)) {
+    const [a, b] = edgeCells(p, e);
+    const fillsA = degree[a] + 1 === need[a];
+    const fillsB = degree[b] + 1 === need[b];
+    if (!fillsA && !fillsB) continue; // nothing new gets closed
+    // Is border f still passable once e is drawn?
+    const passable = (f: number) => {
+      if (f === e || state.segments.has(f)) return true;
+      if (closed.has(f)) return false;
+      const [x, y] = edgeCells(p, f);
+      return !((fillsA && (x === a || y === a)) || (fillsB && (x === b || y === b)));
+    };
+    seen.fill(0);
+    seen[cells[0]] = 1;
+    const queue = [cells[0]];
+    for (let i = 0; i < queue.length; i++) {
+      const c = queue[i];
+      for (const f of usable[c]) {
+        if (!passable(f)) continue;
+        const [x, y] = edgeCells(p, f);
+        const m = x === c ? y : x;
+        if (!seen[m]) {
+          seen[m] = 1;
+          queue.push(m);
+        }
+      }
+    }
+    if (queue.length === cells.length) continue;
+    const reached = new Set(queue);
+    const rest = cells.filter((c) => !reached.has(c));
+    const sealed = rest.length <= queue.length ? rest : queue;
+    out.push({
+      rule: 'noSeal',
+      cell: a,
+      cells: sealed,
+      segments: [],
+      xs: [e],
+      why: 'A line on the highlighted border would wall off the highlighted tiles — the path could never reach them. So it gets an X.',
+    });
+  }
+  return out;
+}
+
+/** The rules a trial runs: the quick, local ones. */
+const TRIAL_RULES: RuleId[] = ['corners', 'passages', 'continue', 'noLoops', 'noFinish', 'order'];
+
+/** Does this state break, as far as the trial rules can tell? Returns how. */
+function breaks(p: Puzzle, start: LogicState): { phrase: string; cells: number[] } | null {
+  let state = start;
+  for (let i = 0; i < 40; i++) {
+    const loop = earlyLoop(p, state);
+    if (loop) return { phrase: 'the lines would close a loop too soon', cells: loop };
+    const step = logicStep(p, state, TRIAL_RULES);
+    if (step.contradiction) {
+      const c = step.contradiction;
+      const phrase =
+        c.reason === 'A tile has too many lines.'
+          ? 'a tile would end up with too many lines'
+          : c.reason === 'A tile has too few ways in or out.'
+            ? 'a tile would be left with too few ways in or out'
+            : 'the rules would contradict each other';
+      return { phrase: i ? `the easy rules would soon find that ${phrase}` : phrase, cells: c.cells ?? [c.cell] };
+    }
+    if (step.solved || (!step.segments.length && !step.xs.length)) return null;
+    state = applyStep(state, step);
+  }
+  return null;
+}
+
+/** Tiles of a loop among the lines that doesn't take in every tile (or that closes a path puzzle). */
+function earlyLoop(p: Puzzle, state: LogicState): number[] | null {
+  const n = cellCount(p);
+  const parent = Int32Array.from({ length: n }, (_, i) => i);
+  const find = (x: number): number => {
+    while (parent[x] !== x) x = parent[x] = parent[parent[x]];
+    return x;
+  };
+  for (const e of state.segments) {
+    const [a, b] = edgeCells(p, e);
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) {
+      parent[ra] = rb;
+      continue;
+    }
+    // A cycle: fine only as the whole loop of a loop puzzle.
+    const tiles = openCells(p).filter((c) => find(c) === ra);
+    if (modeOf(p) === 'cycle' && tiles.length === openCells(p).length) return null;
+    return tiles;
+  }
+  return null;
+}
+
+/**
+ * One-step trial: try a line (then an X) on each open border and run the
+ * quick rules; if that breaks, the border must be the other way.
+ */
+function trialDeduction(p: Puzzle, state: LogicState, _need: Int8Array, closed: Set<number>): Deduction | null {
+  for (const e of openBorders(p, state, closed)) {
+    const [a] = edgeCells(p, e);
+    const withLine = breaks(p, { segments: new Set([...state.segments, e]), xs: state.xs });
+    if (withLine) {
+      return {
+        rule: 'trial',
+        cell: a,
+        cells: withLine.cells,
+        segments: [],
+        xs: [e],
+        why: `Suppose the highlighted border had a line: then ${withLine.phrase}. So it gets an X.`,
+      };
+    }
+    const withX = breaks(p, { segments: state.segments, xs: new Set([...state.xs, e]) });
+    if (withX) {
+      return {
+        rule: 'trial',
+        cell: a,
+        cells: withX.cells,
+        segments: [e],
+        xs: [],
+        why: `Suppose the highlighted border had an X: then ${withX.phrase}. So the path must go through it.`,
+      };
+    }
+  }
+  return null;
 }

@@ -32,11 +32,21 @@ export interface GenOptions {
   w: number;
   h: number;
   type: GenType;
-  difficulty: Difficulty;
+  /** The difficulty wanted, or 'any'. */
+  difficulty: Difficulty | 'any';
   clues: ClueKind;
   /** Remove every clue that isn't needed for a unique solution. */
   minimal: boolean;
+  /** At most this many obstacles (walls plus black tiles); no limit if missing. */
+  maxObstacles?: number;
+  /** How many tries before giving up (default MAX_ATTEMPTS). */
+  attempts?: number;
   seed: number;
+}
+
+/** Walls plus black tiles: what the sparsity limit counts. (Ends and numbers don't count.) */
+export function obstacleCount(p: Puzzle): number {
+  return p.walls.size + p.blocked.size;
 }
 
 export interface GenResult {
@@ -83,8 +93,11 @@ export function logicSolves(p: Puzzle, rules: RuleId[], opts: LogicOptions = {})
   return false;
 }
 
-/** Every rule except Checkerboard balance: what an Easy puzzle may need. */
-export const EASY_RULES: RuleId[] = ALL_RULES.filter((r) => r !== 'balance');
+/** The rules difficulty is rated with: all but the one-step trial (it is trial and error). */
+export const RATING_RULES: RuleId[] = ALL_RULES.filter((r) => r !== 'trial');
+
+/** Every rated rule except Checkerboard balance: what an Easy puzzle may need. */
+export const EASY_RULES: RuleId[] = RATING_RULES.filter((r) => r !== 'balance');
 
 /** Largest Checkerboard balance area (in tiles) a Medium puzzle may need. */
 export const MEDIUM_BALANCE_AREA = 8;
@@ -96,8 +109,8 @@ export const MEDIUM_BALANCE_AREA = 8;
  */
 export function rateDifficulty(p: Puzzle): Difficulty {
   if (logicSolves(p, EASY_RULES)) return 'easy';
-  if (logicSolves(p, ALL_RULES, { balanceMaxArea: MEDIUM_BALANCE_AREA })) return 'medium';
-  if (logicSolves(p, ALL_RULES)) return 'hard';
+  if (logicSolves(p, RATING_RULES, { balanceMaxArea: MEDIUM_BALANCE_AREA })) return 'medium';
+  if (logicSolves(p, RATING_RULES)) return 'hard';
   return 'veryhard';
 }
 
@@ -110,19 +123,24 @@ export function generate(opts: GenOptions, onProgress?: (attempt: number) => voi
     throw new Error('A loop needs an even number of tiles. Pick an even width or height, or allow black tiles.');
   }
   const rand = seededRandom(opts.seed);
-  const target = DIFFICULTIES.indexOf(opts.difficulty);
+  const wanted = opts.difficulty;
+  const target = wanted === 'any' ? -1 : DIFFICULTIES.indexOf(wanted);
   let best: GenResult | null = null;
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= (opts.attempts ?? MAX_ATTEMPTS); attempt++) {
     onProgress?.(attempt);
     const p = attemptPuzzle(opts, rand);
     if (!p) continue;
+    if (opts.maxObstacles !== undefined && obstacleCount(p) > opts.maxObstacles) continue;
     const difficulty = rateDifficulty(p);
     const result = { puzzle: p, difficulty, attempts: attempt };
-    if (difficulty === opts.difficulty) return result;
+    if (wanted === 'any' || difficulty === wanted) return result;
     const off = (r: GenResult) => Math.abs(DIFFICULTIES.indexOf(r.difficulty) - target);
     if (!best || off(result) < off(best)) best = result;
   }
   if (best) return best;
+  if (opts.maxObstacles !== undefined) {
+    throw new Error(`Couldn't find a puzzle with at most ${opts.maxObstacles} obstacle${opts.maxObstacles === 1 ? '' : 's'}. Try a smaller size, a higher limit, or another seed.`);
+  }
   throw new Error("Couldn't make a puzzle with these options. Try another size or clue type.");
 }
 
@@ -157,7 +175,10 @@ function attemptPuzzle(opts: GenOptions, rand: () => number): Puzzle | null {
     unique = uniqueFromSolution(p, order, opts, rand);
   }
   if (!unique) return null;
-  if (opts.minimal) minimise(unique, rand);
+  if (opts.minimal || opts.maxObstacles !== undefined) minimise(unique, rand);
+  if (opts.maxObstacles !== undefined && obstacleCount(unique) > opts.maxObstacles) {
+    if (!sparsify(unique, opts, rand)) return null;
+  }
   if (isSymmetric(unique)) return null;
   return unique;
 }
@@ -328,7 +349,8 @@ function uniqueFromSolution(p: Puzzle, order: number[], opts: GenOptions, rand: 
       candidates = candidates.filter((e) => !p.walls.has(e));
     }
     if (!candidates.length) return null;
-    const useNumber = opts.type === 'checkpoints' && (!wallsAllowed || rand() < 0.5);
+    // With an obstacle limit, numbers puzzles get their uniqueness from numbers where they can.
+    const useNumber = opts.type === 'checkpoints' && (!wallsAllowed || opts.maxObstacles !== undefined || rand() < 0.5);
     if (useNumber) {
       if (!addNumber(candidates.flatMap((e) => edgeCells(p, e)))) return null;
     } else if (wallsAllowed) {
@@ -416,4 +438,57 @@ export function isSymmetric(p: Puzzle): boolean {
     const q = ts.reduce((acc, t) => transformPuzzle(acc, t), p);
     return same(q.walls, p.walls) && same(q.blocked, p.blocked);
   });
+}
+
+/** How many obstacle pairs to try replacing before giving up on a puzzle. */
+const SPARSIFY_TRIES = 40;
+
+/**
+ * Bring a unique puzzle down to the obstacle limit: repeatedly take two
+ * obstacles away and look for a single new one that makes the solution
+ * unique again. False if it can't get there.
+ */
+function sparsify(p: Puzzle, opts: GenOptions, rand: () => number): boolean {
+  const max = opts.maxObstacles ?? Infinity;
+  const isUnique = () => solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT }).status === 'unique';
+  type Obstacle = { wall: boolean; id: number };
+  const list = (): Obstacle[] => [...[...p.walls].map((id) => ({ wall: true, id })), ...[...p.blocked].map((id) => ({ wall: false, id }))];
+  const put = (o: Obstacle, on: boolean) => {
+    const set = o.wall ? p.walls : p.blocked;
+    if (on) set.add(o.id);
+    else set.delete(o.id);
+  };
+  const keep = new Set([...p.checkpoints, ...p.endpoints.map((e) => portCell(p, e.port))]);
+  for (let tries = 0; tries < SPARSIFY_TRIES && obstacleCount(p) > max; tries++) {
+    const obstacles = shuffle(rand, list());
+    if (obstacles.length < 2) return false;
+    const [a, b] = obstacles;
+    put(a, false);
+    put(b, false);
+    if (isUnique()) continue; // both were spare
+    // Candidates: walls on borders some solution uses, or black tiles, as the clue kind allows.
+    const r = solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT });
+    const used = new Set(r.solutions.flat());
+    const candidates: Obstacle[] = [];
+    if (opts.clues !== 'tiles') for (const e of used) if (!p.walls.has(e)) candidates.push({ wall: true, id: e });
+    if (opts.clues !== 'walls') {
+      for (const c of shuffle(rand, openCells(p)).slice(0, 40)) if (!keep.has(c)) candidates.push({ wall: false, id: c });
+    }
+    let found = false;
+    for (const c of shuffle(rand, candidates).slice(0, 60)) {
+      put(c, true);
+      if (c.wall || openTilesOk(p)) {
+        if (isUnique()) {
+          found = true;
+          break;
+        }
+      }
+      put(c, false);
+    }
+    if (!found) {
+      put(a, true);
+      put(b, true);
+    }
+  }
+  return obstacleCount(p) <= max;
 }

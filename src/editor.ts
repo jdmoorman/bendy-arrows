@@ -28,7 +28,7 @@ import { openNewPuzzleSheet } from './new-puzzle-ui';
 type Tool = 'tiles' | 'walls' | 'ends' | 'checkpoints';
 
 /** Rules listed on their own in the Rules sheet; the rest are grouped as the easy rules. */
-const ADVANCED_RULES: RuleId[] = ['bottlenecks', 'balance'];
+const ADVANCED_RULES: RuleId[] = ['bottlenecks', 'balance', 'trial'];
 
 const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends', checkpoints: 'cells' };
 const TOOL_HINT: Record<Tool, string> = {
@@ -156,8 +156,13 @@ export class EditorView {
           this.edit(() => p);
           const kind = { loop: 'loop', path: 'path', checkpoints: 'numbers' }[options.type];
           const word = (d: string) => (d === 'veryhard' ? 'very hard' : d);
-          const note = difficulty === options.difficulty ? '' : ` (no ${word(options.difficulty)} one turned up, so this is the closest)`;
-          this.setMessage(`Generated a ${word(difficulty)} ${kind} puzzle${note} · seed ${options.seed}`, 'success');
+          const note =
+            options.difficulty === 'any' || difficulty === options.difficulty ? '' : ` (no ${word(options.difficulty)} one turned up, so this is the closest)`;
+          const obstacles = p.walls.size + p.blocked.size;
+          this.setMessage(
+            `Generated ${difficulty === 'easy' ? 'an' : 'a'} ${word(difficulty)} ${kind} puzzle with ${obstacles} obstacle${obstacles === 1 ? '' : 's'}${note} · seed ${options.seed}`,
+            'success',
+          );
         },
       }),
     );

@@ -45,3 +45,15 @@ describe('daily puzzle', async () => {
     expect(solve(generate(dailyOptions('2026-11-16')).puzzle).status).toBe('unique');
   }, 60000);
 });
+
+describe('obstacle limit', async () => {
+  const { obstacleCount } = await import('../src/generator');
+  test('puzzles stay within the limit and unique', () => {
+    for (const type of ['loop', 'path', 'checkpoints'] as GenType[]) {
+      const max = type === 'checkpoints' ? 0 : 4;
+      const r = generate({ w: 6, h: 6, type, difficulty: 'any', clues: 'mixed', minimal: true, maxObstacles: max, seed: 5 });
+      expect(obstacleCount(r.puzzle), type).toBeLessThanOrEqual(max);
+      expect(solve(r.puzzle).status).toBe('unique');
+    }
+  }, 120000);
+});
