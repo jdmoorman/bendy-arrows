@@ -9,7 +9,7 @@ export type SampleLevel = 'easy' | 'medium' | 'hard' | 'veryhard';
  * with small balance areas, hard with bigger ones, very hard beyond every rule.
  */
 /** Special collections shown in their own library section. */
-export type SampleGroup = 'one';
+export type SampleGroup = 'one' | 'fewest';
 
 export const SAMPLES: { level: SampleLevel; group?: SampleGroup; name: string; code: string }[] = [
   { level: 'easy', name: 'Path 6×6 · walls & tiles', code: 'BQQGBgASAAkAAEgCAAAAAFQAABI' },
@@ -57,6 +57,7 @@ export const SAMPLES: { level: SampleLevel; group?: SampleGroup; name: string; c
   { level: 'veryhard', name: 'Numbers 7×6 · walls & tiles', code: 'BQgHBgAFACcAEAAaABwACwAAAAEAAAAAAAAAAABAAA' },
   { level: 'veryhard', name: 'Numbers 8×8 · black tiles', code: 'BQgICAAIAB0ACQAVACYAOwAlADIABABAAAYADAAAAAAAAAAAAAAAAAAAAAA' },
   // Sparse: the medium and hard puzzles that are unique with one obstacle (or none),
+  // including black tiles that make an otherwise impossible pair of ends work,
   // from an exhaustive search; mirror images and rotations are listed once.
   { level: 'medium', group: 'one', name: 'Path 4×4 · 1 wall #1', code: 'BQQEBAAAAAMAAIAAAA' },
   { level: 'medium', group: 'one', name: 'Path 4×4 · 1 wall #2', code: 'BQQEBAAAAA8AAAAABA' },
@@ -85,6 +86,32 @@ export const SAMPLES: { level: SampleLevel; group?: SampleGroup; name: string; c
   { level: 'hard', group: 'one', name: 'Path 6×4 · 1 wall #6', code: 'BQQGBAACAAwAAAAAAAQAAA' },
   { level: 'hard', group: 'one', name: 'Path 7×4 · 1 wall #5', code: 'BQQHBAADAA4AAAAAAAAEAAAA' },
   { level: 'hard', group: 'one', name: 'Path 8×5 · 1 wall', code: 'BQQIBQAJABYAAAAAAAAAAAEAAAAAAA' },
+  { level: 'medium', group: 'one', name: 'Path 7×3 · 1 black tile #1', code: 'BQQHAwACAA1AAAAAAAAA' },
+  { level: 'medium', group: 'one', name: 'Path 7×3 · 1 black tile #2', code: 'BQQHAwACAA0AEAAAAAAA' },
+  { level: 'medium', group: 'one', name: 'Path 7×3 · 1 black tile #3', code: 'BQQHAwACAA0AABAAAAAA' },
+  { level: 'medium', group: 'one', name: 'Path 9×3 · 1 black tile #1', code: 'BQQJAwACAA9AAAAAAAAAAAA' },
+  { level: 'medium', group: 'one', name: 'Path 9×3 · 1 black tile #2', code: 'BQQJAwACAA8AAAABAAAAAAA' },
+  // Fewest obstacles the generator found for each size (sparsity research).
+  { level: 'easy', group: 'fewest', name: 'Loop 5×6 · 3 obstacles', code: 'BQEFBgAAAIAAAAAAQQA' },
+  { level: 'easy', group: 'fewest', name: 'Loop 6×6 · 3 obstacles #1', code: 'BQEGBgAgAAACEAAAAAAAAA' },
+  { level: 'easy', group: 'fewest', name: 'Loop 6×6 · 3 obstacles #2', code: 'BQEGBgAACgAAAAAAAAIAAA' },
+  { level: 'easy', group: 'fewest', name: 'Loop 7×8 · 4 obstacles', code: 'BQEHCAgAAAAQAAAAEAAAAEAAAAAAAAAA' },
+  { level: 'easy', group: 'fewest', name: 'Loop 8×8 · 4 obstacles', code: 'BQEICIAAAgAAAACIAAAAAAAAAAAAAAAAAAA' },
+  { level: 'easy', group: 'fewest', name: 'Loop 8×8 · 6 obstacles', code: 'BQEICAggAAACAAAIAAAABAABAAAAAAAAAAA' },
+  { level: 'medium', group: 'fewest', name: 'Loop 9×10 · 14 obstacles', code: 'BQEJCgAABAEACAAAAgAAABAgAAAAAAAJAAAACAABAgCCgAAA' },
+  { level: 'easy', group: 'fewest', name: 'Loop 9×10 · 16 obstacles', code: 'BQEJChAAAAAAAQAAAgAgAAAASRAEACAAAAAAABAEQCAgAAAB' },
+  { level: 'easy', group: 'fewest', name: 'Loop 10×10 · 19 obstacles', code: 'BQEKCgAAIAEAQAAEAAAAAAAACABAAkAAQgAAAEAAISAAAAKQAAAJ' },
+  { level: 'medium', group: 'fewest', name: 'Loop 10×10 · 20 obstacles', code: 'BQEKCiAAVgAAAgAAACAAAAEAAAAIAIQAYAAAAAAgAAAQAZAAAAEB' },
+  { level: 'easy', group: 'fewest', name: 'Path 5×5 · 1 obstacle', code: 'BQQFBQAEAA0EAAAAAAAAAAA' },
+  { level: 'easy', group: 'fewest', name: 'Path 6×6 · 2 obstacles', code: 'BQQGBgAJAA8AAQAAAAAAAAAAIAA' },
+  { level: 'medium', group: 'fewest', name: 'Path 7×7 · 3 obstacles #1', code: 'BQQHBwAGABMAAAEAAAAAAAAAAAAAEAEAAA' },
+  { level: 'easy', group: 'fewest', name: 'Path 7×7 · 3 obstacles #2', code: 'BQQHBwAFABsAAAAAABAAAIAAAAAAAgAAAA' },
+  { level: 'medium', group: 'fewest', name: 'Path 8×8 · 6 obstacles', code: 'BQQICAAJAB8AAAAJAAAAAAAEAAAAAAAQAAAAABEA' },
+  { level: 'easy', group: 'fewest', name: 'Path 8×8 · 8 obstacles', code: 'BQQICAAJABMIAAAAAAAAAAAAAARAAAAgCAAICBAA' },
+  { level: 'easy', group: 'fewest', name: 'Path 9×9 · 10 obstacles', code: 'BQQJCQANAB8AAEAAIAAAACABAAAABBAgAAAQAAABAAACAAAAAA' },
+  { level: 'easy', group: 'fewest', name: 'Path 9×9 · 14 obstacles', code: 'BQQJCQANABsAAAAgEgACEAAQIAigAAAAGAAAAgAAAAAAAAIAAA' },
+  { level: 'medium', group: 'fewest', name: 'Path 10×10 · 17 obstacles', code: 'BQQKCgAFACMEAEAAAAAABAAIAAABACQAAIQgBAAQAAAAUAAAAAACIAAAAg' },
+  { level: 'easy', group: 'fewest', name: 'Path 10×10 · 26 obstacles', code: 'BQQKCgADACAAAAAAAAAAAAAAAAAAQADAFUAAGAJiAABAEACELQAhAAIEIA' },
 ];
 
 export function samplePuzzle(i = 0): Puzzle {

@@ -97,5 +97,5 @@ describe('transformPuzzle', async () => {
     for (const t of ['rotateLeft', 'rotateRight', 'flipH', 'flipV'] as const) {
       expect(solve(transformPuzzle(c, t), { maxSolutions: 1e9 }).solutions.length).toBe(n);
     }
-  });
+  }, 60000);
 });

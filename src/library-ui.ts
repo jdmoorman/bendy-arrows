@@ -214,6 +214,7 @@ export function openLibrarySheet(ctx: LibraryContext): void {
         (level) => [`${LEVEL_NAMES[level]} samples`, SAMPLES.filter((x) => !x.group && x.level === level)] as [string, typeof SAMPLES],
       ),
       ['Sparse: one obstacle or none', SAMPLES.filter((x) => x.group === 'one')],
+      ['Sparse: fewest obstacles by size', SAMPLES.filter((x) => x.group === 'fewest')],
     ];
     for (const [heading, list] of sections) {
       const key = heading;

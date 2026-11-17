@@ -237,7 +237,7 @@ describe('sample difficulty', async () => {
       const p = decodePuzzle(s.code);
       expect(solve(p).status).toBe('unique');
       expect(rateDifficulty(p)).toBe(expected);
-    });
+    }, 30000);
   }
 });
 
@@ -259,7 +259,7 @@ describe('hint choice', async () => {
       expect(h.deduction.cells?.length, s.name).toBe(Math.min(...sizes));
     }
     expect(tried).toBeGreaterThan(5);
-  });
+  }, 60000);
 });
 
 describe('more rules', async () => {
