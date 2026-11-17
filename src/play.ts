@@ -1,7 +1,7 @@
 import { History } from './history';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
-import { edgeBetween, isUsableEdge, modeOf, type Puzzle } from './model';
+import { cellEdges, edgeBetween, isUsableEdge, modeOf, type Puzzle } from './model';
 import { padFor, renderBoard } from './render';
 import { canPlace, checkSolution, type CheckResult } from './rules';
 
@@ -12,11 +12,7 @@ export interface Progress {
 
 /** Describe the puzzle's fixed ends for the hint line. */
 function endsHint(p: Puzzle): string {
-  const ports = p.endpoints.filter((e) => e.kind === 'port').length;
-  const tiles = p.endpoints.length - ports;
-  if (tiles === 0) return ports > 1 ? 'enter and leave at the arrows' : 'end at the arrow';
-  if (ports === 0) return tiles > 1 ? 'start and end in the ringed tiles' : 'end in the ringed tile';
-  return 'run between the arrow and the ringed tile';
+  return p.endpoints.length > 1 ? 'enter and leave at the arrows' : 'end at the arrow';
 }
 
 export class PlayView {
@@ -40,7 +36,15 @@ export class PlayView {
   // Per-gesture state.
   private before: Progress | null = null;
   private changed = false;
-  private trail: number[] = [];
+  /**
+   * Every drag either only draws or only erases. It is decided where it
+   * starts: an empty tile draws; a segment, or a tile the path passes through,
+   * erases. On a path end (one segment) it is decided by the first step:
+   * back along that segment erases, anywhere else draws.
+   */
+  private dragMode: 'draw' | 'erase' | 'undecided' = 'draw';
+  /** The gesture began on a drawn segment's border (so a tap there is not an X). */
+  private startedOnSegment = false;
 
   constructor() {
     this.el = document.createElement('section');
@@ -71,15 +75,37 @@ export class PlayView {
       onGestureStart: () => {
         this.before = this.snapshot();
         this.changed = false;
-        this.trail = [];
+        this.dragMode = 'draw';
+        this.startedOnSegment = false;
       },
       onGestureEnd: () => this.commit(),
-      onPathStart: (cell) => {
-        this.trail = [cell];
+      onPathStart: (cell, edge) => {
+        if (edge >= 0 && this.segments.has(edge)) {
+          // Pressing on a drawn segment erases it, and dragging keeps erasing.
+          this.dragMode = 'erase';
+          this.startedOnSegment = true;
+          this.erase(edge);
+          return;
+        }
+        const drawn = cellEdges(this.puzzle, cell).filter((e) => this.segments.has(e)).length;
+        this.dragMode = drawn === 0 ? 'draw' : drawn === 1 ? 'undecided' : 'erase';
       },
-      onStep: (from, to) => this.step(from, to),
-      // Tapping a border (or right-clicking it) toggles an X there.
-      onTapEdge: (e) => this.toggleX(e),
+      onHoverEdge: (e) => {
+        if (this.dragMode === 'erase') this.erase(e);
+      },
+      onStep: (from, to) => {
+        const e = edgeBetween(this.puzzle, from, to);
+        if (this.dragMode === 'undecided') this.dragMode = this.segments.has(e) ? 'erase' : 'draw';
+        return this.dragMode === 'erase' ? this.erase(e) : this.step(from, to);
+      },
+      // Tapping an empty border (or right-clicking any border) toggles an X there.
+      onTapEdge: (e) => {
+        if (!this.startedOnSegment) this.toggleX(e);
+      },
+      // Tapping a tile removes every segment touching it.
+      onTapCell: (cell) => {
+        for (const e of cellEdges(this.puzzle, cell)) this.erase(e);
+      },
       onSecondaryEdge: (e) => this.toggleX(e),
     });
   }
@@ -158,18 +184,20 @@ export class PlayView {
     this.setX(e, !this.xMarks.has(e));
   }
 
+  /** Remove a drawn segment if there is one. Always lets an erasing drag continue. */
+  private erase(e: number): boolean {
+    if (e >= 0 && this.segments.has(e)) {
+      this.setSegment(e, false);
+      this.render();
+    }
+    return true;
+  }
+
+  /** A drawing drag moved between tiles: add that segment (never removes). */
   private step(from: number, to: number): boolean {
     const e = edgeBetween(this.puzzle, from, to);
     if (e < 0 || !canPlace(this.puzzle, e)) return false;
-    const t = this.trail;
-    if (t.length >= 2 && t[t.length - 2] === to) {
-      // Dragging back over the previous tile removes the segment just drawn.
-      this.setSegment(e, false);
-      t.pop();
-    } else {
-      this.setSegment(e, true);
-      t.push(to);
-    }
+    this.setSegment(e, true);
     this.render();
     return true;
   }
@@ -181,7 +209,6 @@ export class PlayView {
     }
     this.before = null;
     this.changed = false;
-    this.trail = [];
   }
 
   private afterChange() {
@@ -258,6 +285,6 @@ export class PlayView {
       : p.endpoints.length
         ? ` The path must ${endsHint(p)}.`
         : '';
-    return goal + ends + ' Tap a border to mark it with an X.';
+    return goal + ends + ' Tap a line or a tile to erase; tap an empty border for an X.';
   }
 }

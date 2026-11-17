@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, cellEnd, modeOf, portCount, portEnd, portId, endsEqual, type Puzzle } from '../src/model';
+import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, modeOf, portCount, portEnd, portId, endsEqual, type Puzzle } from '../src/model';
 import { checkSolution } from '../src/rules';
 import { parityCheck, solve } from '../src/solver';
 
@@ -33,8 +33,9 @@ describe('parity', () => {
 
   test('open 3x3 path must end on A tiles', () => {
     const p = createPuzzle(3, 3);
-    p.endpoints = [cellEnd(0)];
+    p.checkpoints = [0];
     expect(parityCheck(p).endColor).toBe(0);
+    p.checkpoints = [];
     p.endpoints = [portEnd(portId(p, 'top', 1))];
     expect(parityCheck(p).ok).toBe(false);
   });
@@ -43,7 +44,7 @@ describe('parity', () => {
 describe('solve', () => {
   test('a 1xN strip has a unique path', () => {
     const strip = createPuzzle(5, 1);
-    strip.endpoints = [cellEnd(0)];
+    strip.checkpoints = [0];
     const r = solve(strip);
     expect(r.status).toBe('unique');
     expect(r.solutions[0]).toHaveLength(4);
@@ -51,7 +52,7 @@ describe('solve', () => {
 
   test('open 2x3 path has multiple solutions', () => {
     const p = createPuzzle(3, 2);
-    p.endpoints = [cellEnd(0)];
+    p.checkpoints = [0];
     expect(solve(p).status).toBe('multiple');
   });
 
@@ -67,7 +68,7 @@ describe('solve', () => {
 
   test('endpoints make a 2x2 path unique', () => {
     const p = createPuzzle(2, 2);
-    p.endpoints = [portEnd(portId(p, 'left', 0)), cellEnd(1)];
+    p.endpoints = [portEnd(portId(p, 'left', 0)), portEnd(portId(p, 'right', 0))];
     const r = solve(p);
     expect(r.status).toBe('unique');
     expect(checkSolution(p, r.solutions[0]).solved).toBe(true);
@@ -76,7 +77,7 @@ describe('solve', () => {
   test('walls can force uniqueness', () => {
     // 3x3 path; walls create a comb that only allows the snake.
     const p = createPuzzle(3, 3);
-    p.endpoints = [cellEnd(0)];
+    p.checkpoints = [0];
     p.walls.add(edgeBetween(p, 3, 4)).add(edgeBetween(p, 4, 7)).add(edgeBetween(p, 1, 4));
     p.walls.add(edgeBetween(p, 0, 3));
     const r = solve(p);
@@ -98,7 +99,7 @@ describe('solve', () => {
 
   test('aborts when over the node budget', () => {
     const p = createPuzzle(8, 8);
-    p.endpoints = [cellEnd(0)];
+    p.checkpoints = [0];
     const r = solve(p, { nodeLimit: 1000, maxSolutions: 1e9 });
     expect(r.status).toBe('aborted');
   });
@@ -125,7 +126,7 @@ describe('solve', () => {
         // 0 ends makes a loop puzzle; 1 or 2 make a path puzzle.
         const k = Math.floor(rand() * 3);
         for (let i = 0; i < k; i++) {
-          const end = rand() < 0.5 ? portEnd(Math.floor(rand() * portCount(p))) : cellEnd(Math.floor(rand() * n));
+          const end = portEnd(Math.floor(rand() * portCount(p)));
           if (!p.endpoints.some((e) => endsEqual(e, end))) p.endpoints.push(end);
         }
       }

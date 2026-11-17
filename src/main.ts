@@ -8,6 +8,7 @@ import { clonePuzzle, puzzlesEqual, type Puzzle } from './model';
 import { PlayView, type Progress } from './play';
 import { SAMPLES, samplePuzzle } from './samples';
 import { openShareSheet, puzzleFromHash } from './share';
+import { openSettingsSheet, applySettings } from './settings-ui';
 import { Storage } from './storage';
 import { applyTheme, DEFAULT_THEME } from './themes';
 import { toast } from './ui';
@@ -26,11 +27,14 @@ app.innerHTML = `
     </div>
     <button class="btn icon" data-act="library" aria-label="Library">${ICONS.library}</button>
     <button class="btn icon" data-act="share" aria-label="Share or open a puzzle">${ICONS.share}</button>
+    <button class="btn icon" data-act="settings" aria-label="Settings">${ICONS.settings}</button>
   </header>
   <main class="views"></main>
 `;
 
 const storage = new Storage();
+let settings = storage.loadSettings();
+applySettings(settings);
 const views = app.querySelector('.views')!;
 const titleEl = app.querySelector<HTMLElement>('.app-title')!;
 const play = new PlayView();
@@ -123,6 +127,14 @@ function setTab(t: Tab) {
 for (const b of app.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
   b.addEventListener('click', () => (b.dataset.tab === 'play' ? requestPlay() : setTab('edit')));
 }
+
+app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
+  openSettingsSheet(settings, (s) => {
+    settings = s;
+    applySettings(s);
+    storage.saveSettings(s);
+  });
+});
 
 app.querySelector('[data-act=share]')!.addEventListener('click', () => {
   openShareSheet({

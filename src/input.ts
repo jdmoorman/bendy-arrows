@@ -1,4 +1,4 @@
-import { cellEnd, cellRC, edgeBetween, portEnd, portId, type End, type Puzzle } from './model';
+import { cellRC, edgeBetween, portEnd, portId, type End, type Puzzle } from './model';
 import { CELL, PAD } from './render';
 
 /**
@@ -8,12 +8,14 @@ import { CELL, PAD } from './render';
  *   - 'path':  drag from tile to tile (onStep for each move between adjacent
  *              tiles); tap a border → onTapEdge; tap a tile → onTapCell;
  *              right-click a border → onSecondaryEdge. A drag that starts
- *              on a border draws from the tile it started in.
+ *              on a border moves from the tile it started in. While
+ *              dragging, onHoverEdge reports each border the pointer passes
+ *              close to (used for erasing).
  *   - 'edges': every border the pointer comes nearest to is painted
  *              (onPaintEdge), starting with the one under the initial touch.
  *   - 'cells': every tile the pointer touches is painted (onPaintCell).
- *   - 'ends':  a tap inside the grid picks that tile; a tap outside it picks
- *              the nearest frame border (port). Either way → onTapEnd.
+ *   - 'ends':  a tap outside the grid picks the nearest frame border (port)
+ *              → onTapEnd. Taps inside the grid are ignored.
  */
 
 export type DragKind = 'path' | 'edges' | 'cells' | 'ends';
@@ -25,7 +27,10 @@ export interface BoardHandlers {
   /** Path drag moved between adjacent tiles. Return false to refuse (the drag stays on `from`). */
   onStep?(from: number, to: number): boolean;
   /** Path drag started on a tile. */
-  onPathStart?(cell: number): void;
+  /** Path gesture started on a tile; `edge` is the border under the pointer, or -1. */
+  onPathStart?(cell: number, edge: number): void;
+  /** Path drag passed close to a border. */
+  onHoverEdge?(edge: number): void;
   onTapEdge?(edge: number): void;
   onTapCell?(cell: number): void;
   /** Right-click on a border. */
@@ -147,8 +152,8 @@ export function attachBoardInput(svg: SVGSVGElement, getPuzzle: () => Puzzle, h:
     if (kind === 'ends') {
       const inside = x >= 0 && y >= 0 && x < p.w && y < p.h;
       const port = inside ? -1 : portAt(p, x, y);
-      const end = inside ? cellEnd(hitTest(p, x, y)!.cell) : port >= 0 ? portEnd(port) : null;
-      if (!end) return;
+      if (port < 0) return;
+      const end = portEnd(port);
       ev.preventDefault();
       h.onGestureStart?.();
       h.onTapEnd?.(end);
@@ -173,7 +178,7 @@ export function attachBoardInput(svg: SVGSVGElement, getPuzzle: () => Puzzle, h:
     } else if (kind === 'cells') {
       h.onPaintCell?.(hit.cell, true);
     } else {
-      h.onPathStart?.(hit.cell);
+      h.onPathStart?.(hit.cell, hit.edge);
     }
   };
 
@@ -189,6 +194,10 @@ export function attachBoardInput(svg: SVGSVGElement, getPuzzle: () => Puzzle, h:
         h.onPaintEdge?.(hit.edge, false);
       }
       return;
+    }
+    if (active.kind === 'path' && h.onHoverEdge) {
+      const near = hitTest(p, x, y, EDGE_TOLERANCE);
+      if (near && near.edge >= 0) h.onHoverEdge(near.edge);
     }
     const hit = clampHit(p, x, y, 0);
     if (hit.cell === active.lastCell) return;

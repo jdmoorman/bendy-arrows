@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createPuzzle, edgeBetween, edgeCells, edgeCount, neighbors, cellEnd, portCell, portCount, portEnd, portId, portSide, resizePuzzle } from '../src/model';
+import { createPuzzle, edgeBetween, edgeCells, edgeCount, neighbors, portCell, portCount, portEnd, portId, portSide, resizePuzzle } from '../src/model';
 
 describe('model', () => {
   test('edge ids round-trip through edgeCells/edgeBetween', () => {
@@ -34,8 +34,6 @@ describe('model', () => {
     expect([...q.blocked]).toEqual([3]);
     expect([...q.walls]).toEqual([edgeBetween(q, 0, 1)]);
     expect(q.endpoints).toEqual([portEnd(portId(q, 'left', 0))]);
-    p.endpoints = [cellEnd(3), cellEnd(8)]; // (1,0) survives, (2,2) does not
-    expect(resizePuzzle(p, 2, 2).endpoints).toEqual([cellEnd(2)]);
     p.endpoints = [];
     p.blocked.clear();
     p.checkpoints = [8, 3, 1]; // (2,2) dropped; the rest keep their order

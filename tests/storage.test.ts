@@ -58,3 +58,13 @@ describe('Storage', () => {
     expect(s.loadSession()).toEqual({ code: 'X', progress: { segments: [2], xMarks: [3] }, tab: 'edit' });
   });
 });
+
+describe('settings', () => {
+  test('default to checkerboard on and round-trip', () => {
+    const s = new Storage(new MemStore());
+    expect(s.loadSettings()).toEqual({ checkerboard: true });
+    s.saveSettings({ checkerboard: false });
+    expect(s.loadSettings()).toEqual({ checkerboard: false });
+    expect(new Storage(null).loadSettings()).toEqual({ checkerboard: true });
+  });
+});

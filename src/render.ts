@@ -153,17 +153,11 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   parts.push(`<rect class="outer" x="${pad}" y="${pad}" width="${p.w * CELL}" height="${p.h * CELL}" rx="4"/>`);
   parts.push('</g>');
 
-  // Fixed ends. A frame end is a path stub from the tile centre through the
-  // frame with an arrow outside (in for the entrance, out for the exit);
-  // a tile end is a ring around the tile centre.
+  // Fixed ends: a path stub from the tile centre through the frame, with the
+  // arrow's tail outside at the entrance and its head at the exit.
   if (ends.length) {
     parts.push('<g class="ends">');
     ends.forEach((end, i) => {
-      if (end.kind === 'cell') {
-        const [cx, cy] = center(end.cell);
-        parts.push(`<circle class="end-ring" cx="${cx}" cy="${cy}" r="30"/>`);
-        return;
-      }
       const { x, y, d } = portPoint(end.port);
       parts.push(endMarker(center(portCell(p, end.port)), [x, y], d, i === 0 ? 'in' : 'out'));
     });
@@ -181,8 +175,12 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   const isErr = (e: number) => !!o.errorEdges?.has(e);
   const player = [...(o.segments ?? [])];
   parts.push('<g class="segments">');
-  parts.push(strokes(player.filter((e) => !isErr(e)), 'seg'));
-  parts.push(strokes(player.filter(isErr), 'seg error'));
+  const ok = player.filter((e) => !isErr(e));
+  const bad = player.filter(isErr);
+  // Darker outlines first (all of them), then the fills, so outlines never
+  // cut across a fill where runs meet.
+  parts.push(strokes(ok, 'seg-edge'), strokes(bad, 'seg-edge error'));
+  parts.push(strokes(ok, 'seg'), strokes(bad, 'seg error'));
   parts.push('</g>');
 
   // Numbered checkpoints sit on top of the path.
@@ -265,18 +263,22 @@ export function edgeRuns(p: Puzzle, edges: Iterable<number>): { cells: number[];
 
 /**
  * A frame end: one path-width stroke from the tile centre out through the
- * frame at border point b (outward direction d), with an arrowhead on it
- * outside the grid — pointing in at the entrance, out at the exit.
+ * frame at border point b (outward direction d). Read as a single arrow
+ * along the path: the entrance gets the arrow's tail (fletching) at the
+ * stroke's outer tip, and the exit gets the arrowhead.
  */
 function endMarker(c: [number, number], b: [number, number], d: [number, number], dir: 'in' | 'out'): string {
   const [dx, dy] = d;
   const at = (t: number, side = 0): string => `${b[0] + dx * t - dy * side},${b[1] + dy * t + dx * side}`;
+  // Distances are measured outward from the frame.
+  if (dir === 'in') {
+    // Fletching: a notched chevron at the tip, its point toward the grid.
+    const fins = [at(14), at(28, 24), at(56, 24), at(44), at(56, -24), at(28, -24)].join(' ');
+    return `<path class="end-seg" d="M${c[0]} ${c[1]}L${at(34).replace(',', ' ')}"/><polygon class="end-head" points="${fins}"/>`;
+  }
   const half = 29;
-  // Distances are measured outward from the frame. For 'in' the stroke runs
-  // past the head as a tail; for 'out' it ends under the head's base.
-  const [reach, tip, base] = dir === 'in' ? [50, 4, 30] : [26, 58, 24];
   return (
-    `<path class="end-seg" d="M${c[0]} ${c[1]}L${at(reach).replace(',', ' ')}"/>` +
-    `<polygon class="end-head" points="${at(tip)} ${at(base, half)} ${at(base, -half)}"/>`
+    `<path class="end-seg" d="M${c[0]} ${c[1]}L${at(26).replace(',', ' ')}"/>` +
+    `<polygon class="end-head" points="${at(58)} ${at(24, half)} ${at(24, -half)}"/>`
   );
 }

@@ -21,23 +21,18 @@ npm run build        # static site in dist/ (works from any sub-path, e.g. GitHu
 
 The app opens on a sample puzzle in the **Play** tab.
 
-- **Drag** from tile to tile to draw the path. Drag back over the previous tile to erase that segment.
-- **Tap a border** between two tiles to mark it with an X (the path does not go there). Tap again to clear it. Right-click works too with a mouse.
+- **Drag** from an empty tile to draw: segments are added along the drag. A drag never switches between drawing and erasing — where it starts decides.
+- **Erase** by starting a drag on a line, or on a tile that has lines: segments are removed along the drag. Tapping a line where it crosses a border erases it; tapping the centre of a tile erases all lines touching it. Starting on the end of a path is decided by your first move: back along the path erases, anywhere else extends the path.
+- **Tap an empty border** between two tiles to mark it with an X (the path does not go there). Tap again to clear it. Right-click toggles an X with a mouse.
 - Segments can't enter black tiles or cross walls. Loops and branches are allowed while you work; they are highlighted in red.
 - **Undo / Redo** (or Ctrl+Z / Ctrl+Shift+Z), **Clear**, and **Check**, which highlights missed tiles and bad ends.
 - The board turns green when the puzzle is solved.
 
 ## Creating (Create tab)
 
-- **Tiles:** tap or drag to toggle black tiles.
-- **Walls:** tap or drag along borders to add or remove walls.
-- **Ends:** up to two, and each one can be either:
-  - a **tile end**: tap a tile, and it's drawn as a black ring;
-  - a **frame end**: tap a dot on the frame outside the grid, and it's drawn as a black path stub through the frame with an arrow outside it.
-
-  The first end is the entrance. A frame arrow points in at the entrance and out at the exit. Tap an end again to remove it.
-
-  A puzzle with ends is a **path** puzzle; with no ends it is a **loop** puzzle. If only one end is placed, Play asks for the second first.
+- **Tiles:** tap or drag over tiles. Starting on a white tile makes tiles black along the drag; starting on a black tile clears them.
+- **Walls:** tap or drag along borders. Starting on an empty border adds walls along the drag; starting on a wall removes them.
+- **Ends:** tap a dot on the frame outside the grid to place the entrance, then the exit. Each is drawn as a black stub through the frame: the entrance ends in the arrow's tail, the exit in its head. Tap an end again to remove it. Ends can only go on the frame; for a fixed tile inside the grid, use checkpoints. With ends or checkpoints it is a **path** puzzle; with neither it is a **loop** puzzle. If only one end is placed, Play asks for the second first.
 - **Checkpoints:** tap tiles to place numbered circles 1, 2, 3… in order. The path must start at 1, pass through every number in order and finish at the highest one, while filling every tile. Tap a number to remove it (higher numbers move down). A puzzle uses either ends or checkpoints, not both — placing one kind removes the other. Play needs at least two checkpoints.
 - **Width × height** pickers (1 to 30).
 - **Check** runs the solver in the background and reports whether the puzzle has **no solution** (with a reason, such as a checkerboard parity mismatch), **exactly one**, or **more than one**. The eye button overlays the solutions it found.
@@ -47,6 +42,8 @@ The app opens on a sample puzzle in the **Play** tab.
 
 - **Share** button (top right): send a link with the phone's share sheet or copy it, export or import JSON, or paste a link or code to open a puzzle. Links look like `…/#p=CODE`. The puzzle format is versioned 0.x while the app is pre-release (currently 0.5); older 0.x links still open.
 - **Library** button: save the current puzzle under a name, then reopen, edit or delete saved puzzles. Progress on saved puzzles is kept automatically. The current puzzle, your progress and any unsaved editor work are restored when you come back.
+
+- **Settings** button (gear): turn the faint checkerboard shading on or off. Settings are remembered on this device.
 
 Everything is stored locally in your browser; nothing is sent anywhere.
 

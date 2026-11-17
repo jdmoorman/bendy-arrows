@@ -20,6 +20,9 @@ export type ThemeTokens = Record<
   | 'wall'
   | 'path'
   | 'path-solved'
+  | 'path-edge'
+  | 'path-solved-edge'
+  | 'error-edge'
   | 'xmark'
   | 'end'
   | 'error'
@@ -47,6 +50,9 @@ export const THEMES = {
     wall: '#000000',
     path: '#5eb8ff',
     'path-solved': '#5ee0a0',
+    'path-edge': '#2f86d6',
+    'path-solved-edge': '#2fb174',
+    'error-edge': '#c23a55',
     xmark: '#ff8a65',
     end: '#e6e9f0',
     error: '#ff5c7a',
@@ -69,8 +75,11 @@ export const THEMES = {
     'tile-blocked': '#000000',
     'grid-line': '#c4c9d2',
     wall: '#000000',
-    path: '#8ab4f8',
-    'path-solved': '#8fd9ac',
+    path: '#7aa7f2',
+    'path-solved': '#7fcf9e',
+    'path-edge': '#4a78c9',
+    'path-solved-edge': '#4a9e6c',
+    'error-edge': '#9e1f3a',
     xmark: '#000000',
     end: '#000000',
     error: '#d92d4b',

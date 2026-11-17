@@ -24,7 +24,7 @@ const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends
 const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
   walls: 'Tap or drag along borders to add walls.',
-  ends: 'Tap a tile, or a dot on the frame, to add a path end (two make a path puzzle). With no ends it is a loop.',
+  ends: 'Tap a dot on the frame to add the entrance, then the exit. With no ends or checkpoints it is a loop.',
   checkpoints: 'Tap tiles to number them 1, 2, 3… The path must run through them in order. Tap a number to remove it.',
 };
 

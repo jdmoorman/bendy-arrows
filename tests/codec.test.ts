@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { decodePuzzle, encodePuzzle, puzzleFromJson, puzzleToJson } from '../src/codec';
-import { cellEnd, createPuzzle, edgeBetween, modeOf, portEnd, portId, puzzlesEqual } from '../src/model';
+import { createPuzzle, edgeBetween, modeOf, portEnd, portId, puzzlesEqual } from '../src/model';
 
 function sample() {
   const p = createPuzzle(7, 5);
   p.blocked.add(3).add(17).add(34);
   p.walls.add(edgeBetween(p, 0, 1)).add(edgeBetween(p, 8, 15)).add(edgeBetween(p, 26, 27));
-  p.endpoints = [portEnd(portId(p, 'bottom', 4)), cellEnd(30)];
+  p.endpoints = [portEnd(portId(p, 'bottom', 4)), portEnd(portId(p, 'top', 3))];
   return p;
 }
 
@@ -38,13 +38,14 @@ describe('codec', () => {
     expect(encodePuzzle(sample())).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 
-  test('format 0.1 codes still open with tile ends', () => {
+  test('format 0.1 tile ends open as checkpoints', () => {
     // 3x3 path in format 0.1 with ends at tile 0 and tile 4.
     const bytes = [1, 2 << 1, 3, 3, 0, 0, 0, 4, 0, 0, 0, 0, 0];
     const code = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     const q = decodePuzzle(code);
     expect(modeOf(q)).toBe('path');
-    expect(q.endpoints).toEqual([cellEnd(0), cellEnd(4)]);
+    expect(q.endpoints).toEqual([]);
+    expect(q.checkpoints).toEqual([0, 4]);
   });
 
   test('a legacy "path" with no ends opens as a loop', () => {
@@ -64,6 +65,16 @@ describe('codec', () => {
     expect(q.walls.size).toBe(4);
     const j = { ...puzzleToJson(createPuzzle(3, 3)), version: '0.4', givens: [0, 1] };
     expect('givens' in puzzleFromJson(j)).toBe(false);
+  });
+
+  test('format 0.3 JSON: tile ends become checkpoints, or are dropped next to frame ends', () => {
+    const base = { ...puzzleToJson(createPuzzle(3, 3)), version: '0.3' };
+    const a = puzzleFromJson({ ...base, endpoints: [{ cell: 0 }, { cell: 8 }] });
+    expect(a.checkpoints).toEqual([0, 8]);
+    expect(a.endpoints).toEqual([]);
+    const b = puzzleFromJson({ ...base, endpoints: [{ port: 2 }, { cell: 8 }] });
+    expect(b.endpoints).toEqual([portEnd(2)]);
+    expect(b.checkpoints).toEqual([]);
   });
 
   test('JSON carries a 0.x format version', () => {

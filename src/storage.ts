@@ -28,6 +28,15 @@ export interface Session {
 
 const LIBRARY_KEY = 'hamiltonian.library.v1';
 const SESSION_KEY = 'hamiltonian.session.v1';
+const SETTINGS_KEY = 'hamiltonian.settings.v1';
+
+/** Per-device display preferences. */
+export interface Settings {
+  /** Shade alternate tiles faintly. */
+  checkerboard: boolean;
+}
+
+export const DEFAULT_SETTINGS: Settings = { checkerboard: true };
 
 export interface KeyValueStore {
   getItem(key: string): string | null;
@@ -103,6 +112,15 @@ export class Storage {
     const e = this.get(id);
     if (!e || e.code !== code) return;
     this.put({ ...e, progress, solved: solved || !!e.solved, updated: Date.now() });
+  }
+
+  loadSettings(): Settings {
+    const s = this.read<Partial<Settings> | null>(SETTINGS_KEY, null);
+    return { ...DEFAULT_SETTINGS, ...(s && typeof s === 'object' ? s : {}) };
+  }
+
+  saveSettings(s: Settings): void {
+    this.write(SETTINGS_KEY, s);
   }
 
   loadSession(): Session | null {

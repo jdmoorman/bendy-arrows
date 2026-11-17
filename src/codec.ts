@@ -1,4 +1,4 @@
-import { cellCount, cellEnd, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, modeOf, portCount, portEnd, type End, type Puzzle } from './model';
+import { cellCount, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, modeOf, portCount, portEnd, type End, type Puzzle } from './model';
 
 /**
  * Compact share code for a puzzle.
@@ -16,8 +16,8 @@ import { cellCount, cellEnd, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, modeOf
  *               bit 3 = checkpoints follow the ends
  *   byte 2, 3   width, height
  *   2 bytes per end, big-endian, entrance first:
- *               top bit set = tile end (low 15 bits = tile index),
- *               top bit clear = frame port (port index)
+ *               frame port index (0.3–0.4 codes could set the top bit for
+ *               a tile end; those open as checkpoints)
  *   if bit 3:   2-byte checkpoint count, then 2 bytes per checkpoint tile (1 first)
  *   bitset: blocked cells, then walls (LSB first), padded to a byte
  *               (0.4 and earlier also had a givens bitset after the walls)
@@ -37,7 +37,7 @@ export function encodePuzzle(p: Puzzle): string {
   const flags = (modeOf(p) === 'cycle' ? 1 : 0) | (endpoints.length << 1) | (cps.length ? 8 : 0);
   const header = [VERSION_BYTE, flags, p.w, p.h];
   for (const end of endpoints) {
-    const v = end.kind === 'cell' ? CELL_FLAG | end.cell : end.port;
+    const v = end.port;
     header.push(v >> 8, v & 0xff);
   }
   if (cps.length) {
@@ -72,6 +72,7 @@ export function decodePuzzle(code: string): Puzzle {
   const e = edgeCount(p);
   const nEnd = (flags >> 1) & 3;
   let off = 4;
+  const legacyTiles: number[] = [];
   for (let i = 0; i < nEnd; i++) {
     const v = (bytes[off] << 8) | bytes[off + 1];
     off += 2;
@@ -80,7 +81,7 @@ export function decodePuzzle(code: string): Puzzle {
     const index = version >= 3 ? v & ~CELL_FLAG : v;
     if (isCell) {
       if (!(index < n)) throw new Error('Puzzle code has an end outside the grid.');
-      p.endpoints.push(cellEnd(index));
+      legacyTiles.push(index);
     } else {
       if (!(index < portCount(p))) throw new Error('Puzzle code has an end outside the frame.');
       p.endpoints.push(portEnd(index));
@@ -97,6 +98,7 @@ export function decodePuzzle(code: string): Puzzle {
     }
   }
   // Formats before 0.5 also stored a givens bitset after the walls; it is ignored.
+  adoptLegacyTileEnds(p, legacyTiles);
   const bitCount = n + (version < 5 ? 2 : 1) * e;
   if (bytes.length < off + Math.ceil(bitCount / 8)) throw new Error('Puzzle code is truncated.');
   const get = (i: number) => (bytes[off + (i >> 3)] >> (i & 7)) & 1;
@@ -116,8 +118,9 @@ export interface PuzzleJson {
   blocked: number[];
   walls: number[];
   /**
-   * Ends, entrance first: {"cell": i} or {"port": i}. (Format 0.1 files list
-   * tile indices and 0.2 files list port indices as plain numbers.)
+   * Frame ends, entrance first: {"port": i}. (Format 0.1 files list tile
+   * indices and 0.2 files list port indices as plain numbers; 0.3 files may
+   * contain {"cell": i} tile ends, which open as checkpoints.)
    */
   endpoints: ({ cell: number } | { port: number })[];
   /** Checkpoint tiles in order (checkpoint 1 first). */
@@ -135,7 +138,7 @@ export function puzzleToJson(p: Puzzle): PuzzleJson {
     height: p.h,
     blocked: sorted(p.blocked),
     walls: sorted(p.walls),
-    endpoints: p.endpoints.map((e) => (e.kind === 'cell' ? { cell: e.cell } : { port: e.port })),
+    endpoints: p.endpoints.map((e) => ({ port: e.port })),
     checkpoints: [...p.checkpoints],
     code: encodePuzzle(p),
   };
@@ -164,25 +167,40 @@ export function puzzleFromJson(value: unknown): Puzzle {
   };
   ints(j.blocked, n, 'blocked').forEach((c) => p.blocked.add(c));
   ints(j.walls, e, 'walls').forEach((x) => p.walls.add(x));
-  p.endpoints = parseEnds(j.endpoints, j.version, n, portCount(p)).slice(0, 2);
+  const { ports, tiles } = parseEnds(j.endpoints, j.version, n, portCount(p));
+  p.endpoints = ports.slice(0, 2);
   p.checkpoints = ints(j.checkpoints, n, 'checkpoints');
+  adoptLegacyTileEnds(p, tiles);
   return p;
 }
 
-function parseEnds(xs: unknown, version: unknown, cells: number, ports: number): End[] {
-  if (xs === undefined) return [];
+/**
+ * Formats 0.1 and 0.3 allowed ends on tiles. Those are just checkpoints, so a
+ * puzzle whose ends were all tiles gets them as checkpoints 1 and 2; tile ends
+ * mixed with frame ends (or checkpoints) are dropped.
+ */
+function adoptLegacyTileEnds(p: Puzzle, tiles: number[]) {
+  if (tiles.length && !p.endpoints.length && !p.checkpoints.length) p.checkpoints = tiles.slice(0, 2);
+}
+
+function parseEnds(xs: unknown, version: unknown, cells: number, ports: number): { ports: End[]; tiles: number[] } {
+  const out = { ports: [] as End[], tiles: [] as number[] };
+  if (xs === undefined) return out;
   if (!Array.isArray(xs)) throw new Error('"endpoints" must be a list.');
   const legacyCells = version === '0.1' || version === 1;
   const check = (i: unknown, max: number): number => {
     if (!Number.isInteger(i) || (i as number) < 0 || (i as number) >= max) throw new Error('"endpoints" contains an invalid index.');
     return i as number;
   };
-  return xs.map((x): End => {
-    if (typeof x === 'number') return legacyCells ? cellEnd(check(x, cells)) : portEnd(check(x, ports));
-    if (x && typeof x === 'object' && 'cell' in x) return cellEnd(check((x as { cell: unknown }).cell, cells));
-    if (x && typeof x === 'object' && 'port' in x) return portEnd(check((x as { port: unknown }).port, ports));
-    throw new Error('"endpoints" contains an invalid end.');
-  });
+  for (const x of xs) {
+    if (typeof x === 'number') {
+      if (legacyCells) out.tiles.push(check(x, cells));
+      else out.ports.push(portEnd(check(x, ports)));
+    } else if (x && typeof x === 'object' && 'cell' in x) out.tiles.push(check((x as { cell: unknown }).cell, cells));
+    else if (x && typeof x === 'object' && 'port' in x) out.ports.push(portEnd(check((x as { port: unknown }).port, ports)));
+    else throw new Error('"endpoints" contains an invalid end.');
+  }
+  return out;
 }
 
 function checkSize(w: number, h: number) {

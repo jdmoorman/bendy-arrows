@@ -40,19 +40,18 @@ export interface Puzzle {
   checkpoints: number[];
 }
 
-/** A fixed end of the path: a tile, or a border segment on the outer frame. */
-export type End = { kind: 'cell'; cell: number } | { kind: 'port'; port: number };
-
-export function cellEnd(cell: number): End {
-  return { kind: 'cell', cell };
-}
+/**
+ * A fixed end of the path: a border segment (port) on the outer frame.
+ * (Ends inside the grid would just be checkpoints, so they are not allowed.)
+ */
+export type End = { kind: 'port'; port: number };
 
 export function portEnd(port: number): End {
   return { kind: 'port', port };
 }
 
 export function endsEqual(a: End, b: End): boolean {
-  return a.kind === 'cell' ? b.kind === 'cell' && a.cell === b.cell : b.kind === 'port' && a.port === b.port;
+  return a.port === b.port;
 }
 
 export interface Size {
@@ -189,7 +188,7 @@ export function portCell(s: Size, port: number): number {
 
 /** The tile an end belongs to. */
 export function endTile(s: Size, end: End): number {
-  return end.kind === 'cell' ? end.cell : portCell(s, end.port);
+  return portCell(s, end.port);
 }
 
 /**
@@ -253,17 +252,12 @@ export function resizePuzzle(p: Puzzle, w: number, h: number): Puzzle {
     const n = mapCell(c);
     if (n >= 0) out.checkpoints.push(n);
   }
-  // Tile ends keep their tile; ports stay on the same side of the frame.
+  // Ports stay on the same side of the frame.
   out.endpoints = [];
   for (const end of p.endpoints) {
-    if (end.kind === 'cell') {
-      const c = mapCell(end.cell);
-      if (c >= 0) out.endpoints.push(cellEnd(c));
-    } else {
-      const [side, i] = portSide(p, end.port);
-      const limit = side === 'top' || side === 'bottom' ? w : h;
-      if (i < limit) out.endpoints.push(portEnd(portId(out, side, i)));
-    }
+    const [side, i] = portSide(p, end.port);
+    const limit = side === 'top' || side === 'bottom' ? w : h;
+    if (i < limit) out.endpoints.push(portEnd(portId(out, side, i)));
   }
   return out;
 }
