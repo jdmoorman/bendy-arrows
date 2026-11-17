@@ -3,10 +3,10 @@ import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, cellEnd, modeOf, po
 import { checkSolution } from '../src/rules';
 import { parityCheck, solve } from '../src/solver';
 
-/** Count solutions by checking every subset of usable non-given edges. */
+/** Count solutions by checking every subset of usable edges. */
 function bruteForceCount(p: Puzzle): number {
   const free: number[] = [];
-  for (let e = 0; e < edgeCount(p); e++) if (isUsableEdge(p, e) && !p.givens.has(e)) free.push(e);
+  for (let e = 0; e < edgeCount(p); e++) if (isUsableEdge(p, e)) free.push(e);
   let count = 0;
   for (let mask = 0; mask < 1 << free.length; mask++) {
     const segs: number[] = [];
@@ -84,6 +84,18 @@ describe('solve', () => {
     expect(r.solutions.every((s) => checkSolution(p, s).solved)).toBe(true);
   });
 
+  test('checkpoints force the order', () => {
+    // 3x3 with numbers 1 (top-left), 2 (centre), 3 (bottom-right).
+    const p = createPuzzle(3, 3);
+    p.checkpoints = [0, 4, 8];
+    const r = solve(p, { maxSolutions: 1e9 });
+    expect(r.solutions.length).toBeGreaterThan(0);
+    for (const s of r.solutions) expect(checkSolution(p, s).solved).toBe(true);
+    // Parity: on an open 3x3 a path must end on corner/centre tiles, so ending at an edge tile is impossible.
+    p.checkpoints = [0, 4, 1];
+    expect(solve(p).status).toBe('none');
+  });
+
   test('aborts when over the node budget', () => {
     const p = createPuzzle(8, 8);
     p.endpoints = [cellEnd(0)];
@@ -100,11 +112,16 @@ describe('solve', () => {
       const n = w * h;
       for (let c = 0; c < n; c++) if (rand() < 0.12) p.blocked.add(c);
       for (let e = 0; e < edgeCount(p); e++) {
-        const x = rand();
-        if (x < 0.12) p.walls.add(e);
-        else if (x < 0.18 && isUsableEdge(p, e)) p.givens.add(e);
+        if (rand() < 0.12) p.walls.add(e);
       }
-      {
+      if (rand() < 0.3) {
+        // Checkpoints instead of ends.
+        const k = 2 + Math.floor(rand() * 3);
+        for (let i = 0; i < k; i++) {
+          const c = Math.floor(rand() * n);
+          if (!p.checkpoints.includes(c)) p.checkpoints.push(c);
+        }
+      } else {
         // 0 ends makes a loop puzzle; 1 or 2 make a path puzzle.
         const k = Math.floor(rand() * 3);
         for (let i = 0; i < k; i++) {
@@ -114,7 +131,7 @@ describe('solve', () => {
       }
       const expected = bruteForceCount(p);
       const r = solve(p, { maxSolutions: 1e9 });
-      const ctx = JSON.stringify({ trial, w, h, mode: modeOf(p), blocked: [...p.blocked], walls: [...p.walls], givens: [...p.givens], endpoints: p.endpoints });
+      const ctx = JSON.stringify({ trial, w, h, mode: modeOf(p), blocked: [...p.blocked], walls: [...p.walls], endpoints: p.endpoints, checkpoints: p.checkpoints });
       expect(r.solutions.length, ctx).toBe(expected);
       for (const s of r.solutions) expect(checkSolution(p, s).solved, ctx).toBe(true);
     }

@@ -23,18 +23,13 @@ export interface CheckResult {
   illegalEdges: Set<number>;
   /** Number of separate pieces the drawn segments form. */
   pieces: number;
+  /** Checkpoint tiles reached out of order along an otherwise complete path. */
+  checkpointErrors: Set<number>;
   message: string;
 }
 
-/** All segments in effect: the player's plus the puzzle's givens. */
-export function effectiveSegments(p: Puzzle, segments: Iterable<number>): Set<number> {
-  const out = new Set(segments);
-  for (const g of p.givens) out.add(g);
-  return out;
-}
-
 export function checkSolution(p: Puzzle, segments: Iterable<number>): CheckResult {
-  const segs = effectiveSegments(p, segments);
+  const segs = new Set(segments);
   const n = cellCount(p);
   const degree = new Int32Array(n);
   const adj: number[][] = Array.from({ length: n }, () => []);
@@ -115,7 +110,7 @@ export function checkSolution(p: Puzzle, segments: Iterable<number>): CheckResul
     }
   }
 
-  const solved =
+  const structurallySolved =
     open.length > 0 &&
     illegalEdges.size === 0 &&
     unvisited.size === 0 &&
@@ -127,17 +122,47 @@ export function checkSolution(p: Puzzle, segments: Iterable<number>): CheckResul
       : open.length === 1
         ? segs.size === 0 && eps.every((c) => c === open[0])
         : pieces === 1 && ends.length === 2 && eps.every((c) => ends.includes(c)));
+  const checkpointErrors = structurallySolved ? checkpointOrderErrors(p, adj) : new Set<number>();
+  const solved = structurallySolved && checkpointErrors.size === 0;
 
   return {
     solved,
+    checkpointErrors,
     unvisited,
     branches,
     badEnds,
     loopEdges,
     illegalEdges,
     pieces,
-    message: describe(p, { solved, unvisited, branches, badEnds, loopEdges, illegalEdges, pieces }),
+    message: describe(p, { solved, unvisited, branches, badEnds, loopEdges, illegalEdges, pieces, checkpointErrors }),
   };
+}
+
+/**
+ * Walk a complete path from checkpoint 1 and return the checkpoints that are
+ * not reached in their turn (empty when the order is right).
+ */
+function checkpointOrderErrors(p: Puzzle, adj: number[][]): Set<number> {
+  const cps = p.checkpoints;
+  const errors = new Set<number>();
+  if (cps.length < 2) return errors;
+  const index = new Map(cps.map((c, i) => [c, i]));
+  let next = 0;
+  let prev = -1;
+  let cur = cps[0];
+  for (;;) {
+    const k = index.get(cur);
+    if (k !== undefined) {
+      if (k === next) next++;
+      else errors.add(cur);
+    }
+    const nb = adj[cur].find((x) => x !== prev);
+    if (nb === undefined) break;
+    prev = cur;
+    cur = nb;
+  }
+  for (let i = next; i < cps.length; i++) if (!errors.size) errors.add(cps[i]);
+  return errors;
 }
 
 /** Edges that lie on some cycle within a component (i.e. non-bridge edges). */
@@ -181,6 +206,7 @@ function describe(p: Puzzle, r: Omit<CheckResult, 'message'>): string {
   if (r.loopEdges.size) issues.push(modeOf(p) === 'path' ? 'the path contains a loop' : 'a loop closes too early');
   if (r.badEnds.size) issues.push(modeOf(p) === 'cycle' ? `${r.badEnds.size} loose end(s)` : 'path ends in the wrong place');
   if (r.pieces > 1) issues.push(`${r.pieces} separate pieces`);
+  if (r.checkpointErrors.size) issues.push('the numbers are not visited in order');
   if (r.unvisited.size) issues.push(`${r.unvisited.size} tile(s) not visited`);
   if (!issues.length) issues.push('not complete');
   return 'Not solved: ' + issues.join(', ') + '.';

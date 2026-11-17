@@ -6,40 +6,50 @@ import { cellCount, cellEnd, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, modeOf
  * Pre-release format versions are 0.x; the first byte holds the minor number.
  *   0.1  ends stored as tiles
  *   0.2  ends stored as frame ports
- *   0.3  each end is a tile or a frame port (current)
+ *   0.3  each end is a tile or a frame port
+ *   0.4  numbered checkpoints
+ *   0.5  given segments removed (current; older codes' givens are ignored)
  *
- * Layout (0.3):
- *   byte 0      format minor version (3)
- *   byte 1      bit 0 = loop (no ends; informational), bits 1-2 = number of ends
+ * Layout (0.5):
+ *   byte 0      format minor version (5)
+ *   byte 1      bit 0 = loop (informational), bits 1-2 = number of ends,
+ *               bit 3 = checkpoints follow the ends
  *   byte 2, 3   width, height
  *   2 bytes per end, big-endian, entrance first:
  *               top bit set = tile end (low 15 bits = tile index),
  *               top bit clear = frame port (port index)
- *   bitset: blocked cells, then walls, then givens (LSB first), padded to a byte
+ *   if bit 3:   2-byte checkpoint count, then 2 bytes per checkpoint tile (1 first)
+ *   bitset: blocked cells, then walls (LSB first), padded to a byte
+ *               (0.4 and earlier also had a givens bitset after the walls)
  * The bytes are base64url-encoded without padding.
  */
 
 /** Current puzzle format version (pre-release). */
-export const FORMAT_VERSION = '0.3';
-const VERSION_BYTE = 3;
+export const FORMAT_VERSION = '0.5';
+const VERSION_BYTE = 5;
 const CELL_FLAG = 0x8000;
 
 export function encodePuzzle(p: Puzzle): string {
   const n = cellCount(p);
   const e = edgeCount(p);
   const endpoints = p.endpoints.slice(0, 2);
-  const header = [VERSION_BYTE, (endpoints.length ? 0 : 1) | (endpoints.length << 1), p.w, p.h];
+  const cps = p.checkpoints;
+  const flags = (modeOf(p) === 'cycle' ? 1 : 0) | (endpoints.length << 1) | (cps.length ? 8 : 0);
+  const header = [VERSION_BYTE, flags, p.w, p.h];
   for (const end of endpoints) {
     const v = end.kind === 'cell' ? CELL_FLAG | end.cell : end.port;
     header.push(v >> 8, v & 0xff);
   }
+  if (cps.length) {
+    header.push(cps.length >> 8, cps.length & 0xff);
+    for (const c of cps) header.push(c >> 8, c & 0xff);
+  }
 
-  const bitCount = n + 2 * e;
+  const bitCount = n + e;
   const bits = new Uint8Array(Math.ceil(bitCount / 8));
   const set = (i: number) => (bits[i >> 3] |= 1 << (i & 7));
   for (const c of p.blocked) set(c);
   for (const w of p.walls) set(n + w);
-  for (const g of p.givens) set(n + e + g);
 
   const bytes = new Uint8Array(header.length + bits.length);
   bytes.set(header, 0);
@@ -76,12 +86,22 @@ export function decodePuzzle(code: string): Puzzle {
       p.endpoints.push(portEnd(index));
     }
   }
-  const bitCount = n + 2 * e;
+  if (version >= 4 && flags & 8) {
+    const count = (bytes[off] << 8) | bytes[off + 1];
+    off += 2;
+    for (let i = 0; i < count; i++) {
+      const c = (bytes[off] << 8) | bytes[off + 1];
+      off += 2;
+      if (!(c < n)) throw new Error('Puzzle code has a checkpoint outside the grid.');
+      p.checkpoints.push(c);
+    }
+  }
+  // Formats before 0.5 also stored a givens bitset after the walls; it is ignored.
+  const bitCount = n + (version < 5 ? 2 : 1) * e;
   if (bytes.length < off + Math.ceil(bitCount / 8)) throw new Error('Puzzle code is truncated.');
   const get = (i: number) => (bytes[off + (i >> 3)] >> (i & 7)) & 1;
   for (let i = 0; i < n; i++) if (get(i)) p.blocked.add(i);
   for (let i = 0; i < e; i++) if (get(n + i)) p.walls.add(i);
-  for (let i = 0; i < e; i++) if (get(n + e + i)) p.givens.add(i);
   return p;
 }
 
@@ -95,12 +115,13 @@ export interface PuzzleJson {
   height: number;
   blocked: number[];
   walls: number[];
-  givens: number[];
   /**
    * Ends, entrance first: {"cell": i} or {"port": i}. (Format 0.1 files list
    * tile indices and 0.2 files list port indices as plain numbers.)
    */
   endpoints: ({ cell: number } | { port: number })[];
+  /** Checkpoint tiles in order (checkpoint 1 first). */
+  checkpoints?: number[];
   code: string;
 }
 
@@ -114,8 +135,8 @@ export function puzzleToJson(p: Puzzle): PuzzleJson {
     height: p.h,
     blocked: sorted(p.blocked),
     walls: sorted(p.walls),
-    givens: sorted(p.givens),
     endpoints: p.endpoints.map((e) => (e.kind === 'cell' ? { cell: e.cell } : { port: e.port })),
+    checkpoints: [...p.checkpoints],
     code: encodePuzzle(p),
   };
 }
@@ -143,8 +164,8 @@ export function puzzleFromJson(value: unknown): Puzzle {
   };
   ints(j.blocked, n, 'blocked').forEach((c) => p.blocked.add(c));
   ints(j.walls, e, 'walls').forEach((x) => p.walls.add(x));
-  ints(j.givens, e, 'givens').forEach((x) => p.givens.add(x));
   p.endpoints = parseEnds(j.endpoints, j.version, n, portCount(p)).slice(0, 2);
+  p.checkpoints = ints(j.checkpoints, n, 'checkpoints');
   return p;
 }
 

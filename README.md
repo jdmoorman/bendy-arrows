@@ -38,14 +38,14 @@ The app opens on a sample puzzle in the **Play** tab.
   The first end is the entrance. A frame arrow points in at the entrance and out at the exit. Tap an end again to remove it.
 
   A puzzle with ends is a **path** puzzle; with no ends it is a **loop** puzzle. If only one end is placed, Play asks for the second first.
-- **Givens:** drag between tiles to give away segments of the solution.
+- **Checkpoints:** tap tiles to place numbered circles 1, 2, 3… in order. The path must start at 1, pass through every number in order and finish at the highest one, while filling every tile. Tap a number to remove it (higher numbers move down). A puzzle uses either ends or checkpoints, not both — placing one kind removes the other. Play needs at least two checkpoints.
 - **Width × height** pickers (1 to 30).
 - **Check** runs the solver in the background and reports whether the puzzle has **no solution** (with a reason, such as a checkerboard parity mismatch), **exactly one**, or **more than one**. The eye button overlays the solutions it found.
 - **Play** switches to the Play tab with your puzzle.
 
 ## Sharing and saving
 
-- **Share** button (top right): send a link with the phone's share sheet or copy it, export or import JSON, or paste a link or code to open a puzzle. Links look like `…/#p=CODE`. The puzzle format is versioned 0.x while the app is pre-release (currently 0.3); older 0.1 and 0.2 links still open.
+- **Share** button (top right): send a link with the phone's share sheet or copy it, export or import JSON, or paste a link or code to open a puzzle. Links look like `…/#p=CODE`. The puzzle format is versioned 0.x while the app is pre-release (currently 0.5); older 0.x links still open.
 - **Library** button: save the current puzzle under a name, then reopen, edit or delete saved puzzles. Progress on saved puzzles is kept automatically. The current puzzle, your progress and any unsaved editor work are restored when you come back.
 
 Everything is stored locally in your browser; nothing is sent anywhere.
@@ -56,7 +56,7 @@ The solver is a backtracking search with pruning. At each step it checks that:
 
 - the unvisited tiles stay connected
 - no tile is left with too few ways in or out
-- given segments and endpoints are respected
+- the path's ends are respected
 
 Before searching, it runs a checkerboard **parity check**. Every step moves between the two colours of a checkerboard, so:
 - a loop needs equal numbers of each colour;

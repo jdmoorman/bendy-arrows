@@ -3,7 +3,7 @@
  *
  * Cells are indexed `r * w + c`.
  * Edges (borders between orthogonally adjacent cells) are indexed so that a
- * single numeric key space is shared by walls, givens, player segments and
+ * single numeric key space is shared by walls, player segments and
  * X marks:
  *   - horizontal edges join (r, c) and (r, c + 1): id = r * (w - 1) + c,
  *     for 0 <= id < h * (w - 1)
@@ -32,8 +32,12 @@ export interface Puzzle {
    * it is a loop (see modeOf).
    */
   endpoints: End[];
-  /** Segments that are part of the solution and given to the player. */
-  givens: Set<number>;
+  /**
+   * Numbered checkpoints (tiles), in order: checkpoints[0] is 1. The path
+   * starts at 1, passes through each in order and ends at the last. Puzzles
+   * use either checkpoints or ends, not both; either makes it a path puzzle.
+   */
+  checkpoints: number[];
 }
 
 /** A fixed end of the path: a tile, or a border segment on the outer frame. */
@@ -59,13 +63,13 @@ export interface Size {
 export const MIN_SIZE = 1;
 export const MAX_SIZE = 30;
 
-/** Path puzzles have ends; a puzzle without ends is a loop. */
+/** Puzzles with ends or checkpoints are paths; with neither, a loop. */
 export function modeOf(p: Puzzle): Mode {
-  return p.endpoints.length > 0 ? 'path' : 'cycle';
+  return p.endpoints.length > 0 || p.checkpoints.length > 0 ? 'path' : 'cycle';
 }
 
 export function createPuzzle(w: number, h: number): Puzzle {
-  return { w, h, blocked: new Set(), walls: new Set(), endpoints: [], givens: new Set() };
+  return { w, h, blocked: new Set(), walls: new Set(), endpoints: [], checkpoints: [] };
 }
 
 export function clonePuzzle(p: Puzzle): Puzzle {
@@ -75,7 +79,7 @@ export function clonePuzzle(p: Puzzle): Puzzle {
     blocked: new Set(p.blocked),
     walls: new Set(p.walls),
     endpoints: p.endpoints.map((e) => ({ ...e })),
-    givens: new Set(p.givens),
+    checkpoints: [...p.checkpoints],
   };
 }
 
@@ -188,8 +192,13 @@ export function endTile(s: Size, end: End): number {
   return end.kind === 'cell' ? end.cell : portCell(s, end.port);
 }
 
-/** Tiles where the path must end (path mode). */
+/**
+ * Tiles where the path must end (path mode): the ends, or with checkpoints
+ * the first and last checkpoint (just the first while only one is placed).
+ */
 export function endpointCells(p: Puzzle): number[] {
+  const cp = p.checkpoints;
+  if (cp.length) return cp.length > 1 ? [cp[0], cp[cp.length - 1]] : [cp[0]];
   return p.endpoints.slice(0, 2).map((e) => endTile(p, e));
 }
 
@@ -240,9 +249,9 @@ export function resizePuzzle(p: Puzzle, w: number, h: number): Puzzle {
     const n = mapEdge(e);
     if (n >= 0) out.walls.add(n);
   }
-  for (const e of p.givens) {
-    const n = mapEdge(e);
-    if (n >= 0) out.givens.add(n);
+  for (const c of p.checkpoints) {
+    const n = mapCell(c);
+    if (n >= 0) out.checkpoints.push(n);
   }
   // Tile ends keep their tile; ports stay on the same side of the frame.
   out.endpoints = [];
@@ -266,8 +275,9 @@ export function puzzlesEqual(a: Puzzle, b: Puzzle): boolean {
     a.h === b.h &&
     setEq(a.blocked, b.blocked) &&
     setEq(a.walls, b.walls) &&
-    setEq(a.givens, b.givens) &&
     a.endpoints.length === b.endpoints.length &&
-    a.endpoints.every((v, i) => endsEqual(v, b.endpoints[i]))
+    a.endpoints.every((v, i) => endsEqual(v, b.endpoints[i])) &&
+    a.checkpoints.length === b.checkpoints.length &&
+    a.checkpoints.every((v, i) => v === b.checkpoints[i])
   );
 }

@@ -1,10 +1,10 @@
-import { cellCount, cellRC, edgeBetween, edgeCells, endpointCells, isUsableEdge, modeOf, openCells, type Puzzle } from './model';
+import { cellCount, cellRC, edgeBetween, endpointCells, modeOf, openCells, type Puzzle } from './model';
 
 export type SolveStatus = 'none' | 'unique' | 'multiple' | 'aborted';
 
 export interface SolveResult {
   status: SolveStatus;
-  /** Up to `maxSolutions` distinct solutions, each a sorted list of edge ids (givens included). */
+  /** Up to `maxSolutions` distinct solutions, each a sorted list of edge ids. */
   solutions: number[][];
   /** Human-readable explanation of the status. */
   reason: string;
@@ -90,12 +90,11 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   if (endpoints.length === 2 && endpoints[0] === endpoints[1] && openCount > 1) {
     return result('none', 'Both path ends are on the same tile.');
   }
-  for (const g of p.givens) {
-    if (!isUsableEdge(p, g)) return result('none', 'A given segment crosses a wall or touches a black tile.');
-  }
+  const cps = p.checkpoints;
+  if (cps.some((c) => p.blocked.has(c))) return result('none', 'A checkpoint is on a black tile.');
+  if (new Set(cps).size !== cps.length) return result('none', 'Two checkpoints are on the same tile.');
   if (isCycle && openCount < 4) return result('none', 'A loop needs at least four open tiles.');
   if (openCount === 1) {
-    if (p.givens.size) return result('none', 'Given segments cannot fit a one-tile path.');
     return result('unique', 'The single open tile is the whole path.', [[]]);
   }
 
@@ -108,18 +107,10 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
       if (nb >= 0 && !p.blocked.has(nb) && !p.walls.has(edgeBetween(p, c, nb))) adj[c].push(nb);
     }
   }
-  const givenAt: number[][] = Array.from({ length: n }, () => []);
-  for (const g of p.givens) {
-    const [a, b] = edgeCells(p, g);
-    givenAt[a].push(b);
-    givenAt[b].push(a);
-  }
   for (const c of open) {
-    if (givenAt[c].length > 2) return result('none', 'A tile has more than two given segments.');
     if (adj[c].length === 0) return result('none', 'A tile is completely walled off.');
     if (isCycle && adj[c].length < 2) return result('none', 'A tile has only one way in or out, so it cannot be on a loop.');
   }
-  for (const c of endpoints) if (givenAt[c].length > 1) return result('none', 'A path end tile has two given segments.');
   const deadEnds = open.filter((c) => adj[c].length === 1);
   if (!isCycle) {
     if (deadEnds.length > 2) return result('none', `${deadEnds.length} tiles have only one way in or out, but a path has only two ends.`);
@@ -140,6 +131,10 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   let aborted = false;
   const found = new Map<string, number[]>();
   let start = -1;
+  // Checkpoints must be entered in order: cpIndex[cell] is its position (or -1).
+  const cpIndex = new Int32Array(n).fill(-1);
+  cps.forEach((c, i) => (cpIndex[c] = i));
+  let nextCp = 0;
 
   const done = () => aborted || found.size >= maxSolutions;
 
@@ -147,8 +142,6 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
     const edges: number[] = [];
     for (let i = 1; i < order.length; i++) edges.push(edgeBetween(p, order[i - 1], order[i]));
     if (closing) edges.push(edgeBetween(p, order[order.length - 1], order[0]));
-    const set = new Set(edges);
-    for (const g of p.givens) if (!set.has(g)) return;
     edges.sort((x, y) => x - y);
     const key = edges.join(',');
     if (!found.has(key)) found.set(key, edges);
@@ -201,7 +194,7 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
     return k;
   };
 
-  const dfs = (cur: number, prev: number): void => {
+  const dfs = (cur: number): void => {
     nodes++;
     if ((nodes & 0xffff) === 0) {
       opts.onProgress?.(nodes);
@@ -218,45 +211,33 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
       return;
     }
 
-    // Given segments at cur that are not the one we arrived on force the next step.
-    let forced = -1;
-    for (const g of givenAt[cur]) {
-      if (g === prev) continue;
-      // A given back to an already-visited tile can only be a loop's closing edge,
-      // and we are not at the end yet.
-      if (visited[g]) return;
-      if (forced >= 0) {
-        if (isCycle && cur === start) break; // start of a loop: take one now, the other closes it
-        return;
-      }
-      forced = g;
-    }
-
-    const candidates = forced >= 0 ? [forced] : adj[cur].filter((nb) => !visited[nb]);
+    const candidates = adj[cur].filter((nb) => !visited[nb]);
     if (candidates.length > 1) candidates.sort((x, y) => onwardCount(x) - onwardCount(y));
     for (const next of candidates) {
       if (visited[next]) continue;
       if (endpoints.length === 2 && next === endpoints[1] && visitedCount + 1 < openCount) continue;
+      const k = cpIndex[next];
+      if (k >= 0 && k !== nextCp) continue; // a checkpoint out of turn
+      if (k >= 0) nextCp++;
       visited[next] = 1;
       visitedCount++;
       order.push(next);
-      if (feasible(next)) dfs(next, cur);
+      if (feasible(next)) dfs(next);
       order.pop();
       visitedCount--;
       visited[next] = 0;
+      if (k >= 0) nextCp--;
       if (done()) return;
     }
   };
 
   const runFrom = (s: number) => {
     start = s;
+    nextCp = cpIndex[s] === 0 ? 1 : 0;
     visited[s] = 1;
     visitedCount = 1;
     order.push(s);
-    // A path's start tile is an end, so it can carry at most one given.
-    if (isCycle || givenAt[s].length <= 1) {
-      if (feasible(s)) dfs(s, -1);
-    }
+    if (feasible(s)) dfs(s);
     order.pop();
     visited[s] = 0;
     visitedCount = 0;
@@ -271,7 +252,7 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   } else if (deadEnds.length > 0) {
     starts = [deadEnds[0]];
   } else {
-    starts = open.filter((c) => givenAt[c].length < 2 && (parity.endColor === null || colorOf(p, c) === parity.endColor));
+    starts = open.filter((c) => parity.endColor === null || colorOf(p, c) === parity.endColor);
   }
   for (const s of starts) {
     runFrom(s);

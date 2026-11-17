@@ -76,21 +76,37 @@ describe('checkSolution — path mode', () => {
     expect(checkSolution(p, pathEdges(p, snake3x3)).solved).toBe(false);
   });
 
-  test('givens count as drawn', () => {
-    const p = createPuzzle(3, 3);
-    p.endpoints = [cellEnd(0), cellEnd(8)];
-    const all = pathEdges(p, snake3x3);
-    const [first, ...rest] = [...all];
-    p.givens.add(first);
-    expect(checkSolution(p, rest).solved).toBe(true);
-  });
-
   test('rejects two separate pieces', () => {
     const p = createPuzzle(4, 1);
     p.endpoints = [cellEnd(0), cellEnd(3)];
     const r = checkSolution(p, pathEdges(p, [[0, 0], [0, 1]]).add(edgeBetween(p, 2, 3)));
     expect(r.solved).toBe(false);
     expect(r.pieces).toBe(2);
+  });
+});
+
+describe('checkSolution — checkpoints', () => {
+  test('a path through the numbers in order is solved', () => {
+    const p = createPuzzle(3, 3);
+    p.checkpoints = [0, 4, 8];
+    expect(checkSolution(p, pathEdges(p, snake3x3)).solved).toBe(true);
+  });
+
+  test('numbers visited out of order are reported', () => {
+    const p = createPuzzle(3, 3);
+    p.checkpoints = [0, 6, 4, 8]; // the snake reaches 4 before 6
+    const r = checkSolution(p, pathEdges(p, snake3x3));
+    expect(r.solved).toBe(false);
+    expect(r.checkpointErrors.size).toBeGreaterThan(0);
+    expect(r.message).toMatch(/order/);
+  });
+
+  test('the path must start at 1 and end at the highest number', () => {
+    const p = createPuzzle(3, 3);
+    p.checkpoints = [8, 0]; // reversed: still the same path, so it is fine
+    expect(checkSolution(p, pathEdges(p, snake3x3)).solved).toBe(true);
+    p.checkpoints = [0, 7]; // 7 is not an end of the snake
+    expect(checkSolution(p, pathEdges(p, snake3x3)).solved).toBe(false);
   });
 });
 

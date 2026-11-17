@@ -20,7 +20,6 @@ export type ThemeTokens = Record<
   | 'wall'
   | 'path'
   | 'path-solved'
-  | 'given'
   | 'xmark'
   | 'end'
   | 'error'
@@ -48,7 +47,6 @@ export const THEMES = {
     wall: '#000000',
     path: '#5eb8ff',
     'path-solved': '#5ee0a0',
-    given: '#c9a6ff',
     xmark: '#ff8a65',
     end: '#e6e9f0',
     error: '#ff5c7a',
@@ -73,7 +71,6 @@ export const THEMES = {
     wall: '#000000',
     path: '#8ab4f8',
     'path-solved': '#8fd9ac',
-    given: '#7c3aed',
     xmark: '#000000',
     end: '#000000',
     error: '#d92d4b',

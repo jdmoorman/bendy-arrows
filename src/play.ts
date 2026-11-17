@@ -86,7 +86,7 @@ export class PlayView {
 
   load(p: Puzzle, progress?: Progress): void {
     this.puzzle = p;
-    const ok = (e: number) => isUsableEdge(p, e) && !p.givens.has(e);
+    const ok = (e: number) => isUsableEdge(p, e);
     this.segments = new Set((progress?.segments ?? []).filter(ok));
     this.xMarks = new Set((progress?.xMarks ?? []).filter(ok));
     this.history.clear();
@@ -127,11 +127,10 @@ export class PlayView {
 
   /** A border can hold an X if a segment could ever go there. */
   private canMark(e: number): boolean {
-    return isUsableEdge(this.puzzle, e) && !this.puzzle.givens.has(e);
+    return isUsableEdge(this.puzzle, e);
   }
 
   private setSegment(e: number, on: boolean) {
-    if (this.puzzle.givens.has(e)) return;
     if (on) {
       if (!canPlace(this.puzzle, e) || this.segments.has(e)) return;
       this.segments.add(e);
@@ -225,7 +224,7 @@ export class PlayView {
     if (!this.puzzle) return;
     const live = checkSolution(this.puzzle, this.segments);
     const full = this.shownCheck;
-    const errorCells = new Set<number>(live.branches);
+    const errorCells = new Set<number>([...live.branches, ...live.checkpointErrors]);
     const errorEdges = new Set<number>([...live.loopEdges, ...live.illegalEdges]);
     if (full) {
       for (const c of full.unvisited) errorCells.add(c);
@@ -253,7 +252,12 @@ export class PlayView {
   private hint(): string {
     const p = this.puzzle;
     const goal = modeOf(p) === 'cycle' ? 'Draw one loop through every open tile.' : 'Draw one path through every open tile.';
-    const ends = p.endpoints.length ? ` The path must ${endsHint(p)}.` : '';
+    const n = p.checkpoints.length;
+    const ends = n
+      ? ` Pass through the numbers in order, from 1 to ${n}.`
+      : p.endpoints.length
+        ? ` The path must ${endsHint(p)}.`
+        : '';
     return goal + ends + ' Tap a border to mark it with an X.';
   }
 }

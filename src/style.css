@@ -209,7 +209,6 @@ select {
 }
 
 .seg,
-.given-seg,
 .ghost-seg {
   fill: none;
   stroke-linecap: round;
@@ -219,27 +218,18 @@ select {
 .seg {
   stroke: var(--path);
 }
-.given-seg {
-  stroke: var(--given);
-}
 .ghost-seg {
   stroke: var(--ghost);
   stroke-width: 14;
 }
-.seg.error,
-.given-seg.error {
+.board.has-checkpoints .seg {
+  /* Wider than the checkpoint discs (62 units across). */
+  stroke-width: 74;
+}
+.seg.error {
   stroke: var(--error);
 }
 
-.joint {
-  fill: var(--path);
-}
-.joint.given {
-  fill: var(--given);
-}
-.joint.error {
-  fill: var(--error);
-}
 
 .end-seg {
   fill: none;
@@ -253,6 +243,18 @@ select {
   stroke-width: 4;
   stroke-linejoin: round;
 }
+.cp-dot {
+  fill: var(--end);
+}
+.cp-dot.error {
+  fill: var(--error);
+}
+.cp-num {
+  fill: var(--bg);
+  font-weight: 700;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  pointer-events: none;
+}
 .end-ring {
   fill: none;
   stroke: var(--end);
@@ -265,12 +267,8 @@ select {
   stroke-linecap: round;
 }
 
-.board.solved .seg,
-.board.solved .joint {
+.board.solved .seg {
   stroke: var(--path-solved);
-}
-.board.solved .joint {
-  fill: var(--path-solved);
 }
 
 /* ---------- Status & toolbars ---------- */

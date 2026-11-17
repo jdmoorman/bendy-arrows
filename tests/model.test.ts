@@ -36,6 +36,10 @@ describe('model', () => {
     expect(q.endpoints).toEqual([portEnd(portId(q, 'left', 0))]);
     p.endpoints = [cellEnd(3), cellEnd(8)]; // (1,0) survives, (2,2) does not
     expect(resizePuzzle(p, 2, 2).endpoints).toEqual([cellEnd(2)]);
+    p.endpoints = [];
+    p.blocked.clear();
+    p.checkpoints = [8, 3, 1]; // (2,2) dropped; the rest keep their order
+    expect(resizePuzzle(p, 2, 2).checkpoints).toEqual([2, 1]);
   });
 
   test('ports cover the frame clockwise and map to edge tiles', () => {

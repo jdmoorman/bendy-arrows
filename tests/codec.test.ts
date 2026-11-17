@@ -6,7 +6,6 @@ function sample() {
   const p = createPuzzle(7, 5);
   p.blocked.add(3).add(17).add(34);
   p.walls.add(edgeBetween(p, 0, 1)).add(edgeBetween(p, 8, 15)).add(edgeBetween(p, 26, 27));
-  p.givens.add(edgeBetween(p, 10, 11));
   p.endpoints = [portEnd(portId(p, 'bottom', 4)), cellEnd(30)];
   return p;
 }
@@ -17,6 +16,15 @@ describe('codec', () => {
     const q = decodePuzzle(encodePuzzle(p));
     expect(puzzlesEqual(p, q)).toBe(true);
     expect(q.endpoints).toEqual(p.endpoints);
+  });
+
+  test('checkpoints round-trip through codes and JSON', () => {
+    const p = createPuzzle(30, 30);
+    p.checkpoints = [899, 0, 450, 31];
+    const q = decodePuzzle(encodePuzzle(p));
+    expect(q.checkpoints).toEqual([899, 0, 450, 31]);
+    expect(modeOf(q)).toBe('path');
+    expect(puzzleFromJson(JSON.parse(JSON.stringify(puzzleToJson(p)))).checkpoints).toEqual([899, 0, 450, 31]);
   });
 
   test('cycle mode and large grids round-trip', () => {
@@ -47,8 +55,19 @@ describe('codec', () => {
     expect(modeOf(puzzleFromJson(j))).toBe('cycle');
   });
 
+  test('givens in older codes and JSON are ignored', () => {
+    // Format 0.4, 2x2 loop: blocked (4 bits) + walls (2+2 bits) + givens (4 bits) = 12 bits.
+    const bytes = [4, 1, 2, 2, 0b11110000, 0b00001111];
+    const q = decodePuzzle(btoa(String.fromCharCode(...bytes)).replace(/=+$/, ''));
+    expect('givens' in q).toBe(false);
+    expect(q.blocked.size).toBe(0);
+    expect(q.walls.size).toBe(4);
+    const j = { ...puzzleToJson(createPuzzle(3, 3)), version: '0.4', givens: [0, 1] };
+    expect('givens' in puzzleFromJson(j)).toBe(false);
+  });
+
   test('JSON carries a 0.x format version', () => {
-    expect(puzzleToJson(sample()).version).toBe('0.3');
+    expect(puzzleToJson(sample()).version).toBe('0.5');
   });
 
   test('format 0.2 codes and JSON open with frame ends', () => {

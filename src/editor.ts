@@ -5,7 +5,6 @@ import {
   cellEdges,
   clonePuzzle,
   createPuzzle,
-  edgeBetween,
   edgeTouchesBlocked,
   MAX_SIZE,
   MIN_SIZE,
@@ -18,16 +17,20 @@ import {
   type Puzzle,
 } from './model';
 import { padFor, renderBoard } from './render';
-import { canPlace } from './rules';
 
-type Tool = 'tiles' | 'walls' | 'ends' | 'givens';
+type Tool = 'tiles' | 'walls' | 'ends' | 'checkpoints';
 
-const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends', givens: 'path' };
+const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends', checkpoints: 'cells' };
 const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
   walls: 'Tap or drag along borders to add walls.',
   ends: 'Tap a tile, or a dot on the frame, to add a path end (two make a path puzzle). With no ends it is a loop.',
-  givens: 'Drag between tiles to give segments of the solution.',
+  checkpoints: 'Tap tiles to number them 1, 2, 3… The path must run through them in order. Tap a number to remove it.',
+};
+
+const EXCLUSIVE_NOTE = {
+  ends: 'Checkpoints removed — a puzzle uses either ends or checkpoints.',
+  checkpoints: 'Ends removed — a puzzle uses either ends or checkpoints.',
 };
 
 export class EditorView {
@@ -58,7 +61,8 @@ export class EditorView {
   private before: Puzzle | null = null;
   private changed = false;
   private paintAdd = true;
-  private trail: number[] = [];
+  /** Message to show once the current gesture is committed. */
+  private note = '';
 
   constructor() {
     this.el = document.createElement('section');
@@ -73,7 +77,7 @@ export class EditorView {
             <button class="seg-btn" data-tool="tiles">Tiles</button>
             <button class="seg-btn" data-tool="walls">Walls</button>
             <button class="seg-btn" data-tool="ends">Ends</button>
-            <button class="seg-btn" data-tool="givens">Givens</button>
+            <button class="seg-btn" data-tool="checkpoints">Checkpoints</button>
           </div>
         </div>
         <div class="toolbar-row settings-row">
@@ -105,7 +109,7 @@ export class EditorView {
       tiles: q('[data-tool=tiles]'),
       walls: q('[data-tool=walls]'),
       ends: q('[data-tool=ends]'),
-      givens: q('[data-tool=givens]'),
+      checkpoints: q('[data-tool=checkpoints]'),
     };
 
     for (const t of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[t].addEventListener('click', () => this.setTool(t));
@@ -124,17 +128,11 @@ export class EditorView {
       onGestureStart: () => {
         this.before = clonePuzzle(this.puzzle);
         this.changed = false;
-        this.trail = [];
       },
       onGestureEnd: () => this.commitGesture(),
       onPaintCell: (cell, first) => this.paintCell(cell, first),
       onTapEnd: (end) => this.toggleEnd(end),
       onPaintEdge: (e, first) => this.paintWall(e, first),
-      onPathStart: (cell) => {
-        this.trail = [cell];
-      },
-      onStep: (from, to) => this.stepGiven(from, to),
-      onTapEdge: (e) => this.toggleGiven(e),
       onSecondaryEdge: (e) => this.toggleWall(e),
     });
     this.setTool('tiles');
@@ -199,6 +197,10 @@ export class EditorView {
       this.setMessage('Place a second end on the frame first — a path needs an entrance and an exit.', 'error');
       return false;
     }
+    if (this.puzzle.checkpoints.length === 1) {
+      this.setMessage('Place a second checkpoint first — the path runs from 1 to the highest number.', 'error');
+      return false;
+    }
     return true;
   }
 
@@ -213,7 +215,9 @@ export class EditorView {
     if (this.changed && this.before) {
       this.history.push(this.before);
       this.afterChange();
+      if (this.note) this.setMessage(this.note);
     }
+    this.note = '';
     this.before = null;
     this.changed = false;
   }
@@ -240,13 +244,17 @@ export class EditorView {
 
   private paintCell(cell: number, first: boolean) {
     const p = this.puzzle;
+    if (this.tool === 'checkpoints') {
+      if (first) this.toggleCheckpoint(cell);
+      return;
+    }
     if (first) this.paintAdd = !p.blocked.has(cell);
     if (this.paintAdd === p.blocked.has(cell)) return;
     if (this.paintAdd) {
       p.blocked.add(cell);
       p.endpoints = p.endpoints.filter((end) => endTile(p, end) !== cell);
+      p.checkpoints = p.checkpoints.filter((c) => c !== cell);
       for (const e of cellEdges(p, cell)) {
-        p.givens.delete(e);
         p.walls.delete(e);
       }
     } else {
@@ -261,9 +269,30 @@ export class EditorView {
     const p = this.puzzle;
     if (p.blocked.has(endTile(p, end))) return;
     const i = p.endpoints.findIndex((e) => endsEqual(e, end));
+    if (i < 0 && p.checkpoints.length) {
+      p.checkpoints = [];
+      this.note = EXCLUSIVE_NOTE.ends;
+    }
     if (i >= 0) p.endpoints.splice(i, 1);
     else if (p.endpoints.length < 2) p.endpoints.push(end);
     else p.endpoints[1] = end; // replace the exit
+    this.changed = true;
+    this.render();
+  }
+
+  /** Add the next numbered checkpoint, or remove one (later numbers move down). */
+  private toggleCheckpoint(cell: number) {
+    const p = this.puzzle;
+    if (p.blocked.has(cell)) return;
+    const i = p.checkpoints.indexOf(cell);
+    if (i >= 0) p.checkpoints.splice(i, 1);
+    else {
+      if (p.endpoints.length) {
+        p.endpoints = [];
+        this.note = EXCLUSIVE_NOTE.checkpoints;
+      }
+      p.checkpoints.push(cell);
+    }
     this.changed = true;
     this.render();
   }
@@ -275,7 +304,6 @@ export class EditorView {
       // Black tiles are already walled on every side.
       if (edgeTouchesBlocked(p, e)) return;
       p.walls.add(e);
-      p.givens.delete(e);
     } else {
       p.walls.delete(e);
     }
@@ -290,37 +318,6 @@ export class EditorView {
 
   private toggleWall(e: number) {
     this.setWall(e, !this.puzzle.walls.has(e));
-  }
-
-  private setGiven(e: number, on: boolean) {
-    const p = this.puzzle;
-    if (on === p.givens.has(e)) return;
-    if (on) {
-      if (!canPlace(p, e)) return;
-      p.givens.add(e);
-    } else {
-      p.givens.delete(e);
-    }
-    this.changed = true;
-    this.render();
-  }
-
-  private toggleGiven(e: number) {
-    this.setGiven(e, !this.puzzle.givens.has(e));
-  }
-
-  private stepGiven(from: number, to: number): boolean {
-    const e = edgeBetween(this.puzzle, from, to);
-    if (e < 0 || !canPlace(this.puzzle, e)) return false;
-    const t = this.trail;
-    if (t.length >= 2 && t[t.length - 2] === to) {
-      this.setGiven(e, false);
-      t.pop();
-    } else {
-      this.setGiven(e, true);
-      t.push(to);
-    }
-    return true;
   }
 
   render(): void {

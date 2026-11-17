@@ -82,7 +82,7 @@ function describe(r: SolveResult): string {
     case 'unique':
       return 'Unique solution — ready to play and share.';
     case 'multiple':
-      return 'More than one solution. Add walls, black tiles, ends or givens to narrow it down.';
+      return 'More than one solution. Add walls, black tiles, ends or checkpoints to narrow it down.';
     case 'none':
       return `No solution. ${r.reason}`;
     case 'aborted':
