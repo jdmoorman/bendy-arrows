@@ -20,7 +20,7 @@ import {
   type Puzzle,
 } from './model';
 import { padFor, renderBoard } from './render';
-import { ALL_RULES, applyStep, BASIC_RULES, logicStep, RULES, rulesFor, type LogicState, type RuleId } from './logic';
+import { ALL_RULES, applyStep, BASIC_RULES, findHint, RULES, rulesFor, type LogicState, type RuleId } from './logic';
 import { Storage } from './storage';
 import { openSheet } from './ui';
 import { openNewPuzzleSheet } from './new-puzzle-ui';
@@ -85,6 +85,11 @@ export class EditorView {
   private logicFresh = new Set<number>();
   private logicSteps = 0;
   private logicBad: number[] = [];
+  /** The area the latest step is about. */
+  private logicFocus = new Set<number>();
+  /** The logic state before each step (or fast forward), for stepping back. */
+  private logicHistory: { logic: LogicState; steps: number }[] = [];
+  private logicBackBtn!: HTMLButtonElement;
   private logicNote = '';
   private logicRules = loadRuleChoice(new Storage());
 
@@ -105,8 +110,10 @@ export class EditorView {
         </div>
         <div class="toolbar-row logic-row">
           <button class="btn" data-logic="rules" aria-label="Logic rules">${ICONS.list}<span>Rules</span></button>
-          <button class="btn" data-logic="reset" aria-label="Reset logic">${ICONS.undo}<span>Reset</span></button>
-          <button class="btn" data-logic="step" aria-label="Logic step">${ICONS.step}<span>Step</span></button>
+          <button class="btn icon-only" data-logic="reset" aria-label="Reset logic" title="Reset logic">${ICONS.rotateLeft}</button>
+          <button class="btn icon-only" data-logic="back" aria-label="Undo the last logic step" title="Undo the last logic step">${ICONS.stepBack}</button>
+          <button class="btn icon-only" data-logic="step" aria-label="Logic step" title="Logic step">${ICONS.step}</button>
+          <button class="btn icon-only" data-logic="fast" aria-label="Apply easy rules until stuck" title="Apply easy rules until stuck">${ICONS.fastForward}</button>
           <span class="editor-actions"></span>
         </div>
         <div class="toolbar-row actions-row">
@@ -134,6 +141,9 @@ export class EditorView {
     for (const t of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[t].addEventListener('click', () => this.setTool(t));
     q<HTMLButtonElement>('[data-act=transform]').addEventListener('click', () => this.openTransformSheet());
     q<HTMLButtonElement>('[data-logic=step]').addEventListener('click', () => this.stepLogic());
+    this.logicBackBtn = q<HTMLButtonElement>('[data-logic=back]');
+    this.logicBackBtn.addEventListener('click', () => this.stepLogicBack());
+    q<HTMLButtonElement>('[data-logic=fast]').addEventListener('click', () => this.fastForwardLogic());
     q<HTMLButtonElement>('[data-logic=reset]').addEventListener('click', () => {
       this.resetLogic();
       this.clearMessage();
@@ -211,6 +221,8 @@ export class EditorView {
     this.logicFresh = new Set();
     this.logicSteps = 0;
     this.logicBad = [];
+    this.logicFocus = new Set();
+    this.logicHistory = [];
     this.logicNote = '';
   }
 
@@ -222,33 +234,83 @@ export class EditorView {
       this.render();
       return;
     }
-    const step = logicStep(p, this.logic, this.logicRules);
-    this.logicBad = step.contradiction ? (step.contradiction.cells ?? [step.contradiction.cell]) : [];
-    if (step.contradiction) {
-      this.logicFresh = new Set();
-      this.setMessage(`Contradiction: ${step.contradiction.reason} This puzzle has no solution.`, 'error');
+    // One step is exactly what a Play hint would suggest, using the chosen rules.
+    const hint = findHint(p, this.logic, this.logicRules);
+    this.logicFresh = new Set();
+    this.logicFocus = new Set();
+    this.logicBad = hint.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
+    if (hint.kind === 'mistake') {
+      this.setMessage(`Contradiction: ${hint.text} This puzzle has no solution.`, 'error');
       return;
     }
-    if (step.solved) {
-      this.logicFresh = new Set();
-      this.setMessage(`Solved by simple logic in ${this.logicSteps} step${this.logicSteps === 1 ? '' : 's'}!`, 'success');
+    if (hint.kind === 'solved') {
+      this.setMessage(`Solved by logic in ${this.logicSteps} step${this.logicSteps === 1 ? '' : 's'}!`, 'success');
       return;
     }
-    if (!step.segments.length && !step.xs.length) {
-      this.logicFresh = new Set();
+    if (hint.kind === 'none') {
       this.logicNote = this.logicSteps
         ? `Stuck after ${this.logicSteps} step${this.logicSteps === 1 ? '' : 's'} — the chosen rules find nothing more.`
         : 'The chosen rules find nothing to fill in.';
       this.render();
       return;
     }
-    this.logic = applyStep(this.logic, step);
-    this.logicFresh = new Set([...step.segments, ...step.xs]);
+    const d = hint.deduction;
+    this.logicHistory.push({ logic: this.logic, steps: this.logicSteps });
+    this.logic = applyStep(this.logic, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
+    this.logicFresh = new Set([...d.segments, ...d.xs]);
+    this.logicFocus = new Set(d.cells ?? [d.cell]);
     this.logicSteps++;
-    const parts = RULES.filter((r) => step.byRule[r.id]).map((r) => `${r.label.toLowerCase()} ${step.byRule[r.id]}`);
-    const lines = step.segments.length ? `+${step.segments.length} line${step.segments.length === 1 ? '' : 's'}` : '';
-    const xs = step.xs.length ? `+${step.xs.length} X` : '';
-    this.logicNote = `Step ${this.logicSteps}: ${[lines, xs].filter(Boolean).join(', ')} (${parts.join(', ')}).`;
+    const label = RULES.find((r) => r.id === d.rule)?.label ?? d.rule;
+    this.logicNote = `Step ${this.logicSteps} · ${label}: ${hint.text}`;
+    this.render();
+  }
+
+  /** Take hint-sized steps with the chosen easy rules until they find nothing more. */
+  private fastForwardLogic() {
+    const p = this.puzzle;
+    if (modeOf(p) === 'path' && endpointCells(p).length < 2) {
+      this.clearMessage();
+      this.logicNote = 'Place both ends (or at least two checkpoints) first.';
+      this.render();
+      return;
+    }
+    const rules = [...this.logicRules].filter((r) => !ADVANCED_RULES.includes(r));
+    const before = { logic: this.logic, steps: this.logicSteps };
+    const fresh = new Set<number>();
+    let hint = findHint(p, this.logic, rules);
+    for (let i = 0; hint.kind === 'deduction' && i < 5000; i++) {
+      const d = hint.deduction;
+      this.logic = applyStep(this.logic, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
+      for (const e of [...d.segments, ...d.xs]) fresh.add(e);
+      this.logicSteps++;
+      hint = findHint(p, this.logic, rules);
+    }
+    const taken = this.logicSteps - before.steps;
+    if (taken) this.logicHistory.push(before);
+    this.clearMessage();
+    this.logicFresh = fresh;
+    this.logicFocus = new Set();
+    this.logicBad = hint.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
+    const steps = `${taken} step${taken === 1 ? '' : 's'}`;
+    if (hint.kind === 'mistake') this.setMessage(`Contradiction: ${hint.text} This puzzle has no solution.`, 'error');
+    else if (hint.kind === 'solved') this.setMessage(`Solved by logic in ${this.logicSteps} step${this.logicSteps === 1 ? '' : 's'}!`, 'success');
+    else {
+      this.logicNote =
+        taken ? `Fast forward: ${steps}, up to step ${this.logicSteps}. The easy rules find nothing more.` : 'The easy rules find nothing more.';
+      this.render();
+    }
+  }
+
+  private stepLogicBack() {
+    const prev = this.logicHistory.pop();
+    if (!prev) return;
+    this.clearMessage();
+    this.logic = prev.logic;
+    this.logicSteps = prev.steps;
+    this.logicFresh = new Set();
+    this.logicFocus = new Set();
+    this.logicBad = [];
+    this.logicNote = this.logicSteps ? `Back to step ${this.logicSteps}.` : 'Back to the start.';
     this.render();
   }
 
@@ -563,10 +625,12 @@ export class EditorView {
       segments: logic ? this.logic.segments : undefined,
       xMarks: logic ? this.logic.xs : undefined,
       highlight: logic ? this.logicFresh : undefined,
+      focusCells: logic && this.logicFocus.size ? this.logicFocus : undefined,
       errorCells: logic && this.logicBad.length ? new Set(this.logicBad) : undefined,
     });
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;
+    this.logicBackBtn.disabled = !this.logicHistory.length;
 
     this.status.classList.toggle('success', this.messageKind === 'success');
     this.status.classList.toggle('error', this.messageKind === 'error');

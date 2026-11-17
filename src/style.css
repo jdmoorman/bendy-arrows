@@ -846,8 +846,20 @@ select {
 
 /* Logic helper and the solution check share a row; drop the icons when it's tight. */
 @media (max-width: 480px) {
-  .logic-row > .btn svg {
+  .logic-row > .btn:not(.icon-only) svg {
     display: none;
+  }
+}
+/* Six controls share the logic row; squeeze them on the narrowest phones. */
+@media (max-width: 360px) {
+  .logic-row {
+    gap: 4px;
+  }
+  .logic-row .btn {
+    padding: 0 4px;
+  }
+  .logic-row .btn.icon-only {
+    flex-basis: 36px;
   }
 }
 

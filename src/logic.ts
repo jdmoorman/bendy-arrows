@@ -28,13 +28,13 @@ export interface RuleInfo {
 }
 
 export const RULES: RuleInfo[] = [
-  { id: 'corners', label: 'Corners', hint: 'A tile with only two ways out, at a right angle, uses both.' },
-  { id: 'passages', label: 'Passages', hint: 'A tile walled in on two opposite sides gets a line straight through.' },
   {
     id: 'continue',
     label: 'Continue',
     hint: 'A tile whose remaining ways out are exactly what it still needs takes them — including a path end with only one way out.',
   },
+  { id: 'corners', label: 'Corners', hint: 'A tile with only two ways out, at a right angle, uses both.' },
+  { id: 'passages', label: 'Passages', hint: 'A tile walled in on two opposite sides gets a line straight through.' },
   { id: 'noLoops', label: 'No early loops', hint: 'X out a border that would close a loop before every tile is used.' },
   {
     id: 'noFinish',
@@ -77,7 +77,7 @@ export const RULES: RuleInfo[] = [
 ];
 
 /** The rules from before the advanced ones were added (for migrating saved choices). */
-export const BASIC_RULES: RuleId[] = ['corners', 'passages', 'continue', 'noLoops'];
+export const BASIC_RULES: RuleId[] = ['continue', 'corners', 'passages', 'noLoops'];
 
 export const ALL_RULES: RuleId[] = RULES.map((r) => r.id);
 
@@ -264,7 +264,7 @@ export function logicStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>,
 }
 
 /** Simplest rules first: the order hints are chosen in. */
-export const HINT_ORDER: RuleId[] = ['corners', 'passages', 'continue', 'noLoops', 'noFinish', 'order', 'noSeal', 'bottlenecks', 'balance', 'spacing', 'trial'];
+export const HINT_ORDER: RuleId[] = ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'order', 'noSeal', 'bottlenecks', 'balance', 'spacing', 'trial'];
 
 const TOO_MANY = 'Something is off: the highlighted tile has more lines than the path can use there.';
 const TOO_FEW = 'Something is off: the highlighted tile has too few ways in or out left — check the X marks around it.';
@@ -279,12 +279,14 @@ export type Hint =
  * The single simplest thing the rules can tell the player about their board,
  * with an explanation.
  */
-export function findHint(p: Puzzle, state: LogicState): Hint {
-  const an = analyse(p, state, new Set(HINT_ORDER));
+export function findHint(p: Puzzle, state: LogicState, rules: Iterable<RuleId> = HINT_ORDER): Hint {
+  const allowed = new Set(rules);
+  const order = HINT_ORDER.filter((r) => allowed.has(r));
+  const an = analyse(p, state, new Set(order));
   if (an.kind === 'unknown') return { kind: 'none', text: 'Hints need the puzzle to have both ends.' };
   if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
   if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
-  for (const rule of HINT_ORDER) {
+  for (const rule of order) {
     // Within a rule, the simplest: the smallest area (or shortest piece), then the fewest marks, then top-left first.
     const size = (x: Deduction) => x.cells?.length ?? x.size ?? 1;
     const marks = (x: Deduction) => x.segments.length + x.xs.length;

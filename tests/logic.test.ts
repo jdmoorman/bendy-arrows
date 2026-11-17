@@ -212,6 +212,13 @@ describe('findHint', async () => {
     ]);
   });
 
+  test('only uses the rules it is given', () => {
+    const p = createPuzzle(2, 2);
+    expect(findHint(p, empty(), ['passages']).kind).toBe('none');
+    const h = findHint(p, empty(), ['corners']);
+    expect(h.kind === 'deduction' && h.deduction.rule).toBe('corners');
+  });
+
   test('the simplest rule comes first, with an explanation', () => {
     const p = createPuzzle(2, 2);
     const h = findHint(p, empty());
