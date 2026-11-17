@@ -67,7 +67,13 @@ play.onSolved = async (ms, stats) => {
   const code = playingCode;
   const result = await leaderboard.record(code, ms, stats);
   if (code !== playingCode) return;
-  openSolvedSheet({ ms, result, boardTitle: leaderboard.title, onPlayAgain: () => play.playAgain() });
+  openSolvedSheet({
+    ms,
+    result,
+    boardTitle: leaderboard.title,
+    onPlayAgain: () => play.playAgain(),
+    onAnotherPuzzle: openLibrary,
+  });
 };
 
 /** The timer runs only while Play is in front of the player. */
@@ -166,7 +172,8 @@ app.querySelector('[data-act=share]')!.addEventListener('click', () => {
   });
 });
 
-app.querySelector('[data-act=library]')!.addEventListener('click', () => {
+/** Open the library sheet (also used to pick another puzzle after solving). */
+function openLibrary() {
   const editing = tab === 'edit' && !puzzlesEqual(playing, editor.current);
   openLibrarySheet({
     storage,
@@ -189,7 +196,9 @@ app.querySelector('[data-act=library]')!.addEventListener('click', () => {
       }
     },
   });
-});
+}
+
+app.querySelector('[data-act=library]')!.addEventListener('click', openLibrary);
 
 document.addEventListener('keydown', (ev) => {
   const target = ev.target as HTMLElement | null;

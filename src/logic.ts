@@ -6,13 +6,16 @@ import { cellCount, cellEdges, edgeCells, endpointCells, isHorizontalEdge, isUsa
  * conclude from them, and applies all of it at once.
  */
 
-export type RuleId = 'corners' | 'passages' | 'ends' | 'continue' | 'complete' | 'noLoops';
+export type RuleId = 'corners' | 'passages' | 'continue' | 'complete' | 'noLoops';
 
 export const RULES: { id: RuleId; label: string; hint: string }[] = [
   { id: 'corners', label: 'Corners', hint: 'A tile with only two ways out, at a right angle, uses both.' },
   { id: 'passages', label: 'Passages', hint: 'A tile walled in on two opposite sides gets a line straight through.' },
-  { id: 'ends', label: 'Ends', hint: 'A path end with only one way out takes it.' },
-  { id: 'continue', label: 'Continue', hint: 'A partly drawn tile whose remaining ways out are exactly what it still needs takes them.' },
+  {
+    id: 'continue',
+    label: 'Continue',
+    hint: 'A tile whose remaining ways out are exactly what it still needs takes them — including a path end with only one way out.',
+  },
   { id: 'complete', label: 'Full tiles', hint: 'A tile that already has all its lines gets an X on its other borders.' },
   { id: 'noLoops', label: 'No early loops', hint: 'X out a border that would close a loop before every tile is used.' },
 ];
@@ -85,8 +88,9 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>): Analysis {
     } else if (a.length === need[c]) {
       // Every remaining way out is needed.
       let rule: RuleId;
-      if (drawn.length > 0) rule = 'continue';
-      else if (need[c] === 1) rule = 'ends';
+      // Two fresh ways out at an ordinary tile are a corner or a passage; anything
+      // else (a partly drawn tile, or a path end) is continuing the path.
+      if (drawn.length > 0 || need[c] === 1) rule = 'continue';
       else rule = isHorizontalEdge(p, free[0]) === isHorizontalEdge(p, free[1]) ? 'passages' : 'corners';
       if (enabled.has(rule)) deductions.push({ rule, cell: c, segments: free, xs: [] });
     }
@@ -136,7 +140,7 @@ export function logicStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>)
 }
 
 /** Simplest rules first: the order hints are chosen in. */
-export const HINT_ORDER: RuleId[] = ['corners', 'passages', 'ends', 'complete', 'continue', 'noLoops'];
+export const HINT_ORDER: RuleId[] = ['corners', 'passages', 'continue', 'complete', 'noLoops'];
 
 export type Hint =
   | { kind: 'deduction'; deduction: Deduction; text: string }
@@ -183,11 +187,12 @@ function explain(p: Puzzle, state: LogicState, d: Deduction): string {
       return `The highlighted tile has only two ways out, ${dirs(d.segments)}, and the path must pass through it — so it turns the corner using both.`;
     case 'passages':
       return `The highlighted tile is blocked on two opposite sides, so the path must go straight through it, ${dirs(d.segments)}.`;
-    case 'ends':
-      return `The path ends at the highlighted tile, and the only way out of it is ${dirs(d.segments)} — so the path must go that way.`;
     case 'complete':
       return `The highlighted tile already has ${isEnd ? 'the one line it needs (it is a path end)' : 'both lines it needs'}, so it can't use any other border — mark ${dirs(d.xs)} with an X.`;
     case 'continue':
+      if (isEnd && drawn === 0) {
+        return `The path ends at the highlighted tile, and the only way out of it is ${dirs(d.segments)} — so the path must go that way.`;
+      }
       return `The highlighted tile has ${drawn} line${drawn === 1 ? '' : 's'} and needs ${isEnd ? 1 : 2}; its only remaining way out is ${dirs(d.segments)}, so the path must continue there.`;
     case 'noLoops':
       return `Joining the highlighted border would close a loop before every tile is used, so it gets an X.`;

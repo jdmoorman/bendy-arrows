@@ -25,10 +25,11 @@ The app opens on a sample puzzle in the **Play** tab.
 - **Erase** by starting a drag on a line, or on a tile that has lines: segments are removed along the drag. Tapping a line where it crosses a border erases it; tapping the centre of a tile erases all lines touching it. Starting on the end of a path is decided by your first move: back along the path erases, anywhere else extends the path.
 - **Tap an empty border** between two tiles to mark it with an X (the path does not go there). Tap again to clear it. Right-click toggles an X with a mouse.
 - Segments can't enter black tiles or cross walls. Loops and branches are allowed while you work; they are highlighted in red.
-- **Undo / Redo** (or Ctrl+Z / Ctrl+Shift+Z) and **Clear** (which also restarts the timer).
+- **Undo / Redo** (or Ctrl+Z / Ctrl+Shift+Z).
+- **Reset** (the circular-arrow button, tap twice) empties the board and restarts the timer, hints and checks.
 - **Check** tells you whether all the lines you've drawn so far are part of a solution — nothing more.
 - **Hint** shows the simplest logical next step for your board — the tile is shaded and the suggested lines or X marks are drawn in amber — with a sentence explaining why. It uses the same rules as the editor's Logic helper, simplest first, and says so if none apply or if your board has a mistake. Hints are shown, not drawn for you.
-- The board turns green when the puzzle is solved, and a **Solved!** sheet shows your time and your past times for that puzzle (fastest first), each with the hints and checks used. **Play again** starts a fresh attempt. The time is tracked from when the puzzle is loaded (Clear starts it over), only while Play is on screen; it isn't shown while you play unless you turn on **Show timer** in Settings.
+- The board turns green when the puzzle is solved, and a **Solved!** sheet shows your time and your past times for that puzzle (fastest first), each with the hints and checks used. **Play again** starts a fresh attempt; **Another puzzle** opens the library to pick a new one. The time is tracked from when the puzzle is loaded, only while Play is on screen; it isn't shown while you play unless you turn on **Show timer** in Settings.
 
 ## Creating (Create tab)
 
@@ -40,8 +41,7 @@ The app opens on a sample puzzle in the **Play** tab.
 - **Logic:** a helper that shows how far simple reasoning gets. **Step** applies one round of the chosen rules (the new lines and X marks are highlighted) and can be pressed repeatedly; **Reset** starts over; **Rules** is a checklist of which rules to use:
   - **Corners** — a tile with only two ways out, at a right angle, uses both.
   - **Passages** — a tile walled in on opposite sides gets a straight line.
-  - **Ends** — a path end with one way out takes it.
-  - **Continue** — a partly drawn tile whose remaining ways out are exactly what it needs takes them.
+  - **Continue** — a tile whose remaining ways out are exactly what it still needs takes them (including a path end with only one way out).
   - **Full tiles** — a tile with all its lines gets X marks on its other borders.
   - **No early loops** — X out a border that would close a loop too soon.
 

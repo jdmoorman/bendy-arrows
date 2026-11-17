@@ -4,7 +4,7 @@ import { findHint, type Hint } from './logic';
 import { formatTime, SolveTimer } from './timer';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
-import { cellEdges, edgeBetween, isUsableEdge, modeOf, type Puzzle } from './model';
+import { cellEdges, edgeBetween, isUsableEdge, type Puzzle } from './model';
 import { padFor, renderBoard } from './render';
 import { canPlace, checkSolution } from './rules';
 
@@ -25,11 +25,6 @@ export interface Progress {
 export interface AttemptStats {
   hints: number;
   checks: number;
-}
-
-/** Describe the puzzle's fixed ends for the hint line. */
-function endsHint(p: Puzzle): string {
-  return p.endpoints.length > 1 ? 'enter and leave at the arrows' : 'end at the arrow';
 }
 
 export class PlayView {
@@ -57,6 +52,10 @@ export class PlayView {
   private checkRun: SolverRun | null = null;
   /** Hint shown after pressing Hint, until the next change. */
   private shownHint: Hint | null = null;
+  /** Reset needs a second tap within a few seconds. */
+  private resetArmed = false;
+  private resetTimer = 0;
+  private resetBtn: HTMLButtonElement;
   private solved = false;
 
   private svg: SVGSVGElement;
@@ -86,9 +85,9 @@ export class PlayView {
       <p class="status" role="status" aria-live="polite"></p>
       <div class="toolbar">
         <div class="toolbar-row">
-          <button class="btn" data-act="undo" aria-label="Undo">${ICONS.undo}</button>
+          <button class="btn" data-act="undo" aria-label="Undo">${ICONS.undo}<span>Undo</span></button>
           <button class="btn" data-act="redo" aria-label="Redo">${ICONS.redo}</button>
-          <button class="btn" data-act="clear" aria-label="Clear">${ICONS.clear}<span>Clear</span></button>
+          <button class="btn" data-act="reset" aria-label="Reset puzzle">${ICONS.rotateLeft}</button>
           <button class="btn" data-act="hint" aria-label="Hint">${ICONS.bulb}<span>Hint</span></button>
           <button class="btn primary" data-act="check">${ICONS.check}<span>Check</span></button>
         </div>
@@ -98,10 +97,11 @@ export class PlayView {
     this.status = this.el.querySelector('.status')!;
     this.undoBtn = this.el.querySelector('[data-act=undo]')!;
     this.redoBtn = this.el.querySelector('[data-act=redo]')!;
+    this.resetBtn = this.el.querySelector('[data-act=reset]')!;
+    this.resetBtn.addEventListener('click', () => this.tapReset());
 
     this.undoBtn.addEventListener('click', () => this.undo());
     this.redoBtn.addEventListener('click', () => this.redo());
-    this.el.querySelector('[data-act=clear]')!.addEventListener('click', () => this.clear());
     this.el.querySelector('[data-act=check]')!.addEventListener('click', () => this.check());
     this.el.querySelector('[data-act=hint]')!.addEventListener('click', () => this.showHint());
 
@@ -162,7 +162,7 @@ export class PlayView {
     this.render();
   }
 
-  /** Start a new attempt: empty board and a fresh timer. */
+  /** Start a new attempt: empty board, fresh timer, no hints or checks (Play again / Reset puzzle). */
   playAgain(): void {
     this.segments.clear();
     this.xMarks.clear();
@@ -296,7 +296,29 @@ export class PlayView {
     this.changed = false;
   }
 
+  /** First tap arms Reset; a second tap within a few seconds resets the puzzle. */
+  private tapReset() {
+    if (this.resetArmed) {
+      this.disarmReset();
+      this.playAgain();
+      return;
+    }
+    this.resetArmed = true;
+    clearTimeout(this.resetTimer);
+    this.resetTimer = window.setTimeout(() => {
+      this.disarmReset();
+      this.render();
+    }, 3000);
+    this.render();
+  }
+
+  private disarmReset() {
+    this.resetArmed = false;
+    clearTimeout(this.resetTimer);
+  }
+
   private afterChange() {
+    this.disarmReset();
     this.clearCheck();
     this.shownHint = null;
     const wasSolved = this.solved;
@@ -323,22 +345,6 @@ export class PlayView {
     const next = this.history.redo(this.snapshot());
     if (!next) return;
     this.restore(next);
-    this.afterChange();
-  }
-
-  /** Clear the board and start the attempt (and its timer) over. */
-  private clear() {
-    this.timer.reset(0);
-    this.recorded = false;
-    this.hintsUsed = 0;
-    this.checksUsed = 0;
-    if (!this.segments.size && !this.xMarks.size) {
-      this.onProgress?.(this.progress, this.solved);
-      return;
-    }
-    this.history.push(this.snapshot());
-    this.segments.clear();
-    this.xMarks.clear();
     this.afterChange();
   }
 
@@ -416,28 +422,20 @@ export class PlayView {
       solved: live.solved,
     });
 
-    const kind = live.solved ? 'success' : hint ? (hint.kind === 'mistake' ? 'error' : 'hint') : (check?.kind ?? '');
+    const resetting = this.resetArmed;
+    const kind = resetting ? 'error' : live.solved ? 'success' : hint ? (hint.kind === 'mistake' ? 'error' : 'hint') : (check?.kind ?? '');
     this.status.classList.toggle('success', kind === 'success');
     this.status.classList.toggle('error', kind === 'error');
     this.status.classList.toggle('hint', kind === 'hint');
-    if (live.solved) this.status.textContent = live.message;
+    if (resetting) this.status.textContent = 'Tap reset again to clear your lines and restart the timer, hints and checks.';
+    else if (live.solved) this.status.textContent = live.message;
     else if (hint) this.status.textContent = hint.text;
     else if (check) this.status.textContent = check.text;
-    else this.status.textContent = this.hint();
+    else this.status.textContent = '';
 
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;
-  }
-
-  private hint(): string {
-    const p = this.puzzle;
-    const goal = modeOf(p) === 'cycle' ? 'Draw one loop through every open tile.' : 'Draw one path through every open tile.';
-    const n = p.checkpoints.length;
-    const ends = n
-      ? ` Pass through the numbers in order, from 1 to ${n}.`
-      : p.endpoints.length
-        ? ` The path must ${endsHint(p)}.`
-        : '';
-    return goal + ends + ' Tap a line or a tile to erase; tap an empty border for an X.';
+    this.resetBtn.classList.toggle('danger', resetting);
+    this.resetBtn.setAttribute('aria-label', resetting ? 'Tap again to reset the puzzle' : 'Reset puzzle');
   }
 }

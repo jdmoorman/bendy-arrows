@@ -26,6 +26,8 @@ export function openSolvedSheet(opts: {
   result: RecordResult;
   boardTitle: string;
   onPlayAgain: () => void;
+  /** Pick a different puzzle (for now, the library). */
+  onAnotherPuzzle: () => void;
 }): void {
   const { entries, index } = opts.result;
   const body = el('div', 'sheet-stack solved');
@@ -61,8 +63,8 @@ export function openSolvedSheet(opts: {
 
   const row = el('div', 'sheet-row');
   const again = el('button', 'btn', '<span>Play again</span>');
-  const done = el('button', 'btn primary', '<span>Done</span>');
-  row.append(again, done);
+  const another = el('button', 'btn primary', '<span>Another puzzle</span>');
+  row.append(again, another);
   body.append(row);
 
   const sheet = openSheet('Solved!', body);
@@ -70,5 +72,8 @@ export function openSolvedSheet(opts: {
     sheet.close();
     opts.onPlayAgain();
   });
-  done.addEventListener('click', () => sheet.close());
+  another.addEventListener('click', () => {
+    sheet.close();
+    opts.onAnotherPuzzle();
+  });
 }

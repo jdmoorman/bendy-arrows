@@ -37,10 +37,12 @@ describe('logic rules', () => {
     expect(logicStep(p, empty(), ['corners']).segments.every((e) => e !== edgeBetween(p, 3, 4))).toBe(true);
   });
 
-  test('ends and continue solve a 1x3 strip with frame ends', () => {
+  test('continue (from the path ends) and passages solve a 1x3 strip with frame ends', () => {
     const p = createPuzzle(3, 1);
     p.endpoints = [portEnd(portId(p, 'left', 0)), portEnd(portId(p, 'right', 0))];
-    expect(runToEnd(p, ['ends', 'passages']).solved).toBe(true);
+    expect(runToEnd(p, ['continue', 'passages']).solved).toBe(true);
+    const first = logicStep(p, empty(), ['continue']);
+    expect(first.byRule).toEqual({ continue: 2 }); // both end tiles take their only way out
   });
 
   test('full tiles get X marks', () => {
