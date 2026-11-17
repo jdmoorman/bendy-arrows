@@ -369,7 +369,22 @@ select {
 }
 
 .tabs .seg-btn {
-  min-width: 76px;
+  padding: 0 12px;
+}
+@media (max-width: 400px) {
+  .tabs .seg-btn {
+    padding: 0 8px;
+  }
+  .app-header {
+    gap: 6px;
+    padding: 8px;
+  }
+}
+/* No room left for the puzzle's name beside the tabs. */
+@media (max-width: 359px) {
+  .app-title {
+    display: none;
+  }
 }
 
 /* ---------- Editor ---------- */
@@ -602,36 +617,26 @@ select {
 }
 
 /* ---------- Library ---------- */
-.lib-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.library-view {
+  gap: 8px;
+  padding: 4px 12px 12px;
 }
 
-.lib-item {
+.lib-top,
+.lib-controls {
   display: flex;
-  align-items: stretch;
-  gap: 4px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 2px;
+  gap: var(--gap);
 }
-
-.lib-item.current {
+.lib-top > .btn,
+.lib-controls > .btn {
+  flex: none;
+}
+.lib-controls > .btn.active {
   border-color: var(--accent);
+  color: var(--accent);
 }
 
-.lib-item .btn {
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-}
-
-.lib-main {
+.lib-daily {
   flex: 1;
   min-width: 0;
   min-height: var(--tap);
@@ -640,18 +645,27 @@ select {
   align-items: flex-start;
   justify-content: center;
   gap: 2px;
-  padding: 8px 12px;
-  border: 0;
-  background: transparent;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
   text-align: left;
   cursor: pointer;
-  border-radius: calc(var(--radius) - 2px);
-  touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
-
-.lib-main:active {
-  background: var(--hover);
+.lib-daily.solved {
+  border-color: var(--success);
+}
+.lib-daily.solved .lib-meta {
+  color: var(--success);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.lib-daily svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 3;
 }
 
 .lib-name {
@@ -667,32 +681,160 @@ select {
   color: var(--text-muted);
 }
 
-.lib-solved {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0 12px 0 4px;
-  color: var(--success);
-  font-weight: 700;
-  white-space: nowrap;
-}
-.lib-solved svg {
-  width: 20px;
-  height: 20px;
-  stroke-width: 3;
-}
-/* Solved puzzles get a green outline, like the editor's Unique chip. */
-.lib-item.solved {
-  border-color: var(--success);
-}
-.lib-item.solved .lib-name {
-  color: var(--success);
+.lib-count {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
-.empty-note {
-  margin: 0;
-  color: var(--text-muted);
+/* The table scrolls both ways inside its box, with the header row and name column pinned. */
+.lib-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overscroll-behavior: contain;
+}
+.lib-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 100%;
   font-size: 0.9rem;
+}
+.lib-table th,
+.lib-table td {
+  padding: 0 8px;
+  height: 40px;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-weight: 400;
+}
+.lib-table .num {
+  text-align: right;
+}
+.lib-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-2);
+}
+.lib-table .lib-name-cell,
+.lib-table thead th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+.lib-table thead th:first-child {
+  z-index: 3;
+  background: var(--surface-2);
+}
+.lib-sort {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 600;
+  font-size: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lib-sort > span + span {
+  font-size: 0.7em;
+  color: var(--accent);
+}
+.lib-open {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  min-height: 40px;
+  max-width: 44vw;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lib-open > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lib-table tr.current .lib-name-cell {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.lib-table tr.solved .lib-open {
+  color: var(--success);
+}
+.lib-check {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+.lib-check svg {
+  width: 15px;
+  height: 15px;
+  stroke-width: 3;
+}
+.lib-actions {
+  padding: 0 2px;
+}
+.lib-actions .btn.icon {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+}
+.lib-empty {
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Filters sheet. */
+.lib-filter > .field-label {
+  margin: 0 0 6px;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.chip[aria-pressed='true'] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+}
+.range-row > .text-input {
+  flex: 1 1 0;
 }
 
 /* ---------- Settings ---------- */
@@ -998,7 +1140,7 @@ select {
   display: none;
 }
 
-@media (max-width: 340px) {
+@media (max-width: 420px) {
   .actions-row > .btn:not(.primary) {
     flex: 0 1 var(--tap);
     min-width: 34px;
@@ -1064,47 +1206,6 @@ select {
 
 .lib-sym {
   color: var(--error);
-}
-
-/* Library sections fold away. */
-.lib-fold {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-.lib-fold > summary {
-  min-height: var(--tap);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 14px;
-  font-weight: 600;
-  cursor: pointer;
-}
-.lib-fold > .lib-list,
-.lib-fold > .empty-note {
-  padding: 0 8px 8px;
-}
-.lib-fold > summary {
-  list-style: none;
-}
-.lib-fold > summary::-webkit-details-marker {
-  display: none;
-}
-.lib-fold > summary > span:first-child::before {
-  content: '';
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin: 0 10px 2px 0;
-  border-right: 2px solid var(--text-muted);
-  border-bottom: 2px solid var(--text-muted);
-  transform: rotate(-45deg);
-  transition: transform 0.15s;
-}
-.lib-fold[open] > summary > span:first-child::before {
-  transform: rotate(45deg);
 }
 
 /* New puzzle sheet: "Size" label beside its picker. */

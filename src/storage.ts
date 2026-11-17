@@ -1,3 +1,4 @@
+import type { Rating, TableState } from './library-table';
 import type { Progress } from './play';
 
 /**
@@ -23,7 +24,7 @@ export interface Session {
   name?: string;
   /** Unsaved work in the editor, if it differs from the played puzzle. */
   editorCode?: string;
-  tab?: 'play' | 'edit';
+  tab?: 'play' | 'edit' | 'library';
 }
 
 const LIBRARY_KEY = 'hamiltonian.library.v1';
@@ -33,7 +34,8 @@ const TIMES_KEY = 'hamiltonian.times.v1';
 const LOGIC_KEY = 'hamiltonian.logic.v1';
 const GENERATOR_KEY = 'hamiltonian.generator.v1';
 const DAILY_KEY = 'hamiltonian.daily.v1';
-const FOLDS_KEY = 'hamiltonian.libfolds.v1';
+const TABLE_KEY = 'hamiltonian.libtable.v1';
+const RATINGS_KEY = 'hamiltonian.ratings.v1';
 
 /** Per-device display preferences. */
 export interface Settings {
@@ -166,14 +168,24 @@ export class Storage {
     this.write(GENERATOR_KEY, o);
   }
 
-  /** Which library sections are open, or null if never changed. */
-  loadLibraryFolds(): string[] | null {
-    const f = this.read<unknown>(FOLDS_KEY, null);
-    return Array.isArray(f) ? f.filter((x): x is string => typeof x === 'string') : null;
+  /** The library table's search, filters, sort and columns, or null if never changed. */
+  loadLibraryTable(): Partial<TableState> | null {
+    const t = this.read<unknown>(TABLE_KEY, null);
+    return t && typeof t === 'object' ? (t as Partial<TableState>) : null;
   }
 
-  saveLibraryFolds(open: string[]): void {
-    this.write(FOLDS_KEY, open);
+  saveLibraryTable(state: TableState): void {
+    this.write(TABLE_KEY, state);
+  }
+
+  /** Difficulty and uniqueness of saved puzzles, by code, worked out in the background. */
+  loadRatings(): Record<string, Rating> {
+    const r = this.read<unknown>(RATINGS_KEY, {});
+    return r && typeof r === 'object' ? (r as Record<string, Rating>) : {};
+  }
+
+  saveRating(code: string, rating: Rating): void {
+    this.write(RATINGS_KEY, { ...this.loadRatings(), [code]: rating });
   }
 
   /** The daily puzzle, if one was made for `date` (YYYY-MM-DD). */

@@ -3,10 +3,11 @@ import { attachUniquenessCheck } from './check-ui';
 import { decodePuzzle, encodePuzzle } from './codec';
 import { EditorView } from './editor';
 import { ICONS } from './icons';
-import { openLibrarySheet } from './library-ui';
+import { LibraryView } from './library-view';
 import { clonePuzzle, puzzlesEqual, type Puzzle } from './model';
 import { PlayView, type Progress } from './play';
 import { SAMPLES, samplePuzzle } from './samples';
+import { openSaveSheet } from './save-ui';
 import { openShareSheet, puzzleFromHash } from './share';
 import { openSettingsSheet, applySettings } from './settings-ui';
 import { Storage } from './storage';
@@ -17,7 +18,7 @@ import { toast } from './ui';
 
 applyTheme(DEFAULT_THEME);
 
-type Tab = 'play' | 'edit';
+type Tab = 'play' | 'edit' | 'library';
 
 const app = document.getElementById('app')!;
 app.innerHTML = `
@@ -26,8 +27,8 @@ app.innerHTML = `
     <div class="segmented tabs" role="tablist" aria-label="Mode">
       <button class="seg-btn" role="tab" data-tab="play">Play</button>
       <button class="seg-btn" role="tab" data-tab="edit">Create</button>
+      <button class="seg-btn" role="tab" data-tab="library">Library</button>
     </div>
-    <button class="btn icon" data-act="library" aria-label="Library">${ICONS.library}</button>
     <button class="btn icon" data-act="share" aria-label="Share or open a puzzle">${ICONS.share}</button>
     <button class="btn icon" data-act="settings" aria-label="Settings">${ICONS.settings}</button>
   </header>
@@ -42,7 +43,8 @@ const views = app.querySelector('.views')!;
 const titleEl = app.querySelector<HTMLElement>('.app-title')!;
 const play = new PlayView();
 const editor = new EditorView();
-views.append(play.el, editor.el);
+const library = new LibraryView(storage);
+views.append(play.el, editor.el, library.el);
 play.setShowTimer(settings.showTimer);
 play.setAutoCheck(settings.autoCheck);
 
@@ -52,6 +54,8 @@ let playingCode = encodePuzzle(playing);
 let libraryId: string | undefined;
 let puzzleName: string | undefined;
 let tab: Tab = 'play';
+/** The last of Play and Create to be shown, so the Library knows which puzzle is "current". */
+let lastBoardTab: 'play' | 'edit' = 'play';
 let ready = false;
 
 /** Switch to Play at the user's request, unless the puzzle being edited isn't ready. */
@@ -147,8 +151,14 @@ function setTab(t: Tab) {
     editor.marksStillFit = true;
     updateHeader();
   }
+  if (t !== 'library') lastBoardTab = t;
   play.el.classList.toggle('hidden', t !== 'play');
   editor.el.classList.toggle('hidden', t !== 'edit');
+  library.el.classList.toggle('hidden', t !== 'library');
+  if (t === 'library') {
+    library.currentCode = playingCode;
+    library.refresh();
+  }
   for (const b of app.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
     b.setAttribute('aria-selected', String(b.dataset.tab === t));
   }
@@ -157,7 +167,7 @@ function setTab(t: Tab) {
 }
 
 for (const b of app.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
-  b.addEventListener('click', () => (b.dataset.tab === 'play' ? requestPlay() : setTab('edit')));
+  b.addEventListener('click', () => (b.dataset.tab === 'play' ? requestPlay() : setTab(b.dataset.tab as Tab)));
 }
 
 app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
@@ -178,39 +188,49 @@ app.querySelector('[data-act=share]')!.addEventListener('click', () => {
   });
 });
 
-/** Open the library sheet (also used to pick another puzzle after solving). */
+/** Show the Library tab (also used to pick another puzzle after solving). */
 function openLibrary() {
-  const editing = tab === 'edit' && !puzzlesEqual(playing, editor.current);
-  openLibrarySheet({
+  setTab('library');
+}
+
+/** Save the editor's puzzle, or the one being played, to the library. */
+function saveCurrent(fromEditor: boolean) {
+  const editing = fromEditor && !puzzlesEqual(playing, editor.current);
+  openSaveSheet({
     storage,
     current: editing ? editor.current : playing,
     progress: editing ? undefined : play.progress,
     solved: editing ? undefined : play.isSolved,
     currentId: editing ? undefined : libraryId,
-    onOpen: ({ puzzle, progress, id, name }, t) => loadPuzzle(puzzle, { progress, id, name }, t),
     onSaved: (entry) => {
-      if (entry.code === playingCode || editing) {
-        if (editing) {
-          // Saving the editor's puzzle makes it the current puzzle.
-          loadPuzzle(decodePuzzle(entry.code), { id: entry.id, name: entry.name, progress: entry.progress }, 'edit');
-        } else {
-          libraryId = entry.id;
-          puzzleName = entry.name;
-          updateHeader();
-          saveSession();
-        }
+      if (editing) {
+        // Saving the editor's puzzle makes it the current puzzle.
+        loadPuzzle(decodePuzzle(entry.code), { id: entry.id, name: entry.name, progress: entry.progress }, tab);
+      } else if (entry.code === playingCode) {
+        libraryId = entry.id;
+        puzzleName = entry.name;
+        updateHeader();
+        saveSession();
       }
+      if (tab === 'library') library.refresh();
     },
   });
 }
 
-app.querySelector('[data-act=library]')!.addEventListener('click', openLibrary);
-editor.onSave = openLibrary;
+editor.onSave = () => saveCurrent(true);
+library.onSave = () => saveCurrent(lastBoardTab === 'edit');
+library.onOpen = ({ puzzle, progress, id, name }, t) => loadPuzzle(puzzle, { progress, id, name }, t);
+library.onDeleted = (id) => {
+  if (libraryId === id) {
+    libraryId = undefined;
+    saveSession();
+  }
+};
 
 document.addEventListener('keydown', (ev) => {
   const target = ev.target as HTMLElement | null;
   if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
-  if (document.querySelector('dialog[open]')) return;
+  if (document.querySelector('dialog[open]') || tab === 'library') return;
   const handled = tab === 'play' ? play.handleKey(ev) : editor.handleKey(ev);
   if (handled) ev.preventDefault();
 });
