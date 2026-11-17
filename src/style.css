@@ -1031,3 +1031,8 @@ select {
   flex: none;
   min-height: var(--tap);
 }
+
+/* An X on a border the path needs (shown by Hint). */
+.xmark.error {
+  stroke: var(--error);
+}

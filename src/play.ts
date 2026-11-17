@@ -27,12 +27,18 @@ export interface AttemptStats {
   checks: number;
 }
 
+/** A hint, or the marks that don't fit the solution. */
+type PlayHint = Hint | { kind: 'wrong'; edges: number[]; text: string };
+
 export class PlayView {
   readonly el: HTMLElement;
   /** Called after every change to the player's marks. */
   onProgress?: (progress: Progress, solved: boolean) => void;
-  /** Called once per attempt when the puzzle is solved, with the solve time. */
-  onSolved?: (elapsedMs: number, stats: AttemptStats) => void;
+  /**
+   * Called whenever the board becomes solved, with the attempt's time.
+   * `isNew` is true only the first time in an attempt (the time to record).
+   */
+  onSolved?: (elapsedMs: number, stats: AttemptStats, isNew: boolean) => void;
 
   private timer = new SolveTimer();
   private recorded = false;
@@ -51,7 +57,12 @@ export class PlayView {
   private checkMsg: { text: string; kind: '' | 'success' | 'error' } | null = null;
   private checkRun: SolverRun | null = null;
   /** Hint shown after pressing Hint, until the next change. */
-  private shownHint: Hint | null = null;
+  private shownHint: PlayHint | null = null;
+  /** Solutions of the puzzle, found once in the background when Hint first needs them. */
+  private solutions: Promise<number[][]> | null = null;
+  private solutionsRun: SolverRun | null = null;
+  /** Bumped on every change, so a slow hint can tell the board moved on. */
+  private changeCount = 0;
   private solved = false;
 
   private svg: SVGSVGElement;
@@ -142,6 +153,10 @@ export class PlayView {
 
   load(p: Puzzle, progress?: Progress): void {
     this.puzzle = p;
+    this.solutionsRun?.cancel();
+    this.solutionsRun = null;
+    this.solutions = null;
+    this.changeCount++;
     const ok = (e: number) => isUsableEdge(p, e);
     this.segments = new Set((progress?.segments ?? []).filter(ok));
     this.xMarks = new Set((progress?.xMarks ?? []).filter(ok));
@@ -170,6 +185,20 @@ export class PlayView {
     this.timer.reset(0);
     this.render();
     this.onProgress?.(this.progress, false);
+  }
+
+  /** Replace the board with these marks as one undoable step (e.g. the editor's logic steps). */
+  setMarks(marks: { segments: number[]; xMarks: number[] }): void {
+    const ok = (e: number) => isUsableEdge(this.puzzle, e);
+    const before = this.snapshot();
+    const segments = new Set(marks.segments.filter(ok));
+    const xMarks = new Set(marks.xMarks.filter((e) => ok(e) && !segments.has(e)));
+    const same = (a: Set<number>, b: number[]) => a.size === b.length && b.every((e) => a.has(e));
+    if (same(segments, before.segments) && same(xMarks, before.xMarks)) return;
+    this.history.push(before);
+    this.segments = segments;
+    this.xMarks = xMarks;
+    this.afterChange();
   }
 
   /** Whether mistakes are highlighted as the player draws. */
@@ -301,6 +330,7 @@ export class PlayView {
   }
 
   private afterChange() {
+    this.changeCount++;
     this.clearCheck();
     this.shownHint = null;
     const wasSolved = this.solved;
@@ -313,7 +343,8 @@ export class PlayView {
     }
     this.render();
     this.onProgress?.(this.progress, this.solved);
-    if (firstSolve) this.onSolved?.(this.timer.elapsed, { hints: this.hintsUsed, checks: this.checksUsed });
+    // Every time the board becomes solved (e.g. again after Reset or Undo), not just the first.
+    if (this.solved && !wasSolved) this.onSolved?.(this.timer.elapsed, { hints: this.hintsUsed, checks: this.checksUsed }, firstSolve);
   }
 
   private undo() {
@@ -386,15 +417,55 @@ export class PlayView {
     }
   }
 
-  /** Show the simplest logical next step for the current board (without drawing it). */
-  private showHint() {
+  /** The puzzle's solutions (up to 50), solved once in the background; empty if too big to solve. */
+  private findSolutions(): Promise<number[][]> {
+    if (!this.solutions) {
+      const run = solveInBackground(this.puzzle, undefined, { maxSolutions: 50, nodeLimit: 5_000_000 });
+      this.solutionsRun = run;
+      this.solutions = run.result.then(
+        (r) => r.solutions,
+        () => [],
+      );
+    }
+    return this.solutions;
+  }
+
+  /**
+   * Hint: first point out any lines or X marks that don't fit the solution;
+   * otherwise show the simplest logical next step (without drawing it).
+   */
+  private async showHint() {
     this.clearCheck();
-    this.shownHint = findHint(this.puzzle, { segments: this.segments, xs: this.xMarks });
-    // Count hints that actually help (not "no hint available" or "already solved").
-    if (this.shownHint.kind === 'deduction' || this.shownHint.kind === 'mistake') {
+    const changes = this.changeCount;
+    const count = () => {
       if (!this.recorded) this.hintsUsed++;
       this.onProgress?.(this.progress, this.solved);
+    };
+    if (this.segments.size || this.xMarks.size) {
+      this.shownHint = { kind: 'none', text: 'Thinking…' };
+      this.render();
+      const solutions = await this.findSolutions();
+      if (changes !== this.changeCount) return; // the board changed meanwhile
+      if (solutions.length) {
+        // Compare with the solution closest to the board (puzzles from the editor may have several).
+        let best: { lines: number[]; xs: number[] } | null = null;
+        for (const sol of solutions) {
+          const used = new Set(sol);
+          const lines = [...this.segments].filter((e) => !used.has(e));
+          const xs = [...this.xMarks].filter((e) => used.has(e));
+          if (!best || lines.length + xs.length < best.lines.length + best.xs.length) best = { lines, xs };
+        }
+        if (best && best.lines.length + best.xs.length) {
+          this.shownHint = { kind: 'wrong', edges: [...best.lines, ...best.xs], text: wrongText(best.lines.length, best.xs.length) };
+          count();
+          this.render();
+          return;
+        }
+      }
     }
+    this.shownHint = findHint(this.puzzle, { segments: this.segments, xs: this.xMarks });
+    // Count hints that actually help (not "no hint available" or "already solved").
+    if (this.shownHint.kind === 'deduction' || this.shownHint.kind === 'mistake') count();
     this.render();
   }
 
@@ -404,6 +475,7 @@ export class PlayView {
     const check = this.checkMsg;
     const errorCells = new Set<number>(this.autoCheck ? [...live.branches, ...live.checkpointErrors] : []);
     const errorEdges = new Set<number>(this.autoCheck ? [...live.loopEdges, ...live.illegalEdges] : []);
+    if (!live.solved && this.shownHint?.kind === 'wrong') for (const e of this.shownHint.edges) errorEdges.add(e);
     // A shown hint is drawn on top of the board in the highlight colour.
     const hint = live.solved ? null : this.shownHint;
     const d = hint?.kind === 'deduction' ? hint.deduction : null;
@@ -419,7 +491,7 @@ export class PlayView {
       solved: live.solved,
     });
 
-    const kind = live.solved ? 'success' : hint ? (hint.kind === 'mistake' ? 'error' : 'hint') : (check?.kind ?? '');
+    const kind = live.solved ? 'success' : hint ? (hint.kind === 'mistake' || hint.kind === 'wrong' ? 'error' : 'hint') : (check?.kind ?? '');
     this.status.classList.toggle('success', kind === 'success');
     this.status.classList.toggle('error', kind === 'error');
     this.status.classList.toggle('hint', kind === 'hint');
@@ -431,4 +503,13 @@ export class PlayView {
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;
   }
+}
+
+/** What a Hint says about marks that don't fit the solution. */
+function wrongText(lines: number, xs: number): string {
+  const lineText = lines === 1 ? 'line that isn’t part of the solution' : 'lines that aren’t part of the solution';
+  const xText = xs === 1 ? 'X on a border the path needs' : 'X’s on borders the path needs';
+  if (!xs) return lines === 1 ? 'The highlighted line isn’t part of the solution.' : `These ${lines} highlighted lines aren’t part of the solution.`;
+  if (!lines) return xs === 1 ? 'The highlighted X is on a border the path needs.' : `These ${xs} highlighted X’s are on borders the path needs.`;
+  return `The highlighted marks are wrong: ${lines} ${lineText} and ${xs} ${xText}.`;
 }

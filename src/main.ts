@@ -57,15 +57,19 @@ let ready = false;
 /** Switch to Play at the user's request, unless the puzzle being edited isn't ready. */
 function requestPlay() {
   if (tab === 'edit' && !editor.checkPlayable()) return;
+  // Lines and X's from the editor's logic steps carry over to the Play board.
+  const marks = tab === 'edit' ? editor.logicMarks : null;
   setTab('play');
+  if (marks) play.setMarks(marks);
 }
 
 editor.onPlay = requestPlay;
 attachUniquenessCheck(editor);
 
-play.onSolved = async (ms, stats) => {
+play.onSolved = async (ms, stats, isNew) => {
   const code = playingCode;
-  const result = await leaderboard.record(code, ms, stats);
+  // A repeat solve of the same attempt shows the times without adding another.
+  const result = isNew ? await leaderboard.record(code, ms, stats) : { entries: await leaderboard.list(code), index: -1 };
   if (code !== playingCode) return;
   openSolvedSheet({
     ms,

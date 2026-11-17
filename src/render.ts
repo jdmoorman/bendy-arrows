@@ -221,7 +221,7 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
       const [x1, y1, x2, y2] = borderLine(e);
       const cx = (x1 + x2) / 2;
       const cy = (y1 + y2) / 2;
-      const cls = o.highlight?.has(e) ? 'xmark hint' : 'xmark';
+      const cls = o.highlight?.has(e) ? 'xmark hint' : o.errorEdges?.has(e) ? 'xmark error' : 'xmark';
       parts.push(line(cx - s, cy - s, cx + s, cy + s, cls), line(cx - s, cy + s, cx + s, cy - s, cls));
     }
     parts.push('</g>');

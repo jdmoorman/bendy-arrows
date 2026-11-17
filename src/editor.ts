@@ -182,6 +182,12 @@ export class EditorView {
     return this.puzzle;
   }
 
+  /** The logic helper's lines and X marks, if it has taken any steps on this puzzle. */
+  get logicMarks(): { segments: number[]; xMarks: number[] } | null {
+    if (!this.logicSteps) return null;
+    return { segments: [...this.logic.segments], xMarks: [...this.logic.xs] };
+  }
+
   load(p: Puzzle): void {
     this.puzzle = clonePuzzle(p);
     this.marksStillFit = true;
