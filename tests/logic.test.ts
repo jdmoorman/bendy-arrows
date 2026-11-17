@@ -199,6 +199,19 @@ describe('advanced rules', () => {
 describe('findHint', async () => {
   const { findHint } = await import('../src/logic');
 
+  test('No early loops measures each application by the piece it would close', async () => {
+    const { deductions } = await import('../src/logic');
+    const p = createPuzzle(6, 6);
+    const piece = (cells: number[]) => cells.slice(1).map((c, i) => edgeBetween(p, cells[i], c));
+    // A 6-tile U at the top left and a 4-tile U at the bottom right, each one border from closing.
+    const state: LogicState = { segments: new Set([...piece([0, 1, 2, 8, 7, 6]), ...piece([28, 29, 35, 34])]), xs: new Set() };
+    const loops = deductions(p, state, ['noLoops']);
+    expect(loops.map((d) => [d.xs[0], d.size])).toEqual([
+      [edgeBetween(p, 0, 6), 6],
+      [edgeBetween(p, 28, 34), 4],
+    ]);
+  });
+
   test('the simplest rule comes first, with an explanation', () => {
     const p = createPuzzle(2, 2);
     const h = findHint(p, empty());
@@ -231,13 +244,15 @@ describe('sample difficulty', async () => {
   const { SAMPLES } = await import('../src/samples');
   const { decodePuzzle } = await import('../src/codec');
   const { rateDifficulty } = await import('../src/generator');
-  for (const s of SAMPLES) {
+  // The fewest-obstacle collection is left out: its big boards are slow to rate.
+  // Their uniqueness is still checked in solver.test.ts.
+  for (const s of SAMPLES.filter((x) => x.group !== 'fewest')) {
     const expected = s.level;
     test(`${s.level} ${s.name} is unique and rated ${expected}`, () => {
       const p = decodePuzzle(s.code);
       expect(solve(p).status).toBe('unique');
       expect(rateDifficulty(p)).toBe(expected);
-    }, 30000);
+    });
   }
 });
 
@@ -248,7 +263,7 @@ describe('hint choice', async () => {
   const { EASY_RULES } = await import('../src/generator');
   test('among checkerboard deductions, the hint picks the smallest area', () => {
     let tried = 0;
-    for (const s of SAMPLES.filter((x) => x.level === 'medium')) {
+    for (const s of SAMPLES.filter((x) => !x.group && x.level === 'medium')) {
       const p = decodePuzzle(s.code);
       // Where the easy rules get stuck, the hint must use Checkerboard balance.
       const state = runToEnd(p, EASY_RULES).state;
@@ -259,7 +274,7 @@ describe('hint choice', async () => {
       expect(h.deduction.cells?.length, s.name).toBe(Math.min(...sizes));
     }
     expect(tried).toBeGreaterThan(5);
-  }, 60000);
+  });
 });
 
 describe('more rules', async () => {

@@ -138,6 +138,8 @@ export interface Deduction {
   cells?: number[];
   /** Explanation, for rules that work it out when deducing. */
   why?: string;
+  /** How big the application is, for picking the simplest hint, when there is no area. */
+  size?: number;
 }
 
 type Analysis =
@@ -193,8 +195,8 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
   }
   if (allDone) return { kind: 'solved' };
   if (enabled.has('noLoops')) {
-    for (const e of earlyLoopEdges(p, state, need, open.length)) {
-      deductions.push({ rule: 'noLoops', cell: edgeCells(p, e)[0], segments: [], xs: [e] });
+    for (const { edge: e, size } of earlyLoopEdges(p, state, need, open.length)) {
+      deductions.push({ rule: 'noLoops', cell: edgeCells(p, e)[0], segments: [], xs: [e], size });
     }
   }
   if (enabled.has('noFinish') || enabled.has('order')) {
@@ -283,8 +285,8 @@ export function findHint(p: Puzzle, state: LogicState): Hint {
   if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
   if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
   for (const rule of HINT_ORDER) {
-    // Within a rule, the simplest: the smallest area, then the fewest marks, then top-left first.
-    const size = (x: Deduction) => x.cells?.length ?? 1;
+    // Within a rule, the simplest: the smallest area (or shortest piece), then the fewest marks, then top-left first.
+    const size = (x: Deduction) => x.cells?.length ?? x.size ?? 1;
     const marks = (x: Deduction) => x.segments.length + x.xs.length;
     const d = an.deductions
       .filter((x) => x.rule === rule)
@@ -329,7 +331,7 @@ function explain(p: Puzzle, state: LogicState, d: Deduction): string {
  * one would close a loop, which is only allowed for a loop puzzle when that
  * loop takes in every tile.
  */
-function earlyLoopEdges(p: Puzzle, state: LogicState, need: Int8Array, openCount: number): number[] {
+function earlyLoopEdges(p: Puzzle, state: LogicState, need: Int8Array, openCount: number): { edge: number; size: number }[] {
   const n = cellCount(p);
   const parent = Int32Array.from({ length: n }, (_, i) => i);
   const size = new Int32Array(n).fill(1);
@@ -349,7 +351,7 @@ function earlyLoopEdges(p: Puzzle, state: LogicState, need: Int8Array, openCount
       size[rb] += size[ra];
     }
   }
-  const out: number[] = [];
+  const out: { edge: number; size: number }[] = [];
   const loopPuzzle = modeOf(p) === 'cycle';
   for (const c of openCells(p)) {
     for (const e of cellEdges(p, c)) {
@@ -360,7 +362,7 @@ function earlyLoopEdges(p: Puzzle, state: LogicState, need: Int8Array, openCount
       const r = find(a);
       if (r !== find(b)) continue;
       if (loopPuzzle && size[r] === openCount) continue; // closing the full loop is the answer
-      out.push(e);
+      out.push({ edge: e, size: size[r] });
     }
   }
   return out;
