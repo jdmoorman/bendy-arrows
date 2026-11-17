@@ -166,6 +166,11 @@ function fullTileBorders(p: Puzzle, state: LogicState, need: Int8Array): Set<num
 export interface LogicOptions {
   /** Only use Checkerboard balance on areas of at most this many tiles. */
   balanceMaxArea?: number;
+  /**
+   * Stop growing a room at its first tie (two neighbours equally good), instead of
+   * growing it each way the board could be turned or mirrored.
+   */
+  stopRoomsAtTies?: boolean;
 }
 
 function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: LogicOptions = {}): Analysis {
@@ -204,7 +209,7 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
   }
   if (enabled.has('noSeal')) deductions.push(...sealingEdges(p, state, need, closed));
   if (enabled.has('bottlenecks') || enabled.has('balance') || enabled.has('spacing')) {
-    const found = areaRules(p, state, need, closed, enabled, opts.balanceMaxArea ?? Infinity);
+    const found = areaRules(p, state, need, closed, enabled, opts.balanceMaxArea ?? Infinity, opts.stopRoomsAtTies ?? false);
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
   }
@@ -217,8 +222,8 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
 }
 
 /** Every deduction the rules make from a state (empty if stuck, solved or contradictory). */
-export function deductions(p: Puzzle, state: LogicState, rules: Iterable<RuleId>): Deduction[] {
-  const an = analyse(p, state, new Set(rules));
+export function deductions(p: Puzzle, state: LogicState, rules: Iterable<RuleId>, opts: LogicOptions = {}): Deduction[] {
+  const an = analyse(p, state, new Set(rules), opts);
   return an.kind === 'open' ? an.deductions : [];
 }
 
@@ -273,11 +278,11 @@ export interface LogicRun {
 }
 
 /** Apply every deduction the rules find, round after round, until they find nothing more. */
-export function runLogic(p: Puzzle, rules: Iterable<RuleId>, start: LogicState = { segments: new Set(), xs: new Set() }): LogicRun {
+export function runLogic(p: Puzzle, rules: Iterable<RuleId>, start: LogicState = { segments: new Set(), xs: new Set() }, opts: LogicOptions = {}): LogicRun {
   const chosen = [...rules];
   let state = start;
   for (let rounds = 0; rounds < 1000; rounds++) {
-    const step = logicStep(p, state, chosen);
+    const step = logicStep(p, state, chosen, opts);
     if (step.contradiction) return { state, rounds, solved: false, contradiction: step.contradiction };
     if (step.solved) return { state, rounds, solved: true };
     if (!step.segments.length && !step.xs.length) return { state, rounds, solved: false };
@@ -302,10 +307,10 @@ export type Hint =
  * The single simplest thing the rules can tell the player about their board,
  * with an explanation.
  */
-export function findHint(p: Puzzle, state: LogicState, rules: Iterable<RuleId> = HINT_ORDER): Hint {
+export function findHint(p: Puzzle, state: LogicState, rules: Iterable<RuleId> = HINT_ORDER, opts: LogicOptions = {}): Hint {
   const allowed = new Set(rules);
   const order = HINT_ORDER.filter((r) => allowed.has(r));
-  const an = analyse(p, state, new Set(order));
+  const an = analyse(p, state, new Set(order), opts);
   if (an.kind === 'unknown') return { kind: 'none', text: 'Hints need the puzzle to have both ends.' };
   if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
   if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
@@ -574,6 +579,7 @@ function areaRules(
   closed: Set<number>,
   enabled: Set<RuleId>,
   balanceMaxArea: number,
+  stopRoomsAtTies: boolean,
 ): Deduction[] | Contradiction {
   const n = cellCount(p);
   const cells = openCells(p);
@@ -679,7 +685,7 @@ function areaRules(
     if (sMin > sMax) {
       return {
         cell: Math.min(...area),
-        cells: area,
+        cells: [...area],
         reason: "An area's shaded and white tiles can't balance.",
         hint: 'Something is off: the highlighted area has the wrong mix of shaded and white tiles for the ways in and out that are left — check the lines and X marks around it.',
       };
@@ -724,7 +730,7 @@ function areaRules(
     out.push({
       rule: 'balance',
       cell: Math.min(...area),
-      cells: area,
+      cells: [...area],
       segments: lines,
       xs,
       why: `On the checkerboard, the highlighted area has ${mix}. The path alternates colours${ends}, ${law}.${entry} So it must ${doing.join(' and ')}.`,
@@ -765,7 +771,7 @@ function areaRules(
     if (drawn + open.length < min) {
       return {
         cell: Math.min(...area),
-        cells: area,
+        cells: [...area],
         reason: 'The numbers need an area crossed more often than it can be.',
         hint: 'Something is off: going through the numbers in order, the path would have to cross the edge of the highlighted area more often than it has ways across — check the X marks around it.',
       };
@@ -774,7 +780,7 @@ function areaRules(
     out.push({
       rule: 'spacing',
       cell: Math.min(...area),
-      cells: area,
+      cells: [...area],
       segments: open,
       xs: [],
       why: `Going through the numbers in order, the path has to cross the edge of the highlighted area at least ${min} times, and it only has ${min} ways across — so it uses them all.`,
@@ -901,41 +907,122 @@ function areaRules(
       }
     }
     // ...and for "rooms": from each tile, grow an area one tile at a time, always adding
-    // the neighbour that leaves the fewest open borders out of it (so it follows walls,
-    // X marks and drawn lines), trying the balance at every size.
+    // the neighbour that leaves the fewest borders out of it, open or drawn (so it follows
+    // walls and X marks), trying the balance at every size.
     const maxGrow = Math.min(GROW_AREA, Math.floor(cells.length / 2));
-    const isOpenBorder = (e: number) => !state.segments.has(e); // within `adj`: usable, not X, not closed
     const inArea = new Uint8Array(n);
-    for (const seed of cells) {
-      const area = [seed];
-      inArea[seed] = 1;
-      for (let size = 1; size < maxGrow; size++) {
-        let best = -1;
-        let bestDelta = Infinity;
-        let bestTouch = -1;
-        for (const t of area) {
-          for (const m of neighbors(p, t)) {
-            if (inArea[m] || p.blocked.has(m)) continue;
-            let delta = 0;
-            for (const e of adj[m]) if (isOpenBorder(e)) delta += inArea[other(e, m)] ? -1 : 1;
-            const touch = neighbors(p, m).filter((x) => inArea[x]).length;
-            if (delta < bestDelta || (delta === bestDelta && (touch > bestTouch || (touch === bestTouch && m < best)))) {
-              best = m;
-              bestDelta = delta;
-              bestTouch = touch;
-            }
+    // Ties are broken by position. To find the same rooms whichever way the board is
+    // turned or mirrored, a room that hits a tie is grown once for each of the 8
+    // reading orders (or, with stopRoomsAtTies, stops growing there).
+    const orders: Int32Array[] = [];
+    for (const transpose of [false, true]) {
+      for (const rDir of [1, -1]) {
+        for (const cDir of [1, -1]) {
+          const rank = new Int32Array(n);
+          for (let i = 0; i < n; i++) {
+            const r = Math.floor(i / p.w);
+            const c = i % p.w;
+            const rr = rDir === 1 ? r : p.h - 1 - r;
+            const cc = cDir === 1 ? c : p.w - 1 - c;
+            rank[i] = transpose ? cc * p.h + rr : rr * p.w + cc;
           }
-        }
-        if (best < 0) break;
-        area.push(best);
-        inArea[best] = 1;
-        const bad = checkArea(area);
-        if (bad) {
-          for (const t of area) inArea[t] = 0;
-          return bad;
+          orders.push(rank);
         }
       }
-      for (const t of area) inArea[t] = 0;
+    }
+    // Rooms grown from different tiles or orders often come out the same: check each once.
+    // An area is keyed by XOR-ing a random number per tile (two of them, for 53 bits).
+    const keyLo = new Uint32Array(n);
+    const keyHi = new Uint32Array(n);
+    let x = 0x9e3779b9;
+    const next = () => {
+      x ^= x << 13;
+      x ^= x >>> 17;
+      x ^= x << 5;
+      return x >>> 0;
+    };
+    for (let i = 0; i < n; i++) {
+      keyLo[i] = next();
+      keyHi[i] = next() & 0x1fffff;
+    }
+    const checked = new Set<number>();
+    // Per tile: its open borders, and running counts (while a room grows) of its
+    // neighbours in the room and of its open borders that lead into the room.
+    const nbrs = cells.length ? Array.from({ length: n }, (_, i) => (p.blocked.has(i) ? [] : neighbors(p, i).filter((m) => !p.blocked.has(m)))) : [];
+    // Drawn lines count like open borders: they still cross the room's edge, so a full
+    // tile isn't free to add (it would pull rooms away from the areas that matter).
+    const openAdj = Array.from({ length: n }, (_, i) => adj[i] ?? []);
+    const touchCount = new Int32Array(n);
+    const openIn = new Int32Array(n);
+    const join = (t: number, d: number) => {
+      for (const m of nbrs[t]) touchCount[m] += d;
+      for (const e of openAdj[t]) openIn[other(e, t)] += d;
+    };
+    // Candidates already looked at in this step (a tile can neighbour the room twice).
+    const seenAt = new Int32Array(n);
+    let stamp = 0;
+    for (const seed of cells) {
+      // The first reading order's room; the other orders can only differ after a tie.
+      const first: number[] = [];
+      let tied = false;
+      for (let o = 0; o < orders.length && (o === 0 || (tied && !stopRoomsAtTies)); o++) {
+        const rank = orders[o];
+        const area = [seed];
+        inArea[seed] = 1;
+        join(seed, 1);
+        let lo = keyLo[seed];
+        let hi = keyHi[seed];
+        // Areas this order shares with the first one were checked already.
+        let same = o > 0;
+        for (let size = 1; size < maxGrow; size++) {
+          stamp++;
+          let best = -1;
+          let bestDelta = Infinity;
+          let bestTouch = -1;
+          let ties = 0;
+          for (const t of area) {
+            for (const m of nbrs[t]) {
+              if (inArea[m] || seenAt[m] === stamp) continue;
+              seenAt[m] = stamp;
+              // Borders out of the room after adding m: m's own borders count +1 each,
+              // except those into the room, which stop being borders (-1).
+              const delta = openAdj[m].length - 2 * openIn[m];
+              const touch = touchCount[m];
+              if (delta < bestDelta || (delta === bestDelta && touch > bestTouch)) {
+                best = m;
+                bestDelta = delta;
+                bestTouch = touch;
+                ties = 0;
+              } else if (delta === bestDelta && touch === bestTouch) {
+                ties++;
+                if (rank[m] < rank[best]) best = m;
+              }
+            }
+          }
+          if (best < 0) break;
+          if (ties > 0) {
+            if (o === 0) tied = true;
+            if (stopRoomsAtTies) break;
+          }
+          area.push(best);
+          inArea[best] = 1;
+          join(best, 1);
+          lo = (lo ^ keyLo[best]) >>> 0;
+          hi ^= keyHi[best];
+          if (o === 0) first.push(best);
+          else if (same && first[size - 1] !== best) same = false;
+          if (same) continue;
+          const key = hi * 4294967296 + lo;
+          if (checked.has(key)) continue;
+          checked.add(key);
+          const bad = checkArea(area);
+          if (bad) return bad;
+        }
+        for (const t of area) {
+          inArea[t] = 0;
+          join(t, -1);
+        }
+      }
     }
   }
   return out;

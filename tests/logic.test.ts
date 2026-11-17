@@ -342,3 +342,44 @@ describe('runLogic', async () => {
     expect(run).toMatchObject({ rounds: 0, solved: false });
   });
 });
+
+describe('orientation', async () => {
+  const { decodePuzzle } = await import('../src/codec');
+  const { rateDifficulty } = await import('../src/generator');
+  const { transformPuzzle } = await import('../src/model');
+  test('rooms for Checkerboard balance do not depend on which way the board faces', () => {
+    // This 7×7 once rated very hard one way and hard mirrored: a tie in growing a
+    // room was always broken towards the top left.
+    const p = decodePuzzle('BQQHBwANABgBAEACAAAACAAACAAAAAABEA');
+    expect(rateDifficulty(p)).toBe(rateDifficulty(transformPuzzle(p, 'flipH')));
+  }, 30000);
+});
+
+describe('stopRoomsAtTies', async () => {
+  const { runLogic } = await import('../src/logic');
+  const { decodePuzzle } = await import('../src/codec');
+  const { RATING_RULES } = await import('../src/generator');
+  const { SAMPLES } = await import('../src/samples');
+  test('rooms that stop at a tie find less: Loop 8×8 · walls needs the full rooms', () => {
+    const p = decodePuzzle(SAMPLES.find((s) => s.name === 'Loop 8×8 · walls' && s.level === 'hard')!.code);
+    expect(runLogic(p, RATING_RULES).solved).toBe(true);
+    expect(runLogic(p, RATING_RULES, undefined, { stopRoomsAtTies: true }).solved).toBe(false);
+  }, 60000);
+});
+
+describe('deduction areas', async () => {
+  const { deductions } = await import('../src/logic');
+  const { decodePuzzle } = await import('../src/codec');
+  const { edgeCells: cellsOf } = await import('../src/model');
+  test('a balance deduction keeps the area it used, not the room it grew into', () => {
+    const p = decodePuzzle('BQQHBwACAAsAAAAAAAAAhBQAEAAALAAABA');
+    for (const d of deductions(p, empty(), ['balance'])) {
+      const area = new Set(d.cells);
+      // Every mark it draws crosses the area's edge.
+      for (const e of [...d.segments, ...d.xs]) {
+        const [a, b] = cellsOf(p, e);
+        expect(area.has(a) !== area.has(b)).toBe(true);
+      }
+    }
+  });
+});

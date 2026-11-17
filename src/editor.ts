@@ -21,7 +21,7 @@ import {
   type Puzzle,
 } from './model';
 import { padFor, renderBoard } from './render';
-import { ALL_RULES, applyStep, BASIC_RULES, findHint, RULES, rulesFor, type LogicState, type RuleId } from './logic';
+import { ALL_RULES, applyStep, BASIC_RULES, findHint, RULES, rulesFor, type LogicOptions, type LogicState, type RuleId } from './logic';
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
@@ -96,6 +96,8 @@ export class EditorView {
   private logicRules = loadRuleChoice(new Storage());
   /** Apply the chosen rules after every change, until they get stuck. */
   private autoLogic = new Storage().loadLogicRules()?.auto === true;
+  /** Logic engine options: whether rooms stop growing at a tie. */
+  private logicOpts: LogicOptions = { stopRoomsAtTies: new Storage().loadLogicRules()?.stopRoomsAtTies === true };
   private autoWorker: Worker | null = null;
   private autoId = 0;
 
@@ -245,7 +247,7 @@ export class EditorView {
       return;
     }
     // One step is exactly what a Play hint would suggest, using the chosen rules.
-    const hint = findHint(p, this.logic, this.logicRules);
+    const hint = findHint(p, this.logic, this.logicRules, this.logicOpts);
     this.logicFresh = new Set();
     this.logicFocus = new Set();
     this.logicBad = hint.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
@@ -288,13 +290,13 @@ export class EditorView {
     const rules = [...this.logicRules].filter((r) => !ADVANCED_RULES.includes(r));
     const before = { logic: this.logic, steps: this.logicSteps };
     const fresh = new Set<number>();
-    let hint = findHint(p, this.logic, rules);
+    let hint = findHint(p, this.logic, rules, this.logicOpts);
     for (let i = 0; hint.kind === 'deduction' && i < 5000; i++) {
       const d = hint.deduction;
       this.logic = applyStep(this.logic, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
       for (const e of [...d.segments, ...d.xs]) fresh.add(e);
       this.logicSteps++;
-      hint = findHint(p, this.logic, rules);
+      hint = findHint(p, this.logic, rules, this.logicOpts);
     }
     const taken = this.logicSteps - before.steps;
     if (taken) this.logicHistory.push(before);
@@ -323,6 +325,7 @@ export class EditorView {
       const r = ev.data;
       if (r.id !== this.autoId) return;
       this.cancelAutoLogic();
+      this.clearMessage();
       this.resetLogic();
       this.logic = { segments: new Set(r.segments), xs: new Set(r.xs) };
       // Count the automatic run as one step, so Back clears it and Step carries on from it.
@@ -342,7 +345,7 @@ export class EditorView {
       this.logicNote = r.segments.length || r.xs.length ? 'Auto-apply: the chosen rules get this far, then get stuck.' : 'Auto-apply: the chosen rules find nothing to fill in.';
       this.render();
     };
-    this.autoWorker.postMessage({ id, code: encodePuzzle(p), rules: [...this.logicRules] } satisfies LogicRequest);
+    this.autoWorker.postMessage({ id, code: encodePuzzle(p), rules: [...this.logicRules], opts: this.logicOpts } satisfies LogicRequest);
   }
 
   private cancelAutoLogic() {
@@ -419,7 +422,7 @@ export class EditorView {
     const body = document.createElement('div');
     body.className = 'sheet-stack';
     const save = () => {
-      this.storage.saveLogicRules({ enabled: [...this.logicRules], known: ALL_RULES, auto: this.autoLogic });
+      this.storage.saveLogicRules({ enabled: [...this.logicRules], known: ALL_RULES, auto: this.autoLogic, stopRoomsAtTies: this.logicOpts.stopRoomsAtTies });
       // A different choice of rules gets a fresh automatic run.
       if (this.autoLogic) this.runAutoLogic();
     };
@@ -502,6 +505,17 @@ export class EditorView {
           save();
         });
       }
+      body.append(document.createElement('hr'));
+      body.lastElementChild!.className = 'sheet-sep';
+      switchRow(
+        'Stop rooms at a tie',
+        'Checkerboard balance and Number crossings also look at "rooms", grown one tile at a time. On: a room stops growing when two tiles are equally good to add. Off: it is grown every way the board could be turned or mirrored.',
+        this.logicOpts.stopRoomsAtTies === true,
+        (on) => {
+          this.logicOpts = { ...this.logicOpts, stopRoomsAtTies: on };
+          save();
+        },
+      );
     };
     render();
     openSheet('Logic rules', body);

@@ -108,10 +108,10 @@ export const MEDIUM_BALANCE_AREA = 8;
  * areas of up to MEDIUM_BALANCE_AREA tiles. Hard: needs bigger areas. Very
  * hard: beyond all the rules.
  */
-export function rateDifficulty(p: Puzzle): Difficulty {
-  if (logicSolves(p, EASY_RULES)) return 'easy';
-  if (logicSolves(p, RATING_RULES, { balanceMaxArea: MEDIUM_BALANCE_AREA })) return 'medium';
-  if (logicSolves(p, RATING_RULES)) return 'hard';
+export function rateDifficulty(p: Puzzle, opts: LogicOptions = {}): Difficulty {
+  if (logicSolves(p, EASY_RULES, opts)) return 'easy';
+  if (logicSolves(p, RATING_RULES, { ...opts, balanceMaxArea: MEDIUM_BALANCE_AREA })) return 'medium';
+  if (logicSolves(p, RATING_RULES, opts)) return 'hard';
   return 'veryhard';
 }
 

@@ -1,8 +1,8 @@
 /// <reference lib="webworker" />
 import { decodePuzzle } from './codec';
-import { runLogic, type Contradiction, type RuleId } from './logic';
+import { runLogic, type Contradiction, type LogicOptions, type RuleId } from './logic';
 
-export type LogicRequest = { id: number; code: string; rules: RuleId[] };
+export type LogicRequest = { id: number; code: string; rules: RuleId[]; opts?: LogicOptions };
 export type LogicReply = {
   id: number;
   segments: number[];
@@ -16,8 +16,8 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 /** Run the chosen rules on a puzzle until they get stuck, off the main thread. */
 ctx.onmessage = (ev: MessageEvent<LogicRequest>) => {
-  const { id, code, rules } = ev.data;
-  const run = runLogic(decodePuzzle(code), rules);
+  const { id, code, rules, opts } = ev.data;
+  const run = runLogic(decodePuzzle(code), rules, undefined, opts);
   ctx.postMessage({
     id,
     segments: [...run.state.segments],
