@@ -26,5 +26,6 @@ export const ICONS = {
   flipV: svg('<path d="M3 12h18"/><path d="M7 8l5-5 5 5H7z"/><path d="M7 16l5 5 5-5H7z"/>'),
   list: svg('<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2"/>'),
   step: svg('<path d="M5 5v14l9-7z"/><path d="M18 5v14"/>'),
+  bulb: svg('<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/>'),
   close: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
 };

@@ -185,6 +185,10 @@ select {
 .tile.blocked {
   fill: var(--tile-blocked);
 }
+.tile.focus,
+.no-checkerboard .tile.focus {
+  fill: var(--hint-fill);
+}
 .tile.error {
   fill: var(--error-fill);
 }
@@ -286,7 +290,11 @@ select {
 
 /* ---------- Status & toolbars ---------- */
 .status {
-  min-height: 1.4em;
+  /* Room for three lines, so the board doesn't jump as messages change length. */
+  min-height: 4.2em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   margin: 2px 16px 4px;
   text-align: center;
   color: var(--text-muted);
@@ -785,6 +793,14 @@ select {
 
 .time-value {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.time-help {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 400;
 }
 
 .time-date {
@@ -824,4 +840,47 @@ select {
 /* Five editor tools share one row on a phone. */
 .toolbar-row .segmented .seg-btn {
   padding: 0 6px;
+}
+
+.status.hint {
+  color: var(--text);
+}
+
+/* Play toolbar: icon-only undo/redo, the rest share the remaining width. */
+.play-view .toolbar-row {
+  gap: 6px;
+}
+.play-view .toolbar-row > .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 8px;
+}
+.play-view .toolbar-row > [data-act='undo'],
+.play-view .toolbar-row > [data-act='redo'] {
+  flex: 0 0 var(--tap);
+  padding: 0;
+}
+@media (max-width: 420px) {
+  .play-view .toolbar-row > [data-act='clear'] svg,
+  .play-view .toolbar-row > [data-act='hint'] svg {
+    display: none;
+  }
+}
+
+/* Editor's automatic solution check. */
+.validity {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.validity[data-state='checking'] {
+  color: var(--text-muted);
+}
+.validity[data-state='unique'] {
+  color: var(--success);
+  border-color: var(--success);
+}
+.validity[data-state='none'],
+.validity[data-state='multiple'] {
+  color: var(--error);
+  border-color: var(--error);
 }

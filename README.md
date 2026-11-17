@@ -25,8 +25,10 @@ The app opens on a sample puzzle in the **Play** tab.
 - **Erase** by starting a drag on a line, or on a tile that has lines: segments are removed along the drag. Tapping a line where it crosses a border erases it; tapping the centre of a tile erases all lines touching it. Starting on the end of a path is decided by your first move: back along the path erases, anywhere else extends the path.
 - **Tap an empty border** between two tiles to mark it with an X (the path does not go there). Tap again to clear it. Right-click toggles an X with a mouse.
 - Segments can't enter black tiles or cross walls. Loops and branches are allowed while you work; they are highlighted in red.
-- **Undo / Redo** (or Ctrl+Z / Ctrl+Shift+Z), **Clear**, and **Check**, which highlights missed tiles and bad ends.
-- The board turns green when the puzzle is solved, and a **Solved!** sheet shows your time and your past times for that puzzle (fastest first). **Play again** starts a fresh attempt. The time is tracked from when the puzzle is loaded (Clear starts it over), only while Play is on screen; it isn't shown while you play unless you turn on **Show timer** in Settings.
+- **Undo / Redo** (or Ctrl+Z / Ctrl+Shift+Z) and **Clear** (which also restarts the timer).
+- **Check** tells you whether all the lines you've drawn so far are part of a solution — nothing more.
+- **Hint** shows the simplest logical next step for your board — the tile is shaded and the suggested lines or X marks are drawn in amber — with a sentence explaining why. It uses the same rules as the editor's Logic helper, simplest first, and says so if none apply or if your board has a mistake. Hints are shown, not drawn for you.
+- The board turns green when the puzzle is solved, and a **Solved!** sheet shows your time and your past times for that puzzle (fastest first), each with the hints and checks used. **Play again** starts a fresh attempt. The time is tracked from when the puzzle is loaded (Clear starts it over), only while Play is on screen; it isn't shown while you play unless you turn on **Show timer** in Settings.
 
 ## Creating (Create tab)
 
@@ -44,7 +46,7 @@ The app opens on a sample puzzle in the **Play** tab.
   - **No early loops** — X out a border that would close a loop too soon.
 
   It reports when it's stuck, when logic alone solves the puzzle, or when it finds a contradiction. Editing the puzzle resets it.
-- **Check** runs the solver in the background and reports whether the puzzle has **no solution** (with a reason, such as a checkerboard parity mismatch), **exactly one**, or **more than one**. The eye button overlays the solutions it found.
+- The puzzle is **checked automatically** in the background after every edit. A chip shows **Unique**, **No solution**, **2+ solutions** or **Too big**; tap it for the explanation (e.g. a checkerboard parity mismatch). The eye button overlays the solutions it found.
 - **Play** switches to the Play tab with your puzzle.
 
 ## Sharing and saving
@@ -52,7 +54,7 @@ The app opens on a sample puzzle in the **Play** tab.
 - **Share** button (top right): send a link with the phone's share sheet or copy it, export or import JSON, or paste a link or code to open a puzzle. Links look like `…/#p=CODE`. The puzzle format is versioned 0.x while the app is pre-release (currently 0.5); older 0.x links still open.
 - **Library** button: save the current puzzle under a name, then reopen, edit or delete saved puzzles. Progress on saved puzzles is kept automatically. The current puzzle, your progress and any unsaved editor work are restored when you come back.
 
-- **Settings** button (gear): checkerboard shading (on by default) and **Show timer** (off by default). Settings are remembered on this device.
+- **Settings** button (gear): checkerboard shading (on by default), **Show timer** (off by default) and **Auto-check** (on by default), which highlights mistakes such as branches, early loops and numbers out of order as you play. Settings are remembered on this device.
 
 Everything is stored locally in your browser; nothing is sent anywhere.
 

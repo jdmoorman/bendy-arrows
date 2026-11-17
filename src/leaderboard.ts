@@ -5,6 +5,10 @@ export interface TimeEntry {
   ms: number;
   /** When it was recorded (epoch ms). */
   at: number;
+  /** Hints used during the attempt. */
+  hints?: number;
+  /** Checks used during the attempt. */
+  checks?: number;
 }
 
 export interface RecordResult {
@@ -20,7 +24,7 @@ export interface RecordResult {
  */
 export interface Leaderboard {
   readonly title: string;
-  record(puzzleCode: string, ms: number): Promise<RecordResult>;
+  record(puzzleCode: string, ms: number, extra?: Omit<TimeEntry, 'ms' | 'at'>): Promise<RecordResult>;
   list(puzzleCode: string): Promise<TimeEntry[]>;
 }
 
@@ -35,8 +39,8 @@ export class LocalLeaderboard implements Leaderboard {
     return sortTimes(this.storage.loadTimes(puzzleCode));
   }
 
-  async record(puzzleCode: string, ms: number): Promise<RecordResult> {
-    const entry: TimeEntry = { ms: Math.round(ms), at: Date.now() };
+  async record(puzzleCode: string, ms: number, extra: Omit<TimeEntry, 'ms' | 'at'> = {}): Promise<RecordResult> {
+    const entry: TimeEntry = { ms: Math.round(ms), at: Date.now(), ...extra };
     const entries = sortTimes([...this.storage.loadTimes(puzzleCode), entry]);
     this.storage.saveTimes(puzzleCode, entries.slice(0, 100));
     return { entries, index: entries.indexOf(entry) };

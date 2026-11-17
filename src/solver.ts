@@ -1,4 +1,4 @@
-import { cellCount, cellRC, edgeBetween, endpointCells, modeOf, openCells, type Puzzle } from './model';
+import { cellCount, cellRC, edgeBetween, edgeCells, endpointCells, isUsableEdge, modeOf, openCells, type Puzzle } from './model';
 
 export type SolveStatus = 'none' | 'unique' | 'multiple' | 'aborted';
 
@@ -21,6 +21,8 @@ export interface SolveOptions {
   shouldAbort?: () => boolean;
   /** Called periodically with the node count. */
   onProgress?: (nodes: number) => void;
+  /** Only accept solutions that use all of these segments (e.g. what the player has drawn). */
+  mustUse?: Iterable<number>;
 }
 
 export interface ParityResult {
@@ -94,6 +96,16 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   if (cps.some((c) => p.blocked.has(c))) return result('none', 'A checkpoint is on a black tile.');
   if (new Set(cps).size !== cps.length) return result('none', 'Two checkpoints are on the same tile.');
   if (isCycle && openCount < 4) return result('none', 'A loop needs at least four open tiles.');
+  const required = [...(opts.mustUse ?? [])];
+  const requiredAt: number[][] = Array.from({ length: n }, () => []);
+  for (const e of required) {
+    if (!isUsableEdge(p, e)) return result('none', 'A required segment crosses a wall or a black tile.');
+    const [a, b] = edgeCells(p, e);
+    requiredAt[a].push(b);
+    requiredAt[b].push(a);
+  }
+  for (const c of open) if (requiredAt[c].length > 2) return result('none', 'A tile has more than two required segments.');
+  for (const c of endpoints) if (requiredAt[c].length > 1) return result('none', 'A path end has two required segments.');
   if (openCount === 1) {
     return result('unique', 'The single open tile is the whole path.', [[]]);
   }
@@ -142,6 +154,10 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
     const edges: number[] = [];
     for (let i = 1; i < order.length; i++) edges.push(edgeBetween(p, order[i - 1], order[i]));
     if (closing) edges.push(edgeBetween(p, order[order.length - 1], order[0]));
+    if (required.length) {
+      const set = new Set(edges);
+      if (!required.every((e) => set.has(e))) return;
+    }
     edges.sort((x, y) => x - y);
     const key = edges.join(',');
     if (!found.has(key)) found.set(key, edges);
@@ -194,7 +210,7 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
     return k;
   };
 
-  const dfs = (cur: number): void => {
+  const dfs = (cur: number, prev: number): void => {
     nodes++;
     if ((nodes & 0xffff) === 0) {
       opts.onProgress?.(nodes);
@@ -211,7 +227,18 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
       return;
     }
 
-    const candidates = adj[cur].filter((nb) => !visited[nb]);
+    // Required segments at cur (other than the one we arrived on) force the next step.
+    let forced = -1;
+    for (const g of requiredAt[cur]) {
+      if (g === prev) continue;
+      if (visited[g]) return; // it could only be a loop's closing edge, and we are not at the end
+      if (forced >= 0) {
+        if (isCycle && cur === start) break; // start of a loop: take one now, the other closes it
+        return;
+      }
+      forced = g;
+    }
+    const candidates = forced >= 0 ? [forced] : adj[cur].filter((nb) => !visited[nb]);
     if (candidates.length > 1) candidates.sort((x, y) => onwardCount(x) - onwardCount(y));
     for (const next of candidates) {
       if (visited[next]) continue;
@@ -222,7 +249,7 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
       visited[next] = 1;
       visitedCount++;
       order.push(next);
-      if (feasible(next)) dfs(next);
+      if (feasible(next)) dfs(next, cur);
       order.pop();
       visitedCount--;
       visited[next] = 0;
@@ -237,7 +264,8 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
     visited[s] = 1;
     visitedCount = 1;
     order.push(s);
-    if (feasible(s)) dfs(s);
+    // A path's start is an end, so it can carry at most one required segment.
+    if ((isCycle || requiredAt[s].length <= 1) && feasible(s)) dfs(s, -1);
     order.pop();
     visited[s] = 0;
     visitedCount = 0;

@@ -44,6 +44,7 @@ const play = new PlayView();
 const editor = new EditorView();
 views.append(play.el, editor.el);
 play.setShowTimer(settings.showTimer);
+play.setAutoCheck(settings.autoCheck);
 
 /** The puzzle currently loaded in the play view, and where it came from. */
 let playing: Puzzle = samplePuzzle();
@@ -62,9 +63,9 @@ function requestPlay() {
 editor.onPlay = requestPlay;
 attachUniquenessCheck(editor);
 
-play.onSolved = async (ms) => {
+play.onSolved = async (ms, stats) => {
   const code = playingCode;
-  const result = await leaderboard.record(code, ms);
+  const result = await leaderboard.record(code, ms, stats);
   if (code !== playingCode) return;
   openSolvedSheet({ ms, result, boardTitle: leaderboard.title, onPlayAgain: () => play.playAgain() });
 };
@@ -152,6 +153,7 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
     settings = s;
     applySettings(s);
     play.setShowTimer(s.showTimer);
+    play.setAutoCheck(s.autoCheck);
     storage.saveSettings(s);
   });
 });

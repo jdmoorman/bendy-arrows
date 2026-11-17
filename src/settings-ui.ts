@@ -9,6 +9,7 @@ export function applySettings(s: Settings): void {
 const SWITCHES: { key: keyof Settings; label: string; hint: string }[] = [
   { key: 'checkerboard', label: 'Checkerboard shading', hint: 'Faintly shade every other tile' },
   { key: 'showTimer', label: 'Show timer', hint: 'Show your solve time while playing' },
+  { key: 'autoCheck', label: 'Auto-check', hint: 'Highlight mistakes like branches, early loops and numbers out of order as you play' },
 ];
 
 /** The settings sheet: one switch per setting, saved as soon as it changes. */

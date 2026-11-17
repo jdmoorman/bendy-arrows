@@ -2,6 +2,16 @@ import type { RecordResult } from './leaderboard';
 import { formatDuration, formatTime } from './timer';
 import { el, openSheet } from './ui';
 
+/** "2 hints · 1 check" (nothing when no help was used). */
+function helpText(e: { hints?: number; checks?: number }): string {
+  const parts: string[] = [];
+  const h = e.hints ?? 0;
+  const c = e.checks ?? 0;
+  if (h) parts.push(`${h} hint${h === 1 ? '' : 's'}`);
+  if (c) parts.push(`${c} check${c === 1 ? '' : 's'}`);
+  return parts.join(' · ');
+}
+
 const dateFmt = new Intl.DateTimeFormat(undefined, {
   month: 'short',
   day: 'numeric',
@@ -40,6 +50,8 @@ export function openSolvedSheet(opts: {
     rank.textContent = `${i + 1}`;
     const t = el('span', 'time-value');
     t.textContent = formatTime(e.ms);
+    const help = helpText(e);
+    if (help) t.append(Object.assign(el('small', 'time-help'), { textContent: help }));
     const d = el('span', 'time-date');
     d.textContent = dateFmt.format(e.at);
     li.append(rank, t, d);

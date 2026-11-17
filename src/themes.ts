@@ -25,6 +25,7 @@ export type ThemeTokens = Record<
   | 'error-edge'
   | 'hint'
   | 'hint-edge'
+  | 'hint-fill'
   | 'xmark'
   | 'end'
   | 'error'
@@ -57,6 +58,7 @@ export const THEMES = {
     'error-edge': '#c23a55',
     hint: '#ffcf70',
     'hint-edge': '#d99a1c',
+    'hint-fill': 'rgba(255, 207, 112, 0.22)',
     xmark: '#ff8a65',
     end: '#e6e9f0',
     error: '#ff5c7a',
@@ -86,6 +88,7 @@ export const THEMES = {
     'error-edge': '#9e1f3a',
     hint: '#ffd27a',
     'hint-edge': '#c98a00',
+    'hint-fill': '#fff1cc',
     xmark: '#000000',
     end: '#000000',
     error: '#d92d4b',

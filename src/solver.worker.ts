@@ -2,7 +2,7 @@
 import { decodePuzzle } from './codec';
 import { solve } from './solver';
 
-export type SolverRequest = { code: string; maxSolutions?: number; nodeLimit?: number };
+export type SolverRequest = { code: string; maxSolutions?: number; nodeLimit?: number; mustUse?: number[] };
 export type SolverMessage =
   | { type: 'progress'; nodes: number }
   | { type: 'done'; result: import('./solver').SolveResult }
@@ -16,6 +16,7 @@ ctx.onmessage = (ev: MessageEvent<SolverRequest>) => {
     const result = solve(p, {
       maxSolutions: ev.data.maxSolutions,
       nodeLimit: ev.data.nodeLimit,
+      mustUse: ev.data.mustUse,
       onProgress: (nodes) => ctx.postMessage({ type: 'progress', nodes } satisfies SolverMessage),
     });
     ctx.postMessage({ type: 'done', result } satisfies SolverMessage);

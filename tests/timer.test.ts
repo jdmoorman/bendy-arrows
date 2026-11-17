@@ -77,3 +77,13 @@ describe('LocalLeaderboard', () => {
     expect(await lb.list('OTHER')).toEqual([]);
   });
 });
+
+test('hint counts are stored with times but do not change the order', async () => {
+  const lb = new LocalLeaderboard(new Storage(new MemStore()));
+  await lb.record('P', 50_000, { hints: 3 });
+  const r = await lb.record('P', 40_000, { hints: 0 });
+  expect(r.entries.map((e) => [e.ms, e.hints])).toEqual([
+    [40_000, 0],
+    [50_000, 3],
+  ]);
+});

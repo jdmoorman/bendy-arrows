@@ -148,3 +148,32 @@ describe('samples', async () => {
     });
   }
 });
+
+describe('solve with required segments', () => {
+  test('finds a solution that uses the given segments, or none if they are wrong', async () => {
+    const { decodePuzzle } = await import('../src/codec');
+    const { SAMPLES } = await import('../src/samples');
+    const p = decodePuzzle(SAMPLES[0].code);
+    const sol = solve(p).solutions[0];
+    const some = sol.filter((_, i) => i % 3 === 0);
+    expect(solve(p, { mustUse: some, maxSolutions: 1 }).solutions).toHaveLength(1);
+    // A usable segment that is not in the unique solution.
+    const wrong = Array.from({ length: edgeCount(p) }, (_, e) => e).find((e) => isUsableEdge(p, e) && !sol.includes(e))!;
+    expect(solve(p, { mustUse: [...some, wrong], maxSolutions: 1 }).status).toBe('none');
+  });
+
+  test('matches brute force on random small puzzles with required segments', () => {
+    let seed = 99;
+    const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    for (let trial = 0; trial < 200; trial++) {
+      const p = createPuzzle(2 + Math.floor(rand() * 3), 2 + Math.floor(rand() * 2));
+      if (rand() < 0.5) p.endpoints = [portEnd(Math.floor(rand() * portCount(p))), portEnd(Math.floor(rand() * portCount(p)))];
+      if (p.endpoints.length === 2 && p.endpoints[0].port === p.endpoints[1].port) p.endpoints = [];
+      const must: number[] = [];
+      for (let e = 0; e < edgeCount(p); e++) if (rand() < 0.15) must.push(e);
+      const all = solve(p, { maxSolutions: 1e9 }).solutions;
+      const expected = all.filter((s) => must.every((e) => s.includes(e))).length;
+      expect(solve(p, { mustUse: must, maxSolutions: 1e9 }).solutions.length, `trial ${trial}`).toBe(expected);
+    }
+  });
+});

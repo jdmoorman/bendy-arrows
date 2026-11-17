@@ -22,6 +22,8 @@ export interface RenderOptions {
   solved?: boolean;
   /** Margin around the grid in SVG units (default PAD). */
   pad?: number;
+  /** Tiles to shade in the highlight colour (e.g. the tile a hint is about). */
+  focusCells?: Set<number>;
   /** Segments and X marks to draw in the highlight colour (e.g. the latest logic step). */
   highlight?: Set<number>;
 }
@@ -91,7 +93,15 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   parts.push('<g class="tiles">');
   for (let i = 0; i < n; i++) {
     const [r, c] = cellRC(p, i);
-    const cls = p.blocked.has(i) ? 'tile blocked' : o.errorCells?.has(i) ? 'tile error' : (r + c) % 2 ? 'tile alt' : 'tile';
+    const cls = p.blocked.has(i)
+      ? 'tile blocked'
+      : o.errorCells?.has(i)
+        ? 'tile error'
+        : o.focusCells?.has(i)
+          ? 'tile focus'
+          : (r + c) % 2
+            ? 'tile alt'
+            : 'tile';
     parts.push(`<rect class="${cls}" x="${pad + c * CELL}" y="${pad + r * CELL}" width="${CELL}" height="${CELL}"/>`);
   }
   parts.push('</g>');

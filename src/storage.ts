@@ -38,9 +38,11 @@ export interface Settings {
   checkerboard: boolean;
   /** Show the solve timer while playing. */
   showTimer: boolean;
+  /** Highlight mistakes (branches, early loops, numbers out of order) as you play. */
+  autoCheck: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { checkerboard: true, showTimer: false };
+export const DEFAULT_SETTINGS: Settings = { checkerboard: true, showTimer: false, autoCheck: true };
 
 export interface KeyValueStore {
   getItem(key: string): string | null;
@@ -119,14 +121,14 @@ export class Storage {
   }
 
   /** Solve times for a puzzle (by share code), as stored. */
-  loadTimes(code: string): { ms: number; at: number }[] {
-    const all = this.read<Record<string, { ms: number; at: number }[]>>(TIMES_KEY, {});
+  loadTimes(code: string): { ms: number; at: number; hints?: number; checks?: number }[] {
+    const all = this.read<Record<string, { ms: number; at: number; hints?: number; checks?: number }[]>>(TIMES_KEY, {});
     const list = all && typeof all === 'object' ? all[code] : undefined;
     return Array.isArray(list) ? list.filter((t) => t && typeof t.ms === 'number' && typeof t.at === 'number') : [];
   }
 
-  saveTimes(code: string, times: { ms: number; at: number }[]): void {
-    const all = this.read<Record<string, { ms: number; at: number }[]>>(TIMES_KEY, {});
+  saveTimes(code: string, times: { ms: number; at: number; hints?: number; checks?: number }[]): void {
+    const all = this.read<Record<string, { ms: number; at: number; hints?: number; checks?: number }[]>>(TIMES_KEY, {});
     this.write(TIMES_KEY, { ...(all && typeof all === 'object' ? all : {}), [code]: times });
   }
 

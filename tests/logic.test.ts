@@ -90,3 +90,48 @@ describe('logic rules', () => {
     expect(checked).toBeGreaterThan(30);
   });
 });
+
+describe('findHint', async () => {
+  const { findHint } = await import('../src/logic');
+
+  test('the simplest rule comes first, with an explanation', () => {
+    const p = createPuzzle(2, 2);
+    const h = findHint(p, empty());
+    expect(h.kind).toBe('deduction');
+    if (h.kind !== 'deduction') return;
+    expect(h.deduction.rule).toBe('corners');
+    expect(h.deduction.cell).toBe(0);
+    expect(h.deduction.segments).toHaveLength(2);
+    expect(h.text).toMatch(/corner/);
+  });
+
+  test('points out a mistake on the board', () => {
+    const p = createPuzzle(3, 3);
+    const state: LogicState = { segments: new Set([edgeBetween(p, 4, 1), edgeBetween(p, 4, 3), edgeBetween(p, 4, 5)]), xs: new Set() };
+    const h = findHint(p, state);
+    expect(h.kind).toBe('mistake');
+  });
+
+  test('says so when no simple rule applies', () => {
+    const p = createPuzzle(4, 4); // a loop with many solutions: the rules get stuck
+    const end = runToEnd(p);
+    expect(end.solved).toBe(false);
+    const h = findHint(p, end.state);
+    expect(h.kind).toBe('none');
+    expect(h.text).toMatch(/No hint/);
+  });
+});
+
+describe('tricky samples', async () => {
+  const { SAMPLES } = await import('../src/samples');
+  const { decodePuzzle } = await import('../src/codec');
+  for (const s of SAMPLES.filter((x) => x.name.startsWith('Tricky'))) {
+    test(`${s.name} is unique but not solved by the simple rules alone`, () => {
+      const p = decodePuzzle(s.code);
+      expect(solve(p).status).toBe('unique');
+      const end = runToEnd(p);
+      expect(end.contradiction).toBeUndefined();
+      expect(end.solved).toBe(false);
+    });
+  }
+});

@@ -1,10 +1,12 @@
 import { History } from './history';
+import { solveInBackground, type SolverRun } from './solver-client';
+import { findHint, type Hint } from './logic';
 import { formatTime, SolveTimer } from './timer';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
 import { cellEdges, edgeBetween, isUsableEdge, modeOf, type Puzzle } from './model';
 import { padFor, renderBoard } from './render';
-import { canPlace, checkSolution, type CheckResult } from './rules';
+import { canPlace, checkSolution } from './rules';
 
 export interface Progress {
   segments: number[];
@@ -13,6 +15,16 @@ export interface Progress {
   elapsedMs?: number;
   /** The current attempt has already been solved and its time recorded. */
   recorded?: boolean;
+  /** Hints shown during the current attempt. */
+  hints?: number;
+  /** Times Check was used during the current attempt. */
+  checks?: number;
+}
+
+/** How much help an attempt used. */
+export interface AttemptStats {
+  hints: number;
+  checks: number;
 }
 
 /** Describe the puzzle's fixed ends for the hint line. */
@@ -25,10 +37,13 @@ export class PlayView {
   /** Called after every change to the player's marks. */
   onProgress?: (progress: Progress, solved: boolean) => void;
   /** Called once per attempt when the puzzle is solved, with the solve time. */
-  onSolved?: (elapsedMs: number) => void;
+  onSolved?: (elapsedMs: number, stats: AttemptStats) => void;
 
   private timer = new SolveTimer();
   private recorded = false;
+  private hintsUsed = 0;
+  private autoCheck = true;
+  private checksUsed = 0;
   private timerEl!: HTMLElement;
   private timerTick = 0;
 
@@ -37,7 +52,11 @@ export class PlayView {
   private xMarks = new Set<number>();
   private history = new History<Progress>();
   /** Full check result shown after pressing Check, until the next change. */
-  private shownCheck: CheckResult | null = null;
+  /** Result of the last Check, shown until the next change. */
+  private checkMsg: { text: string; kind: '' | 'success' | 'error' } | null = null;
+  private checkRun: SolverRun | null = null;
+  /** Hint shown after pressing Hint, until the next change. */
+  private shownHint: Hint | null = null;
   private solved = false;
 
   private svg: SVGSVGElement;
@@ -70,6 +89,7 @@ export class PlayView {
           <button class="btn" data-act="undo" aria-label="Undo">${ICONS.undo}</button>
           <button class="btn" data-act="redo" aria-label="Redo">${ICONS.redo}</button>
           <button class="btn" data-act="clear" aria-label="Clear">${ICONS.clear}<span>Clear</span></button>
+          <button class="btn" data-act="hint" aria-label="Hint">${ICONS.bulb}<span>Hint</span></button>
           <button class="btn primary" data-act="check">${ICONS.check}<span>Check</span></button>
         </div>
       </div>`;
@@ -83,6 +103,7 @@ export class PlayView {
     this.redoBtn.addEventListener('click', () => this.redo());
     this.el.querySelector('[data-act=clear]')!.addEventListener('click', () => this.clear());
     this.el.querySelector('[data-act=check]')!.addEventListener('click', () => this.check());
+    this.el.querySelector('[data-act=hint]')!.addEventListener('click', () => this.showHint());
 
     attachBoardInput(this.svg, () => this.puzzle, {
       kind: () => 'path',
@@ -130,11 +151,14 @@ export class PlayView {
     this.segments = new Set((progress?.segments ?? []).filter(ok));
     this.xMarks = new Set((progress?.xMarks ?? []).filter(ok));
     this.history.clear();
-    this.shownCheck = null;
+    this.clearCheck();
+    this.shownHint = null;
     this.solved = checkSolution(p, this.segments).solved;
     // A puzzle that opens already solved does not get a new time.
     this.recorded = !!progress?.recorded || this.solved;
     this.timer.reset(progress?.elapsedMs ?? 0, this.recorded);
+    this.hintsUsed = progress?.hints ?? 0;
+    this.checksUsed = progress?.checks ?? 0;
     this.render();
   }
 
@@ -143,12 +167,20 @@ export class PlayView {
     this.segments.clear();
     this.xMarks.clear();
     this.history.clear();
-    this.shownCheck = null;
+    this.clearCheck();
     this.solved = false;
     this.recorded = false;
+    this.hintsUsed = 0;
+    this.checksUsed = 0;
     this.timer.reset(0);
     this.render();
     this.onProgress?.(this.progress, false);
+  }
+
+  /** Whether mistakes are highlighted as the player draws. */
+  setAutoCheck(on: boolean): void {
+    this.autoCheck = on;
+    this.render();
   }
 
   /** Show or hide the running solve time (hidden by default). */
@@ -169,7 +201,13 @@ export class PlayView {
 
   /** Marks plus the attempt's timing, for saving. */
   get progress(): Progress {
-    return { ...this.snapshot(), elapsedMs: Math.round(this.timer.elapsed), recorded: this.recorded };
+    return {
+      ...this.snapshot(),
+      elapsedMs: Math.round(this.timer.elapsed),
+      recorded: this.recorded,
+      hints: this.hintsUsed,
+      checks: this.checksUsed,
+    };
   }
 
   get isSolved(): boolean {
@@ -259,7 +297,8 @@ export class PlayView {
   }
 
   private afterChange() {
-    this.shownCheck = null;
+    this.clearCheck();
+    this.shownHint = null;
     const wasSolved = this.solved;
     this.solved = checkSolution(this.puzzle, this.segments).solved;
     if (this.solved && !wasSolved) navigator.vibrate?.([30, 60, 30]);
@@ -270,7 +309,7 @@ export class PlayView {
     }
     this.render();
     this.onProgress?.(this.progress, this.solved);
-    if (firstSolve) this.onSolved?.(this.timer.elapsed);
+    if (firstSolve) this.onSolved?.(this.timer.elapsed, { hints: this.hintsUsed, checks: this.checksUsed });
   }
 
   private undo() {
@@ -291,6 +330,8 @@ export class PlayView {
   private clear() {
     this.timer.reset(0);
     this.recorded = false;
+    this.hintsUsed = 0;
+    this.checksUsed = 0;
     if (!this.segments.size && !this.xMarks.size) {
       this.onProgress?.(this.progress, this.solved);
       return;
@@ -301,34 +342,87 @@ export class PlayView {
     this.afterChange();
   }
 
-  private check() {
-    this.shownCheck = checkSolution(this.puzzle, this.segments);
+  private clearCheck() {
+    this.checkRun?.cancel();
+    this.checkRun = null;
+    this.checkMsg = null;
+  }
+
+  /** Tell the player whether every line drawn so far can be part of the solution. */
+  private async check() {
+    if (this.solved) return;
+    this.shownHint = null;
+    this.clearCheck();
+    if (!this.recorded) this.checksUsed++;
+    this.onProgress?.(this.progress, this.solved);
+    const n = this.segments.size;
+    const show = (text: string, kind: '' | 'success' | 'error') => {
+      this.checkMsg = { text, kind };
+      this.render();
+    };
+    if (!n) return show('Nothing drawn yet — every line you draw will be checked against the solution.', '');
+    // Obvious problems need no search.
+    const live = checkSolution(this.puzzle, this.segments);
+    if (live.branches.size || live.loopEdges.size || live.illegalEdges.size || live.checkpointErrors.size) {
+      return show('Not all of your lines are right.', 'error');
+    }
+    show('Checking…', '');
+    const run = solveInBackground(this.puzzle, undefined, { mustUse: [...this.segments], maxSolutions: 1, nodeLimit: 5_000_000 });
+    this.checkRun = run;
+    try {
+      const r = await run.result;
+      if (this.checkRun !== run) return;
+      this.checkRun = null;
+      if (r.solutions.length) show(`All ${n} line${n === 1 ? '' : 's'} so far ${n === 1 ? 'is' : 'are'} correct.`, 'success');
+      else if (r.status === 'aborted') show("Couldn't finish checking — this puzzle is too big to check quickly.", '');
+      else show('Not all of your lines are right.', 'error');
+    } catch (err) {
+      if (this.checkRun !== run) return;
+      this.checkRun = null;
+      if ((err as Error).name !== 'AbortError') show(`Check failed: ${(err as Error).message}`, 'error');
+    }
+  }
+
+  /** Show the simplest logical next step for the current board (without drawing it). */
+  private showHint() {
+    this.clearCheck();
+    this.shownHint = findHint(this.puzzle, { segments: this.segments, xs: this.xMarks });
+    // Count hints that actually help (not "no hint available" or "already solved").
+    if (this.shownHint.kind === 'deduction' || this.shownHint.kind === 'mistake') {
+      if (!this.recorded) this.hintsUsed++;
+      this.onProgress?.(this.progress, this.solved);
+    }
     this.render();
   }
 
   render(): void {
     if (!this.puzzle) return;
     const live = checkSolution(this.puzzle, this.segments);
-    const full = this.shownCheck;
-    const errorCells = new Set<number>([...live.branches, ...live.checkpointErrors]);
-    const errorEdges = new Set<number>([...live.loopEdges, ...live.illegalEdges]);
-    if (full) {
-      for (const c of full.unvisited) errorCells.add(c);
-      for (const c of full.badEnds) errorCells.add(c);
-    }
+    const check = this.checkMsg;
+    const errorCells = new Set<number>(this.autoCheck ? [...live.branches, ...live.checkpointErrors] : []);
+    const errorEdges = new Set<number>(this.autoCheck ? [...live.loopEdges, ...live.illegalEdges] : []);
+    // A shown hint is drawn on top of the board in the highlight colour.
+    const hint = live.solved ? null : this.shownHint;
+    const d = hint?.kind === 'deduction' ? hint.deduction : null;
+    const focus = d ? d.cell : hint?.kind === 'mistake' ? hint.cell : -1;
     renderBoard(this.svg, this.puzzle, {
       pad: padFor(this.puzzle),
-      segments: this.segments,
-      xMarks: this.xMarks,
+      segments: d ? new Set([...this.segments, ...d.segments]) : this.segments,
+      xMarks: d ? new Set([...this.xMarks, ...d.xs]) : this.xMarks,
+      highlight: d ? new Set([...d.segments, ...d.xs]) : undefined,
+      focusCells: focus >= 0 ? new Set([focus]) : undefined,
       errorCells,
       errorEdges,
       solved: live.solved,
     });
 
-    this.status.classList.toggle('success', live.solved);
-    this.status.classList.toggle('error', !live.solved && !!full);
+    const kind = live.solved ? 'success' : hint ? (hint.kind === 'mistake' ? 'error' : 'hint') : (check?.kind ?? '');
+    this.status.classList.toggle('success', kind === 'success');
+    this.status.classList.toggle('error', kind === 'error');
+    this.status.classList.toggle('hint', kind === 'hint');
     if (live.solved) this.status.textContent = live.message;
-    else if (full) this.status.textContent = full.message;
+    else if (hint) this.status.textContent = hint.text;
+    else if (check) this.status.textContent = check.text;
     else this.status.textContent = this.hint();
 
     this.undoBtn.disabled = !this.history.canUndo;
