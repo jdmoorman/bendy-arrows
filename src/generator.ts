@@ -1,4 +1,4 @@
-import { ALL_RULES, applyStep, logicStep, type LogicState, type RuleId } from './logic';
+import { ALL_RULES, applyStep, logicStep, type LogicOptions, type LogicState, type RuleId } from './logic';
 import {
   cellCount,
   cellRC,
@@ -24,7 +24,7 @@ import { solve } from './solver';
  */
 
 export type GenType = 'loop' | 'path' | 'checkpoints';
-export type Difficulty = 'easy' | 'medium' | 'hard';
+export type Difficulty = 'easy' | 'medium' | 'hard' | 'veryhard';
 /** Which clues may be used: walls and black tiles, only walls, or only black tiles. */
 export type ClueKind = 'mixed' | 'walls' | 'tiles';
 
@@ -46,10 +46,10 @@ export interface GenResult {
   attempts: number;
 }
 
-export const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
+export const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'veryhard'];
 
 /** A sensible default size for each difficulty. */
-export const DEFAULT_SIZE: Record<Difficulty, number> = { easy: 5, medium: 6, hard: 7 };
+export const DEFAULT_SIZE: Record<Difficulty, number> = { easy: 5, medium: 6, hard: 7, veryhard: 7 };
 
 const MAX_ATTEMPTS = 400;
 /** Search budget for each uniqueness check. */
@@ -72,10 +72,10 @@ export function randomSeed(): number {
 }
 
 /** Whether repeatedly applying `rules` solves the puzzle. */
-export function logicSolves(p: Puzzle, rules: RuleId[]): boolean {
+export function logicSolves(p: Puzzle, rules: RuleId[], opts: LogicOptions = {}): boolean {
   let state: LogicState = { segments: new Set(), xs: new Set() };
   for (let i = 0; i < 500; i++) {
-    const step = logicStep(p, state, rules);
+    const step = logicStep(p, state, rules, opts);
     if (step.solved) return true;
     if (step.contradiction || (!step.segments.length && !step.xs.length)) return false;
     state = applyStep(state, step);
@@ -86,14 +86,19 @@ export function logicSolves(p: Puzzle, rules: RuleId[]): boolean {
 /** Every rule except Checkerboard balance: what an Easy puzzle may need. */
 export const EASY_RULES: RuleId[] = ALL_RULES.filter((r) => r !== 'balance');
 
+/** Largest Checkerboard balance area (in tiles) a Medium puzzle may need. */
+export const MEDIUM_BALANCE_AREA = 8;
+
 /**
- * Easy: solved without Checkerboard balance. Medium: needs Checkerboard
- * balance. Hard: beyond all the rules.
+ * Easy: solved without Checkerboard balance. Medium: needs it, but only on
+ * areas of up to MEDIUM_BALANCE_AREA tiles. Hard: needs bigger areas. Very
+ * hard: beyond all the rules.
  */
 export function rateDifficulty(p: Puzzle): Difficulty {
   if (logicSolves(p, EASY_RULES)) return 'easy';
-  if (logicSolves(p, ALL_RULES)) return 'medium';
-  return 'hard';
+  if (logicSolves(p, ALL_RULES, { balanceMaxArea: MEDIUM_BALANCE_AREA })) return 'medium';
+  if (logicSolves(p, ALL_RULES)) return 'hard';
+  return 'veryhard';
 }
 
 /**

@@ -180,7 +180,7 @@ export function openLibrarySheet(ctx: LibraryContext): void {
     body.append(list);
 
     // --- Samples, grouped by difficulty ---
-    for (const [level, heading] of [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard']] as const) {
+    for (const [level, heading] of [['easy', 'Easy'], ['medium', 'Medium'], ['hard', 'Hard'], ['veryhard', 'Very hard']] as const) {
       body.append(el('hr', 'sheet-sep'), el('p', 'field-label', `${heading} samples`));
       const samples = el('ul', 'lib-list');
       for (const s of SAMPLES.filter((x) => x.level === level)) {

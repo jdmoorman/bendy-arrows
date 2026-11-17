@@ -240,3 +240,24 @@ describe('sample difficulty', async () => {
     });
   }
 });
+
+describe('hint choice', async () => {
+  const { findHint, deductions } = await import('../src/logic');
+  const { SAMPLES } = await import('../src/samples');
+  const { decodePuzzle } = await import('../src/codec');
+  const { EASY_RULES } = await import('../src/generator');
+  test('among checkerboard deductions, the hint picks the smallest area', () => {
+    let tried = 0;
+    for (const s of SAMPLES.filter((x) => x.level === 'medium')) {
+      const p = decodePuzzle(s.code);
+      // Where the easy rules get stuck, the hint must use Checkerboard balance.
+      const state = runToEnd(p, EASY_RULES).state;
+      const h = findHint(p, state);
+      if (h.kind !== 'deduction' || h.deduction.rule !== 'balance') continue;
+      tried++;
+      const sizes = deductions(p, state, ['balance']).map((d) => d.cells?.length ?? 1);
+      expect(h.deduction.cells?.length, s.name).toBe(Math.min(...sizes));
+    }
+    expect(tried).toBeGreaterThan(5);
+  });
+});

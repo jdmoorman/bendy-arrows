@@ -397,13 +397,10 @@ export class PlayView {
       this.checkRun = null;
       return r.solutions.length ? 'yes' : r.status === 'aborted' ? 'unknown' : 'no';
     };
-    const plural = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
     try {
       const all = await fits(withXs(this.puzzle));
       if (all === 'yes') {
-        const what = [n ? plural(n, 'line', 'lines') : '', x ? plural(x, 'X', "X's") : ''].filter(Boolean).join(' and ');
-        if (n + x === 1) return show(`Your ${n ? 'line' : 'X'} is correct.`, 'success');
-        return show(`Your ${what} are all correct so far.`, 'success');
+        return show('Looks good so far!', 'success');
       }
       if (all === 'unknown') return show("Couldn't finish checking — this puzzle is too big to check quickly.", '');
       if (!x) return show('Not all of your lines are right.', 'error');

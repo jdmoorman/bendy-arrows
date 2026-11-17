@@ -155,8 +155,9 @@ export class EditorView {
           this.marksStillFit = false;
           this.edit(() => p);
           const kind = { loop: 'loop', path: 'path', checkpoints: 'numbers' }[options.type];
-          const note = difficulty === options.difficulty ? '' : ` (no ${options.difficulty} one turned up, so this is the closest)`;
-          this.setMessage(`Generated a ${difficulty} ${kind} puzzle${note} · seed ${options.seed}`, 'success');
+          const word = (d: string) => (d === 'veryhard' ? 'very hard' : d);
+          const note = difficulty === options.difficulty ? '' : ` (no ${word(options.difficulty)} one turned up, so this is the closest)`;
+          this.setMessage(`Generated a ${word(difficulty)} ${kind} puzzle${note} · seed ${options.seed}`, 'success');
         },
       }),
     );

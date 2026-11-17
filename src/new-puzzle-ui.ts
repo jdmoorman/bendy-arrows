@@ -27,6 +27,7 @@ const DIFFS: [Difficulty, string][] = [
   ['easy', 'Easy'],
   ['medium', 'Medium'],
   ['hard', 'Hard'],
+  ['veryhard', 'Very hard'],
 ];
 const CLUES: [ClueKind, string][] = [
   ['mixed', 'Walls & tiles'],

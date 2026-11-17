@@ -1,12 +1,12 @@
 import { decodePuzzle } from './codec';
 import type { Puzzle } from './model';
 
-export type SampleLevel = 'easy' | 'medium' | 'hard';
+export type SampleLevel = 'easy' | 'medium' | 'hard' | 'veryhard';
 
 /**
  * Built-in puzzles, each with a unique solution. The level is the logic
- * rating: easy without Checkerboard balance, medium with it, hard beyond
- * every rule.
+ * rating (see rateDifficulty): easy without Checkerboard balance, medium
+ * with small balance areas, hard with bigger ones, very hard beyond every rule.
  */
 export const SAMPLES: { level: SampleLevel; name: string; code: string }[] = [
   { level: 'easy', name: 'Path 6×6 · walls & tiles', code: 'BQQGBgASAAkAAEgCAAAAAFQAABI' },
@@ -28,21 +28,31 @@ export const SAMPLES: { level: SampleLevel; name: string; code: string }[] = [
   { level: 'medium', name: 'Path 7×7 · walls & tiles', code: 'BQQHBwAOAAIAAhAAAAAAgAAAAIAAEAUQAA' },
   { level: 'medium', name: 'Path 8×8 · walls', code: 'BQQICAAEAAoAAAAAAAAAAAAJwgBwIQAAhEAAACBA' },
   { level: 'medium', name: 'Loop 6×6 · walls 2', code: 'BQEGBgAAAAAAABIEAAoAIA' },
-  { level: 'medium', name: 'Path 6×6 · walls', code: 'BQQGBgACAA4AAAAAAIAQAAAIgQI' },
+  { level: 'hard', name: 'Path 6×6 · walls', code: 'BQQGBgACAA4AAAAAAIAQAAAIgQI' },
   { level: 'medium', name: 'Numbers 6×6 · walls', code: 'BQgGBgACAAgAAgAAAAAAEAIAAAKAIA' },
   { level: 'medium', name: 'Numbers 7×7 · walls', code: 'BQgHBwAGABYAHwAuABcAEQAAAAAAAAAAAAAEAAiACAIAgAI' },
   { level: 'medium', name: 'Numbers 7×6 · black tiles', code: 'BQgHBgAGACIACQASAAwAEAAdEAACAMAAAAAAAAAAAAAA' },
-  { level: 'hard', name: 'Loop 8×8 · walls', code: 'BQEICAAAAAAAAAAAAAQIgAMQAQQgBAYEICo' },
-  { level: 'hard', name: 'Loop 8×8 · walls 2', code: 'BQEICAAAAAAAAAAAgAAAQQASAEQgAkxABCA' },
-  { level: 'hard', name: 'Loop 7×8 · walls', code: 'BQEHCAAAAAAAAAACCCAaAAMABCEAYAAA' },
-  { level: 'hard', name: 'Loop 7×7 · walls & tiles', code: 'BQEHBwMAQAAAAAAEgAABAAAhgAAC' },
-  { level: 'hard', name: 'Path 7×7 · walls', code: 'BQQHBwACAAsAAAAAAAAAhBQAEAAALAAABA' },
+  { level: 'hard', name: 'Loop 8×8 · walls', code: 'BQEICAAAAAAAAAAAgAAAQQASAEQgAkxABCA' },
+  { level: 'hard', name: 'Loop 7×8 · walls 2', code: 'BQEHCAAAAAAAAAACCCAaAAMABCEAYAAA' },
+  { level: 'medium', name: 'Path 7×7 · walls', code: 'BQQHBwACAAsAAAAAAAAAhBQAEAAALAAABA' },
   { level: 'hard', name: 'Path 7×7 · walls 2', code: 'BQQHBwANABIAAAAAAAAIQMAECwAQAQAAAA' },
-  { level: 'hard', name: 'Path 8×8 · walls', code: 'BQQICAAKAA0AAAAAAAAAAABFKQCBCAAAIAgABEFI' },
+  { level: 'hard', name: 'Path 8×8 · walls 2', code: 'BQQICAAKAA0AAAAAAAAAAABFKQCBCAAAIAgABEFI' },
   { level: 'hard', name: 'Path 7×7 · walls 3', code: 'BQQHBwAJABkAAAAAAAAAKAAEAABgMCoABg' },
-  { level: 'hard', name: 'Numbers 7×6 · walls & tiles', code: 'BQgHBgAFACcAEAAaABwACwAAAAEAAAAAAAAAAABAAA' },
-  { level: 'hard', name: 'Numbers 7×7 · walls', code: 'BQgHBwAIACgACgALABcAGAAPACYAHgAAAAAAAAAIAEAAICAAAAAA' },
-  { level: 'hard', name: 'Numbers 8×8 · black tiles', code: 'BQgICAAIAB0ACQAVACYAOwAlADIABABAAAYADAAAAAAAAAAAAAAAAAAAAAA' },
+  { level: 'veryhard', name: 'Loop 8×8 · walls', code: 'BQEICAAAAAAAAAAAAAQIgAMQAQQgBAYEICo' },
+  { level: 'veryhard', name: 'Loop 7×7 · walls & tiles', code: 'BQEHBwMAQAAAAAAEgAABAAAhgAAC' },
+  { level: 'veryhard', name: 'Loop 8×8 · walls 2', code: 'BQEICAAAAAAAAAAAiIBCJEABBEAARAAYAAA' },
+  { level: 'veryhard', name: 'Loop 8×8 · walls 3', code: 'BQEICAAAAAAAAAAAAAACAQUBABiBGAQQAhA' },
+  { level: 'veryhard', name: 'Loop 7×8 · walls', code: 'BQEHCAAAAAAAAAAAA0kKAEAAAJCAEAAA' },
+  { level: 'veryhard', name: 'Loop 8×8 · walls 4', code: 'BQEICAAAAAAAAAAAAIghAAIsAAhAMBBUQAA' },
+  { level: 'veryhard', name: 'Loop 7×7 · walls & tiles 2', code: 'BQEHBwAAAAAAQASAAwEBQAAEAAgA' },
+  { level: 'veryhard', name: 'Path 8×8 · walls & tiles', code: 'BQQICAAVABIAAIAAEAAAAAAAIAAwwAACCAQEAAgA' },
+  { level: 'veryhard', name: 'Path 7×7 · walls & tiles', code: 'BQQHBwANABgBAEACAAAACAAACAAAAAABEA' },
+  { level: 'veryhard', name: 'Path 7×7 · walls', code: 'BQQHBwAQAAIAAAAAAAAABBRAAKAQEAoSAA' },
+  { level: 'veryhard', name: 'Path 7×7 · walls 2', code: 'BQQHBwAXAA4AAAAAAAAIICIIAAAAQIoACA' },
+  { level: 'veryhard', name: 'Path 8×8 · walls', code: 'BQQICAATAAMAAAAAAAAAAAAEAAAQEABAAhAAUEQI' },
+  { level: 'veryhard', name: 'Numbers 7×6 · walls & tiles', code: 'BQgHBgAFACcAEAAaABwACwAAAAEAAAAAAAAAAABAAA' },
+  { level: 'veryhard', name: 'Numbers 7×7 · walls', code: 'BQgHBwAIACgACgALABcAGAAPACYAHgAAAAAAAAAIAEAAICAAAAAA' },
+  { level: 'veryhard', name: 'Numbers 8×8 · black tiles', code: 'BQgICAAIAB0ACQAVACYAOwAlADIABABAAAYADAAAAAAAAAAAAAAAAAAAAAA' },
 ];
 
 export function samplePuzzle(i = 0): Puzzle {

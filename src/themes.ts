@@ -1,7 +1,7 @@
 /**
  * Colour themes. Every colour in the app comes from one of these CSS custom
  * properties; adding a theme means adding one entry to `THEMES`. Light is the
- * default; dark is kept for a future theme picker.
+ * default; dark is chosen in Settings.
  */
 
 export type ThemeTokens = Record<
@@ -48,9 +48,11 @@ export const THEMES = {
     'accent-text': '#08121c',
     tile: '#1d2230',
     'tile-alt': '#191e2a',
-    'tile-blocked': '#05070a',
+    // Walls and blocked tiles are light, to stand out on dark tiles (the inverse of
+    // the light theme's black); they share a colour so blocks read as solid shapes.
+    'tile-blocked': '#c9cfdb',
     'grid-line': '#2f3749',
-    wall: '#000000',
+    wall: '#c9cfdb',
     path: '#5eb8ff',
     'path-solved': '#5ee0a0',
     'path-edge': '#2f86d6',

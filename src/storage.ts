@@ -42,9 +42,11 @@ export interface Settings {
   showTimer: boolean;
   /** Highlight mistakes (branches, early loops, numbers out of order) as you play. */
   autoCheck: boolean;
+  /** Use the dark colour theme. */
+  darkTheme: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { checkerboard: true, showTimer: false, autoCheck: true };
+export const DEFAULT_SETTINGS: Settings = { checkerboard: true, showTimer: false, autoCheck: true, darkTheme: false };
 
 export interface KeyValueStore {
   getItem(key: string): string | null;

@@ -1,4 +1,4 @@
-import { cellCount, cellEdges, edgeCells, edgeCount, endpointCells, isHorizontalEdge, isUsableEdge, modeOf, openCells, type Puzzle } from './model';
+import { cellCount, cellEdges, edgeCells, edgeCount, endpointCells, isHorizontalEdge, isUsableEdge, modeOf, neighbors, openCells, type Puzzle } from './model';
 
 /**
  * Simple, local deduction rules for the editor's logic helper. A "step"
@@ -134,7 +134,12 @@ function fullTileBorders(p: Puzzle, state: LogicState, need: Int8Array): Set<num
 }
 
 /** Everything the rules can conclude from a state (each deduction is new). */
-function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>): Analysis {
+export interface LogicOptions {
+  /** Only use Checkerboard balance on areas of at most this many tiles. */
+  balanceMaxArea?: number;
+}
+
+function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: LogicOptions = {}): Analysis {
   const need = needs(p);
   if (!need) return { kind: 'unknown' };
   const open = openCells(p);
@@ -169,16 +174,22 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>): Analysis {
     deductions.push(...joinRules(p, state, need, closed, open.length, enabled));
   }
   if (enabled.has('bottlenecks') || enabled.has('balance')) {
-    const found = areaRules(p, state, need, closed, enabled);
+    const found = areaRules(p, state, need, closed, enabled, opts.balanceMaxArea ?? Infinity);
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
   }
   return { kind: 'open', deductions };
 }
 
-export function logicStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>): StepResult {
-  const result: StepResult = { segments: [], xs: [], byRule: {}, solved: false };
+/** Every deduction the rules make from a state (empty if stuck, solved or contradictory). */
+export function deductions(p: Puzzle, state: LogicState, rules: Iterable<RuleId>): Deduction[] {
   const an = analyse(p, state, new Set(rules));
+  return an.kind === 'open' ? an.deductions : [];
+}
+
+export function logicStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>, opts: LogicOptions = {}): StepResult {
+  const result: StepResult = { segments: [], xs: [], byRule: {}, solved: false };
+  const an = analyse(p, state, new Set(rules), opts);
   if (an.kind === 'unknown') return result;
   if (an.kind === 'contradiction') {
     const { kind: _, ...c } = an;
@@ -239,10 +250,15 @@ export function findHint(p: Puzzle, state: LogicState): Hint {
   if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
   if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
   for (const rule of HINT_ORDER) {
-    const d = an.deductions.filter((x) => x.rule === rule).sort((a, b) => a.cell - b.cell)[0];
+    // Within a rule, the simplest: the smallest area, then the fewest marks, then top-left first.
+    const size = (x: Deduction) => x.cells?.length ?? 1;
+    const marks = (x: Deduction) => x.segments.length + x.xs.length;
+    const d = an.deductions
+      .filter((x) => x.rule === rule)
+      .sort((a, b) => size(a) - size(b) || marks(a) - marks(b) || a.cell - b.cell)[0];
     if (d) return { kind: 'deduction', deduction: d, text: explain(p, state, d) };
   }
-  return { kind: 'none', text: 'No hint available — none of the simple rules apply here. Time for some deeper thinking!' };
+  return { kind: 'none', text: 'No hint available.' };
 }
 
 const DIR_NAMES = (p: Puzzle, cell: number, e: number): string => {
@@ -435,7 +451,7 @@ function joinRules(p: Puzzle, state: LogicState, need: Int8Array, closed: Set<nu
  * Bridges of the graph of open tiles and open borders (ignoring `skip`): the
  * borders whose removal splits it.
  */
-function bridges(n: number, cells: number[], adj: number[][], other: (e: number, c: number) => number, skip: number): number[] {
+function bridges(n: number, cells: number[], adj: number[][], other: (e: number, c: number) => number, skip: number, skip2 = -1): number[] {
   const disc = new Int32Array(n).fill(-1);
   const low = new Int32Array(n);
   const out: number[] = [];
@@ -455,7 +471,7 @@ function bridges(n: number, cells: number[], adj: number[][], other: (e: number,
       const es = adj[v];
       if (stackIdx[top] < es.length) {
         const e = es[stackIdx[top]++];
-        if (e === skip || e === stackEdge[top]) continue;
+        if (e === skip || e === skip2 || e === stackEdge[top]) continue;
         const w = other(e, v);
         if (disc[w] < 0) {
           disc[w] = low[w] = t++;
@@ -484,12 +500,21 @@ const MAX_CUTS = 4000;
 const SMALL_BOARD = 100;
 /** On bigger boards, rectangles up to this many tiles (and full-width or full-height strips). */
 const RECT_AREA = 24;
+/** Largest "room" grown from a tile for Checkerboard balance. */
+const GROW_AREA = 30;
 
 /**
  * Rules about areas of the board: the borders into an area (bottlenecks),
  * and its count of shaded and white tiles (checkerboard balance).
  */
-function areaRules(p: Puzzle, state: LogicState, need: Int8Array, closed: Set<number>, enabled: Set<RuleId>): Deduction[] | Contradiction {
+function areaRules(
+  p: Puzzle,
+  state: LogicState,
+  need: Int8Array,
+  closed: Set<number>,
+  enabled: Set<RuleId>,
+  balanceMaxArea: number,
+): Deduction[] | Contradiction {
   const n = cellCount(p);
   const cells = openCells(p);
   if (cells.length < 2) return [];
@@ -561,7 +586,7 @@ function areaRules(p: Puzzle, state: LogicState, need: Int8Array, closed: Set<nu
    * The path must also cross at least once (twice when the count is even).
    */
   const balance = (area: number[]): Contradiction | null => {
-    if (area.length < 2 || area.length >= cells.length) return null;
+    if (area.length < 2 || area.length >= cells.length || area.length > balanceMaxArea) return null;
     const inArea = new Set(area);
     let diff = 0;
     let endS = 0;
@@ -729,6 +754,65 @@ function areaRules(p: Puzzle, state: LogicState, need: Int8Array, closed: Set<nu
           }
         }
       }
+    }
+    // ...and, on small boards, for every area cut off by exactly three borders.
+    if (cells.length <= SMALL_BOARD) {
+      const seen3 = new Set<string>();
+      for (let i = 0; i < edges.length; i++) {
+        const f = edges[i];
+        if (isBridge.has(f)) continue;
+        for (let j = i + 1; j < edges.length; j++) {
+          const g = edges[j];
+          if (isBridge.has(g)) continue;
+          for (const h of bridges(n, cells, adj, other, f, g)) {
+            if (isBridge.has(h)) continue;
+            const key = [f, g, h].sort((a, b) => a - b).join(',');
+            if (seen3.has(key)) continue;
+            seen3.add(key);
+            const side = sideOf([f, g, h]);
+            if (!side) continue;
+            const bad = balance(side);
+            if (bad) return bad;
+          }
+        }
+      }
+    }
+    // ...and for "rooms": from each tile, grow an area one tile at a time, always adding
+    // the neighbour that leaves the fewest open borders out of it (so it follows walls,
+    // X marks and drawn lines), trying the balance at every size.
+    const maxGrow = Math.min(GROW_AREA, Math.floor(cells.length / 2));
+    const isOpenBorder = (e: number) => !state.segments.has(e); // within `adj`: usable, not X, not closed
+    const inArea = new Uint8Array(n);
+    for (const seed of cells) {
+      const area = [seed];
+      inArea[seed] = 1;
+      for (let size = 1; size < maxGrow; size++) {
+        let best = -1;
+        let bestDelta = Infinity;
+        let bestTouch = -1;
+        for (const t of area) {
+          for (const m of neighbors(p, t)) {
+            if (inArea[m] || p.blocked.has(m)) continue;
+            let delta = 0;
+            for (const e of adj[m]) if (isOpenBorder(e)) delta += inArea[other(e, m)] ? -1 : 1;
+            const touch = neighbors(p, m).filter((x) => inArea[x]).length;
+            if (delta < bestDelta || (delta === bestDelta && (touch > bestTouch || (touch === bestTouch && m < best)))) {
+              best = m;
+              bestDelta = delta;
+              bestTouch = touch;
+            }
+          }
+        }
+        if (best < 0) break;
+        area.push(best);
+        inArea[best] = 1;
+        const bad = balance(area);
+        if (bad) {
+          for (const t of area) inArea[t] = 0;
+          return bad;
+        }
+      }
+      for (const t of area) inArea[t] = 0;
     }
   }
   return out;
