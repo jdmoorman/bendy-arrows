@@ -21,7 +21,7 @@ import {
   type Puzzle,
 } from './model';
 import { padFor, renderBoard } from './render';
-import { ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, RULES, rulesFor, runLogic, type AreaSource, type LogicOptions, type LogicState, type RuleId } from './logic';
+import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, RULES, rulesFor, runLogic, type AreaSource, type LogicOptions, type LogicState, type RuleId } from './logic';
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
@@ -30,7 +30,6 @@ import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from 
 type Tool = 'tiles' | 'walls' | 'ends' | 'checkpoints';
 
 /** Rules listed on their own in the Rules sheet; the rest are grouped as the easy rules. */
-const ADVANCED_RULES: RuleId[] = ['bottlenecks', 'balance', 'trial'];
 
 const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends', checkpoints: 'cells' };
 const TOOL_HINT: Record<Tool, string> = {
@@ -134,7 +133,8 @@ export class EditorView {
           <button class="btn" data-act="transform" aria-label="Size, rotate and flip" title="Size, rotate and flip">${ICONS.transform}</button>
           <button class="btn primary" data-act="play">${ICONS.play}<span>Play</span></button>
         </div>
-      </div>`;
+      </div>
+      <div class="board-info"></div>`;
     this.svg = this.el.querySelector('svg')!;
     this.status = this.el.querySelector('.status')!;
     this.undoBtn = this.el.querySelector('[data-act=undo]')!;
@@ -274,7 +274,7 @@ export class EditorView {
     this.logicFocus = new Set(d.cells ?? [d.cell]);
     this.logicSteps++;
     const label = RULES.find((r) => r.id === d.rule)?.label ?? d.rule;
-    this.logicNote = `Step ${this.logicSteps} · ${label}: ${hint.text}`;
+    this.logicNote = `Step ${this.logicSteps} · ${label}`;
     this.render();
   }
 

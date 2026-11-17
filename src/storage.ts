@@ -38,6 +38,7 @@ const TABLE_KEY = 'hamiltonian.libtable.v1';
 const RATINGS_KEY = 'hamiltonian.ratings.v1';
 const HIDDEN_KEY = 'hamiltonian.hiddensamples.v1';
 const SHOW_SOLUTION_KEY = 'hamiltonian.showsolution.v1';
+const HINTS_INLINE_KEY = 'hamiltonian.hintsinline.v1';
 
 /** Per-device display preferences. */
 export interface Settings {
@@ -192,6 +193,15 @@ export class Storage {
 
   saveShowSolution(on: boolean): void {
     this.write(SHOW_SOLUTION_KEY, on);
+  }
+
+  /** Whether the editor's hint list sits on one line beside the difficulty (else a list under it). */
+  loadHintsInline(): boolean {
+    return this.read<unknown>(HINTS_INLINE_KEY, false) === true;
+  }
+
+  saveHintsInline(on: boolean): void {
+    this.write(HINTS_INLINE_KEY, on);
   }
 
   /** Codes of built-in samples deleted from this device's library. */

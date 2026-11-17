@@ -433,3 +433,26 @@ describe('three-border cuts by labels', async () => {
     }
   });
 });
+
+describe('hintJourney', async () => {
+  const { hintJourney, ADVANCED_RULES } = await import('../src/logic');
+  const { decodePuzzle } = await import('../src/codec');
+  const { SAMPLES } = await import('../src/samples');
+  test('only advanced rules appear, and every sample short of very hard gets solved', () => {
+    for (const s of SAMPLES.filter((x) => !x.group && x.level !== 'veryhard')) {
+      const j = hintJourney(decodePuzzle(s.code));
+      expect(j.outcome, s.name).toBe('solved');
+      for (const step of j.steps) expect(ADVANCED_RULES, s.name).toContain(step.rule);
+      // Easy means the easy rules plus Bottlenecks are enough.
+      if (s.level === 'easy') expect(j.steps.every((x) => x.rule === 'bottlenecks'), s.name).toBe(true);
+    }
+  });
+  test('area rules report the size of their area', () => {
+    for (const s of SAMPLES.filter((x) => !x.group && x.level === 'medium')) {
+      for (const step of hintJourney(decodePuzzle(s.code)).steps) {
+        if (step.rule === 'balance' || step.rule === 'bottlenecks') expect(step.area, s.name).toBeGreaterThan(1);
+        else expect(step.area).toBeUndefined();
+      }
+    }
+  });
+});

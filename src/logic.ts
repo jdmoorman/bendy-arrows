@@ -342,6 +342,42 @@ export function runLogic(p: Puzzle, rules: Iterable<RuleId>, start: LogicState =
   return { state, rounds: limit, solved: false };
 }
 
+/** The rules outside the editor's "Easy rules" group. */
+export const ADVANCED_RULES: RuleId[] = ['bottlenecks', 'balance', 'trial'];
+
+/** One hint a player needed: its rule, and for area rules how many tiles the area had. */
+export interface HintStep {
+  rule: RuleId;
+  area?: number;
+}
+
+/**
+ * What solving is like for a player who applies the easy rules until they get stuck, then
+ * asks for a hint, and repeats: the hints they'd need, in order, and whether that finishes
+ * the puzzle or leaves them stuck with no hint to give.
+ */
+export function hintJourney(p: Puzzle): { steps: HintStep[]; outcome: 'solved' | 'stuck' } {
+  const easy = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
+  const steps: HintStep[] = [];
+  let state: LogicState = { segments: new Set(), xs: new Set() };
+  for (let i = 0; i <= edgeCount(p); i++) {
+    const run = runLogic(p, easy, state);
+    state = run.state;
+    if (run.solved) return { steps, outcome: 'solved' };
+    if (run.contradiction) return { steps, outcome: 'stuck' };
+    // Stuck on the easy rules: take the hint the Hint button would give.
+    const h = findHint(p, state);
+    if (h.kind === 'solved') return { steps, outcome: 'solved' };
+    if (h.kind !== 'deduction') return { steps, outcome: 'stuck' };
+    const d = h.deduction;
+    // Only the area rules report a size (the trial's tiles are just what it highlights).
+    const areaRule = d.rule === 'balance' || d.rule === 'bottlenecks' || d.rule === 'spacing';
+    steps.push(areaRule && d.cells ? { rule: d.rule, area: d.cells.length } : { rule: d.rule });
+    state = applyStep(state, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
+  }
+  return { steps, outcome: 'stuck' };
+}
+
 /** Simplest rules first: the order hints are chosen in. */
 export const HINT_ORDER: RuleId[] = ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'order', 'noSeal', 'bottlenecks', 'balance', 'spacing', 'trial'];
 

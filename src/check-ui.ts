@@ -1,4 +1,8 @@
+import { encodePuzzle } from './codec';
 import type { EditorView } from './editor';
+import type { Difficulty } from './generator';
+import { RULES } from './logic';
+import type { RatingMessage, RatingRequest } from './rating.worker';
 import { solutionUnionInBackground, solveInBackground, type SolverRun, type UnionRun } from './solver-client';
 import type { SolveResult } from './solver';
 import { Storage } from './storage';
@@ -23,6 +27,77 @@ export function attachUniquenessCheck(editor: EditorView): void {
   let timer = 0;
   let last: SolveResult | null = null;
   let showing = storage.loadShowSolution();
+
+  // The difficulty of a unique puzzle, rated in the background, in a chip under the board, with
+  // the hints a player alternating easy rules and hints would need: each rule, and area sizes.
+  const info = document.createElement('div');
+  info.className = 'difficulty hidden';
+  info.setAttribute('role', 'status');
+  // The chip switches the hints between a list under it and one line beside it (cut short).
+  const level = document.createElement('button');
+  level.type = 'button';
+  level.className = 'difficulty-chip';
+  let inline = storage.loadHintsInline();
+  const applyInline = () => {
+    info.classList.toggle('inline', inline);
+    level.setAttribute('aria-pressed', String(inline));
+    level.title = inline ? 'Show the hints as a list' : 'Show the hints on one line';
+  };
+  level.addEventListener('click', () => {
+    inline = !inline;
+    storage.saveHintsInline(inline);
+    applyInline();
+  });
+  const journey = document.createElement('ul');
+  journey.className = 'journey';
+  info.append(level, journey);
+  editor.el.querySelector('.board-info')!.append(info);
+  applyInline();
+  let rater: Worker | null = null;
+  const NAMES: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', veryhard: 'Very hard' };
+  const stopRating = () => {
+    rater?.terminate();
+    rater = null;
+    info.classList.add('hidden');
+  };
+  const rate = () => {
+    stopRating();
+    if (last?.status !== 'unique') return;
+    level.textContent = 'Rating…';
+    level.dataset.level = '';
+    journey.replaceChildren();
+    info.setAttribute('aria-label', 'Rating the difficulty');
+    info.classList.remove('hidden');
+    const worker = new Worker(new URL('./rating.worker.ts', import.meta.url), { type: 'module' });
+    rater = worker;
+    worker.onmessage = (ev: MessageEvent<RatingMessage>) => {
+      if (rater !== worker) return;
+      worker.terminate();
+      rater = null;
+      const d = ev.data.rating.difficulty;
+      if (!d) return info.classList.add('hidden');
+      level.textContent = NAMES[d];
+      level.dataset.level = d;
+      const j = ev.data.journey;
+      const stuck = j?.outcome === 'stuck';
+      const steps = (j?.steps ?? []).map((s) => {
+        const label = RULES.find((r) => r.id === s.rule)?.label ?? s.rule;
+        return s.area ? `${label} (${s.area} tiles)` : label;
+      });
+      // One bullet per hint, in order; a lone line when no hints are needed.
+      const items = !j ? [] : steps.length ? [...steps, ...(stuck ? ['Stuck'] : [])] : [stuck ? 'Stuck' : 'Easy rules alone'];
+      journey.replaceChildren(
+        ...items.map((text) => {
+          const li = document.createElement('li');
+          li.textContent = text;
+          return li;
+        }),
+      );
+      journey.classList.toggle('plain', !!j && !steps.length);
+      info.setAttribute('aria-label', `Difficulty: ${NAMES[d]}. ${items.join(', ')}`);
+    };
+    worker.postMessage({ codes: [encodePuzzle(editor.current)], journey: true } satisfies RatingRequest);
+  };
 
   const setChip = (state: 'checking' | 'unique' | 'none' | 'multiple' | 'aborted', label: string) => {
     chip.dataset.state = state;
@@ -78,6 +153,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
       last = r;
       refreshChip();
       overlay();
+      rate();
     } catch (err) {
       if (run !== thisRun) return;
       run = null;
@@ -94,6 +170,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
     last = null;
     editor.showGhost(null);
     editor.suggestWall(null);
+    stopRating();
     refreshChip();
     clearTimeout(timer);
     timer = window.setTimeout(start, DEBOUNCE_MS);
