@@ -1,10 +1,11 @@
-import { ALL_RULES, applyStep, logicStep, type LogicOptions, type LogicState, type RuleId } from './logic';
+import { ALL_RULES, applyStep, fastStep, type LogicOptions, type LogicState, type RuleId } from './logic';
 import {
   cellCount,
   cellRC,
   createPuzzle,
   edgeBetween,
   edgeCells,
+  edgeCount,
   neighbors,
   openCells,
   orientEnds,
@@ -85,8 +86,9 @@ export function randomSeed(): number {
 /** Whether repeatedly applying `rules` solves the puzzle. */
 export function logicSolves(p: Puzzle, rules: RuleId[], opts: LogicOptions = {}): boolean {
   let state: LogicState = { segments: new Set(), xs: new Set() };
-  for (let i = 0; i < 500; i++) {
-    const step = logicStep(p, state, rules, opts);
+  // Every round adds a mark, so there can't be more rounds than borders.
+  for (let i = 0; i <= edgeCount(p); i++) {
+    const step = fastStep(p, state, rules, opts);
     if (step.solved) return true;
     if (step.contradiction || (!step.segments.length && !step.xs.length)) return false;
     state = applyStep(state, step);

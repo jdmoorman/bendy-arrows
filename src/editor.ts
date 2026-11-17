@@ -21,7 +21,7 @@ import {
   type Puzzle,
 } from './model';
 import { padFor, renderBoard } from './render';
-import { ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, RULES, rulesFor, type AreaSource, type LogicOptions, type LogicState, type RuleId } from './logic';
+import { ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, RULES, rulesFor, runLogic, type AreaSource, type LogicOptions, type LogicState, type RuleId } from './logic';
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
@@ -289,27 +289,27 @@ export class EditorView {
     }
     const rules = [...this.logicRules].filter((r) => !ADVANCED_RULES.includes(r));
     const before = { logic: this.logic, steps: this.logicSteps };
-    const fresh = new Set<number>();
-    let hint = findHint(p, this.logic, rules, this.logicOpts);
-    for (let i = 0; hint.kind === 'deduction' && i < 5000; i++) {
-      const d = hint.deduction;
-      this.logic = applyStep(this.logic, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
-      for (const e of [...d.segments, ...d.xs]) fresh.add(e);
+    // Speed matters here, not the order a hint would pick: run the easy rules to the end.
+    const run = runLogic(p, rules, this.logic, this.logicOpts);
+    const fresh = new Set([...run.state.segments, ...run.state.xs].filter((e) => !this.logic.segments.has(e) && !this.logic.xs.has(e)));
+    const lines = [...run.state.segments].filter((e) => !this.logic.segments.has(e)).length;
+    const xs = fresh.size - lines;
+    if (fresh.size) {
+      // The whole fast forward counts as one step, so Back undoes it in one go.
+      this.logicHistory.push(before);
+      this.logic = run.state;
       this.logicSteps++;
-      hint = findHint(p, this.logic, rules, this.logicOpts);
     }
-    const taken = this.logicSteps - before.steps;
-    if (taken) this.logicHistory.push(before);
     this.clearMessage();
     this.logicFresh = fresh;
     this.logicFocus = new Set();
-    this.logicBad = hint.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
-    const steps = `${taken} step${taken === 1 ? '' : 's'}`;
-    if (hint.kind === 'mistake') this.setMessage(`Contradiction: ${hint.text} This puzzle has no solution.`, 'error');
-    else if (hint.kind === 'solved') this.setMessage(`Solved by logic in ${this.logicSteps} step${this.logicSteps === 1 ? '' : 's'}!`, 'success');
+    const c = run.contradiction;
+    this.logicBad = c ? (c.cells ?? [c.cell]) : [];
+    const added = [lines ? `+${lines} line${lines === 1 ? '' : 's'}` : '', xs ? `+${xs} X` : ''].filter(Boolean).join(', ');
+    if (c) this.setMessage(`Contradiction: ${c.reason} This puzzle has no solution.`, 'error');
+    else if (run.solved) this.setMessage(`Fast forward: ${added ? added + ', and ' : ''}the easy rules solve it!`, 'success');
     else {
-      this.logicNote =
-        taken ? `Fast forward: ${steps}, up to step ${this.logicSteps}. The easy rules find nothing more.` : 'The easy rules find nothing more.';
+      this.logicNote = fresh.size ? `Fast forward: ${added}. The easy rules find nothing more.` : 'The easy rules find nothing more.';
       this.render();
     }
   }
@@ -426,7 +426,6 @@ export class EditorView {
         enabled: [...this.logicRules],
         known: ALL_RULES,
         auto: this.autoLogic,
-        stopRoomsAtTies: this.logicOpts.stopRoomsAtTies,
         // Saved as the ones switched off, so a newly added kind of area starts on.
         areaSourcesOff: AREA_SOURCES.filter((x) => !(this.logicOpts.areaSources ?? AREA_SOURCES).includes(x)),
       });
@@ -530,18 +529,6 @@ export class EditorView {
             save();
             render();
           });
-          if (src === 'rooms' && sources.has('rooms')) {
-            switchRow(
-              'Stop rooms at a tie',
-              'On: a room stops growing when two tiles are equally good to add. Off: it is grown every way the board could be turned or mirrored.',
-              this.logicOpts.stopRoomsAtTies === true,
-              (on) => {
-                this.logicOpts = { ...this.logicOpts, stopRoomsAtTies: on };
-                save();
-              },
-              'sub-rule',
-            );
-          }
         }
       }
     };
@@ -759,7 +746,6 @@ export class EditorView {
 const AREA_SOURCE_TEXT: Record<AreaSource, [string, string]> = {
   cuts: ['Cut off by one or two borders', 'Areas joined to the rest of the board by only one or two open borders.'],
   cuts3: ['Cut off by three borders', 'Areas joined to the rest of the board by exactly three open borders (on boards of up to 100 tiles). Slow to find, so only used when nothing else applies.'],
-  empty: ['Empty areas', 'Each connected group of tiles that has no lines yet.'],
   rects: ['Rectangles', 'Every rectangle of tiles (on boards over 100 tiles, those of up to 24 tiles, plus strips running all the way across).'],
   rooms: ['Rooms', 'Grown one tile at a time from each tile, following walls and X marks, up to 30 tiles.'],
 };
@@ -769,7 +755,7 @@ function loadLogicOptions(storage: Storage): LogicOptions {
   const saved = storage.loadLogicRules();
   const off = new Set(saved?.areaSourcesOff ?? []);
   const sources = AREA_SOURCES.filter((x) => !off.has(x));
-  return { stopRoomsAtTies: saved?.stopRoomsAtTies === true, areaSources: sources.length < AREA_SOURCES.length ? sources : undefined };
+  return { areaSources: sources.length < AREA_SOURCES.length ? sources : undefined };
 }
 
 function loadRuleChoice(storage: Storage): Set<RuleId> {

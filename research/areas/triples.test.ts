@@ -12,7 +12,7 @@ import { outPath, record } from '../out';
 const NAME = 'areas/triples.txt';
 const ORDER = ['easy', 'medium', 'hard', 'veryhard'];
 const SHORT: Record<string, string> = { easy: 'E', medium: 'M', hard: 'H', veryhard: 'VH' };
-const KINDS: Record<string, AreaSource[]> = { rooms: ['rooms'], cuts: ['cuts', 'cuts3'], empty: ['empty'], rects: ['rects'] };
+const KINDS: Record<string, AreaSource[]> = { rooms: ['rooms'], cuts: ['cuts', 'cuts3'], rects: ['rects'] };
 
 test('groups of three with rooms', () => {
   writeFileSync(outPath(NAME), 'cuts = areas cut off by one, two or three borders\n');

@@ -268,7 +268,7 @@ describe('hint choice', async () => {
   const { SAMPLES } = await import('../src/samples');
   const { decodePuzzle } = await import('../src/codec');
   const { EASY_RULES } = await import('../src/generator');
-  test('among checkerboard deductions, the hint picks the smallest area', () => {
+  test('among checkerboard deductions, the hint picks the fewest exits, then the smallest area', () => {
     let tried = 0;
     for (const s of SAMPLES.filter((x) => !x.group && x.level === 'medium')) {
       const p = decodePuzzle(s.code);
@@ -277,8 +277,11 @@ describe('hint choice', async () => {
       const h = findHint(p, state);
       if (h.kind !== 'deduction' || h.deduction.rule !== 'balance') continue;
       tried++;
-      const sizes = deductions(p, state, ['balance']).map((d) => d.cells?.length ?? 1);
-      expect(h.deduction.cells?.length, s.name).toBe(Math.min(...sizes));
+      const all = deductions(p, state, ['balance']);
+      const fewest = Math.min(...all.map((d) => d.exits!));
+      expect(h.deduction.exits, s.name).toBe(fewest);
+      const smallest = Math.min(...all.filter((d) => d.exits === fewest).map((d) => d.cells!.length));
+      expect(h.deduction.cells?.length, s.name).toBe(smallest);
     }
     expect(tried).toBeGreaterThan(5);
   });
@@ -355,18 +358,6 @@ describe('orientation', async () => {
   }, 30000);
 });
 
-describe('stopRoomsAtTies', async () => {
-  const { runLogic } = await import('../src/logic');
-  const { decodePuzzle } = await import('../src/codec');
-  const { RATING_RULES } = await import('../src/generator');
-  const { SAMPLES } = await import('../src/samples');
-  test('rooms that stop at a tie find less: Loop 8×8 · walls needs the full rooms', () => {
-    const p = decodePuzzle(SAMPLES.find((s) => s.name === 'Loop 8×8 · walls' && s.level === 'hard')!.code);
-    expect(runLogic(p, RATING_RULES).solved).toBe(true);
-    expect(runLogic(p, RATING_RULES, undefined, { stopRoomsAtTies: true }).solved).toBe(false);
-  }, 60000);
-});
-
 describe('deduction areas', async () => {
   const { deductions } = await import('../src/logic');
   const { decodePuzzle } = await import('../src/codec');
@@ -395,7 +386,7 @@ describe('area sources', async () => {
   const draws = (opts: object) => deductions(p, empty(), ['balance'], opts).some((d) => d.segments.includes(target));
   test('switching off rooms loses an area only rooms find', () => {
     expect(draws({})).toBe(true);
-    expect(draws({ areaSources: ['cuts', 'empty', 'rects'] })).toBe(false);
+    expect(draws({ areaSources: ['cuts', 'cuts3', 'rects'] })).toBe(false);
     expect(draws({ areaSources: [] })).toBe(false);
   });
   test('switching off cut-off areas leaves Bottlenecks alone', () => {
@@ -419,6 +410,26 @@ describe('three-border cuts', async () => {
       const without = deductions(p, empty(), ALL_RULES, { areaSources: noCuts3 });
       // Whenever anything else applies, the 3-border search adds nothing.
       if (without.length) expect(all.length, s.name).toBe(without.length);
+    }
+  });
+});
+
+describe('three-border cuts by labels', async () => {
+  const { deductions } = await import('../src/logic');
+  const { decodePuzzle } = await import('../src/codec');
+  const { EASY_RULES } = await import('../src/generator');
+  const { SAMPLES } = await import('../src/samples');
+  const marks = (d: { segments: number[]; xs: number[] }) => JSON.stringify([[...d.segments].sort((a, b) => a - b), [...d.xs].sort((a, b) => a - b)]);
+  test('find the same marks as the original search', () => {
+    for (const s of SAMPLES.filter((x) => !x.group).slice(0, 8)) {
+      const p = decodePuzzle(s.code);
+      for (const state of [empty(), runToEnd(p, EASY_RULES).state]) {
+        // The search also re-finds 2-border areas; those belong to the other source.
+        const two = new Set(deductions(p, state, ['balance'], { areaSources: ['cuts'] }).map(marks));
+        const get = (threeCuts: 'labels' | 'search') =>
+          [...new Set(deductions(p, state, ['balance'], { areaSources: ['cuts3'], threeCuts }).map(marks))].filter((k) => !two.has(k)).sort();
+        expect(get('labels'), s.name).toEqual(get('search'));
+      }
     }
   });
 });

@@ -140,6 +140,8 @@ export interface Deduction {
   why?: string;
   /** How big the application is, for picking the simplest hint, when there is no area. */
   size?: number;
+  /** Borders out of the area the path can still cross (open or already drawn), for picking the simplest hint. */
+  exits?: number;
 }
 
 type Analysis =
@@ -164,19 +166,19 @@ function fullTileBorders(p: Puzzle, state: LogicState, need: Int8Array): Set<num
 
 /** Everything the rules can conclude from a state (each deduction is new). */
 /** Where Checkerboard balance and Number crossings look for areas to check. */
-export type AreaSource = 'cuts' | 'cuts3' | 'empty' | 'rects' | 'rooms';
-export const AREA_SOURCES: AreaSource[] = ['cuts', 'cuts3', 'empty', 'rects', 'rooms'];
+export type AreaSource = 'cuts' | 'cuts3' | 'rects' | 'rooms';
+export const AREA_SOURCES: AreaSource[] = ['cuts', 'cuts3', 'rects', 'rooms'];
 
 export interface LogicOptions {
   /** Only use Checkerboard balance on areas of at most this many tiles. */
   balanceMaxArea?: number;
-  /**
-   * Stop growing a room at its first tie (two neighbours equally good), instead of
-   * growing it each way the board could be turned or mirrored.
-   */
-  stopRoomsAtTies?: boolean;
   /** Which kinds of area to check (all of them if missing). */
   areaSources?: AreaSource[];
+  /**
+   * How to find areas cut off by three borders: 'labels' (fast, the default) or the
+   * original 'search', kept to check the two agree.
+   */
+  threeCuts?: 'labels' | 'search';
 }
 
 function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: LogicOptions = {}): Analysis {
@@ -216,17 +218,16 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
   if (enabled.has('noSeal')) deductions.push(...sealingEdges(p, state, need, closed));
   const sources = new Set(opts.areaSources ?? AREA_SOURCES);
   const maxArea = opts.balanceMaxArea ?? Infinity;
-  const stopAtTies = opts.stopRoomsAtTies ?? false;
   if (enabled.has('bottlenecks') || enabled.has('balance') || enabled.has('spacing')) {
     // Areas cut off by three borders are slow to find, so they wait for the pass below.
-    const found = areaRules(p, state, need, closed, enabled, maxArea, stopAtTies, new Set([...sources].filter((x) => x !== 'cuts3')));
+    const found = areaRules(p, state, need, closed, enabled, maxArea, new Set([...sources].filter((x) => x !== 'cuts3')));
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
   }
   // Last resort before the trial: areas cut off by three borders, only when nothing else applies.
   if ((enabled.has('balance') || enabled.has('spacing')) && sources.has('cuts3') && !deductions.length) {
     const areaOnly = new Set([...enabled].filter((r) => r === 'balance' || r === 'spacing'));
-    const found = areaRules(p, state, need, closed, areaOnly, maxArea, stopAtTies, new Set<AreaSource>(['cuts3']));
+    const found = areaRules(p, state, need, closed, areaOnly, maxArea, new Set<AreaSource>(['cuts3']), opts.threeCuts ?? 'labels');
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
   }
@@ -285,6 +286,37 @@ export function logicStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>,
   return result;
 }
 
+/**
+ * Rules grouped from cheapest to most expensive, for running them to the end quickly.
+ * (Hints use HINT_ORDER instead: there the choice of move matters, here only speed.)
+ */
+const SPEED_TIERS: RuleId[][] = [
+  ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'order'],
+  ['noSeal'],
+  ['bottlenecks', 'balance', 'spacing'],
+  ['trial'],
+];
+
+/**
+ * One round of deductions, cheapest rules first: stop at the first group of rules that
+ * finds anything. Applying cheap moves before computing expensive ones reaches the same
+ * end, since each rule only ever adds marks that hold in every solution.
+ */
+export function fastStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>, opts: LogicOptions = {}): StepResult {
+  const chosen = new Set(rules);
+  const tiered = new Set(SPEED_TIERS.flat());
+  // Rules not in any group (none today) run with the expensive ones, before the trial.
+  const tiers = [...SPEED_TIERS.slice(0, -1), [...chosen].filter((r) => !tiered.has(r)), SPEED_TIERS.at(-1)!];
+  let last: StepResult = { segments: [], xs: [], byRule: {}, solved: false };
+  for (const tier of tiers) {
+    const use = tier.filter((r) => chosen.has(r));
+    if (!use.length) continue;
+    last = logicStep(p, state, use, opts);
+    if (last.contradiction || last.solved || last.segments.length || last.xs.length) return last;
+  }
+  return last;
+}
+
 /** Where running the rules to the end got to. */
 export interface LogicRun {
   state: LogicState;
@@ -298,14 +330,16 @@ export interface LogicRun {
 export function runLogic(p: Puzzle, rules: Iterable<RuleId>, start: LogicState = { segments: new Set(), xs: new Set() }, opts: LogicOptions = {}): LogicRun {
   const chosen = [...rules];
   let state = start;
-  for (let rounds = 0; rounds < 1000; rounds++) {
-    const step = logicStep(p, state, chosen, opts);
+  // Every round adds a mark, so there can't be more rounds than borders.
+  const limit = edgeCount(p) + 1;
+  for (let rounds = 0; rounds < limit; rounds++) {
+    const step = fastStep(p, state, chosen, opts);
     if (step.contradiction) return { state, rounds, solved: false, contradiction: step.contradiction };
     if (step.solved) return { state, rounds, solved: true };
     if (!step.segments.length && !step.xs.length) return { state, rounds, solved: false };
     state = applyStep(state, step);
   }
-  return { state, rounds: 1000, solved: false };
+  return { state, rounds: limit, solved: false };
 }
 
 /** Simplest rules first: the order hints are chosen in. */
@@ -332,12 +366,14 @@ export function findHint(p: Puzzle, state: LogicState, rules: Iterable<RuleId> =
   if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
   if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
   for (const rule of order) {
-    // Within a rule, the simplest: the smallest area (or shortest piece), then the fewest marks, then top-left first.
+    // Within a rule, the simplest: the fewest exits (Checkerboard balance), then the smallest
+    // area (or shortest piece), then the fewest marks, then top-left first.
+    const exits = (x: Deduction) => x.exits ?? 0;
     const size = (x: Deduction) => x.cells?.length ?? x.size ?? 1;
     const marks = (x: Deduction) => x.segments.length + x.xs.length;
     const d = an.deductions
       .filter((x) => x.rule === rule)
-      .sort((a, b) => size(a) - size(b) || marks(a) - marks(b) || a.cell - b.cell)[0];
+      .sort((a, b) => exits(a) - exits(b) || size(a) - size(b) || marks(a) - marks(b) || a.cell - b.cell)[0];
     if (d) return { kind: 'deduction', deduction: d, text: explain(p, state, d) };
   }
   return { kind: 'none', text: 'No hint available.' };
@@ -577,6 +613,94 @@ function bridges(n: number, cells: number[], adj: number[][], other: (e: number,
   return out;
 }
 
+/**
+ * Every set of three borders that cuts the board in two, with no two of them doing so
+ * already (and none a bridge), found with cycle-space labels instead of a search per pair.
+ *
+ * Take a spanning tree. Give each border not in the tree a random label, and each tree
+ * border the XOR of the labels of the non-tree borders whose loops run over it. Every loop
+ * crosses a cut an even number of times, so the labels of a cut's borders XOR to zero: a
+ * bridge has label 0, a 2-cut is two equal labels, and a 3-cut is three labels that XOR to
+ * zero. A chance match among non-cuts is possible (about 1 in 2^53 per pair), so the
+ * caller checks each one.
+ */
+function threeBorderCuts(p: Puzzle, cells: number[], edges: number[], adj: number[][], other: (e: number, c: number) => number): number[][] {
+  const n = cellCount(p);
+  // Spanning tree by breadth-first search (the board is connected by now).
+  const parentEdge = new Int32Array(n).fill(-1);
+  const seen = new Uint8Array(n);
+  const order = [cells[0]];
+  seen[cells[0]] = 1;
+  const inTree = new Set<number>();
+  for (let i = 0; i < order.length; i++) {
+    for (const e of adj[order[i]]) {
+      const m = other(e, order[i]);
+      if (seen[m]) continue;
+      seen[m] = 1;
+      parentEdge[m] = e;
+      inTree.add(e);
+      order.push(m);
+    }
+  }
+  // Labels as two halves (32 + 21 bits, so the pair fits a JS number exactly).
+  let x = 0x2545f491;
+  const rnd = () => {
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    return x >>> 0;
+  };
+  const lo = new Map<number, number>();
+  const hi = new Map<number, number>();
+  const accLo = new Uint32Array(n);
+  const accHi = new Uint32Array(n);
+  for (const e of edges) {
+    if (inTree.has(e)) continue;
+    const l = rnd();
+    const h = rnd() & 0x1fffff;
+    lo.set(e, l);
+    hi.set(e, h);
+    for (const c of edgeCells(p, e)) {
+      accLo[c] ^= l;
+      accHi[c] ^= h;
+    }
+  }
+  // Fold each tile's XOR into its parent, leaves first: what reaches a tree border is its label.
+  for (let i = order.length - 1; i > 0; i--) {
+    const v = order[i];
+    const e = parentEdge[v];
+    lo.set(e, accLo[v] >>> 0);
+    hi.set(e, accHi[v]);
+    const u = other(e, v);
+    accLo[u] ^= accLo[v];
+    accHi[u] ^= accHi[v];
+  }
+  const key = (e: number) => hi.get(e)! * 4294967296 + lo.get(e)!;
+  // Borders by label, leaving out bridges (label 0).
+  const live = edges.filter((e) => key(e) !== 0);
+  const byKey = new Map<number, number[]>();
+  live.forEach((e, i) => {
+    const k = key(e);
+    const list = byKey.get(k);
+    if (list) list.push(i);
+    else byKey.set(k, [i]);
+  });
+  const out: number[][] = [];
+  for (let i = 0; i < live.length; i++) {
+    const a = live[i];
+    for (let j = i + 1; j < live.length; j++) {
+      const b = live[j];
+      const tLo = (lo.get(a)! ^ lo.get(b)!) >>> 0;
+      const tHi = hi.get(a)! ^ hi.get(b)!;
+      if (tLo === 0 && tHi === 0) continue; // a and b already make a 2-cut
+      const ks = byKey.get(tHi * 4294967296 + tLo);
+      if (!ks) continue;
+      for (const k of ks) if (k > j) out.push([a, b, live[k]]);
+    }
+  }
+  return out;
+}
+
 const MAX_CUTS = 4000;
 /** Boards up to this many tiles have Checkerboard balance tried on every rectangle. */
 const SMALL_BOARD = 100;
@@ -596,8 +720,8 @@ function areaRules(
   closed: Set<number>,
   enabled: Set<RuleId>,
   balanceMaxArea: number,
-  stopRoomsAtTies: boolean,
   use: Set<AreaSource>,
+  threeCuts: 'labels' | 'search' = 'labels',
 ): Deduction[] | Contradiction {
   const n = cellCount(p);
   const cells = openCells(p);
@@ -749,6 +873,7 @@ function areaRules(
       rule: 'balance',
       cell: Math.min(...area),
       cells: [...area],
+      exits: sDrawn + wDrawn + sOpen.length + wOpen.length,
       segments: lines,
       xs,
       why: `On the checkerboard, the highlighted area has ${mix}. The path alternates colours${ends}, ${law}.${entry} So it must ${doing.join(' and ')}.`,
@@ -872,22 +997,11 @@ function areaRules(
     }
   }
 
-  // Checkerboard balance for each empty area (tiles with no lines yet).
+  // Checkerboard balance for rectangles of the board: every rectangle on a small board;
+  // on a big one, those of up to RECT_AREA tiles plus the strips that run all the way across.
+  // (Empty areas, the groups of tiles with no lines yet, were dropped: every sample that
+  // needed one was also covered by a cut, rectangle or room.)
   if (enabled.has('balance') || enabled.has('spacing')) {
-    const degree = new Int32Array(n);
-    for (const e of state.segments) for (const c of edgeCells(p, e)) degree[c]++;
-    const empty = new Uint8Array(n);
-    for (const c of cells) if (degree[c] === 0) empty[c] = 1;
-    const done = new Uint8Array(n);
-    for (const c of use.has('empty') ? cells : []) {
-      if (!empty[c] || done[c]) continue;
-      const area = reach(c, [], empty);
-      for (const t of area) done[t] = 1;
-      const bad = checkArea(area);
-      if (bad) return bad;
-    }
-    // ...and for rectangles of the board: every rectangle on a small board; on a big one,
-    // those of up to RECT_AREA tiles plus the strips that run all the way across.
     const small = p.w * p.h <= SMALL_BOARD;
     for (let rh = 1; rh <= (use.has('rects') ? p.h : 0); rh++) {
       for (let rw = 1; rw <= p.w; rw++) {
@@ -904,7 +1018,15 @@ function areaRules(
       }
     }
     // ...and, on small boards, for every area cut off by exactly three borders.
-    if (use.has('cuts3') && cells.length <= SMALL_BOARD) {
+    if (use.has('cuts3') && cells.length <= SMALL_BOARD && threeCuts === 'labels') {
+      for (const cut of threeBorderCuts(p, cells, edges, adj, other)) {
+        const side = sideOf(cut);
+        if (!side) continue; // a chance match of labels, not a real cut
+        const bad = checkArea(side);
+        if (bad) return bad;
+      }
+    }
+    if (use.has('cuts3') && cells.length <= SMALL_BOARD && threeCuts === 'search') {
       const seen3 = new Set<string>();
       for (let i = 0; i < edges.length; i++) {
         const f = edges[i];
@@ -932,7 +1054,7 @@ function areaRules(
     const inArea = new Uint8Array(n);
     // Ties are broken by position. To find the same rooms whichever way the board is
     // turned or mirrored, a room that hits a tie is grown once for each of the 8
-    // reading orders (or, with stopRoomsAtTies, stops growing there).
+    // reading orders.
     const orders: Int32Array[] = [];
     for (const transpose of [false, true]) {
       for (const rDir of [1, -1]) {
@@ -984,7 +1106,7 @@ function areaRules(
       // The first reading order's room; the other orders can only differ after a tie.
       const first: number[] = [];
       let tied = false;
-      for (let o = 0; o < orders.length && (o === 0 || (tied && !stopRoomsAtTies)); o++) {
+      for (let o = 0; o < orders.length && (o === 0 || tied); o++) {
         const rank = orders[o];
         const area = [seed];
         inArea[seed] = 1;
@@ -1019,10 +1141,7 @@ function areaRules(
             }
           }
           if (best < 0) break;
-          if (ties > 0) {
-            if (o === 0) tied = true;
-            if (stopRoomsAtTies) break;
-          }
+          if (ties > 0 && o === 0) tied = true;
           area.push(best);
           inArea[best] = 1;
           join(best, 1);

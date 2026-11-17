@@ -35,9 +35,9 @@ test('who finds the bottom edge', () => {
   for (const [label, p] of [['A (all walls)', A], ['B (two walls)', B]] as const) {
     record(NAME, `===== ${label}\n${draw(p)}`);
     for (const [when, state] of [['empty board', { segments: new Set<number>(), xs: new Set<number>() }], ['after easy rules stall', easyStall(p)]] as const) {
-      for (const opts of [{}, { stopRoomsAtTies: true }] as LogicOptions[]) {
+      for (const opts of [{}] as LogicOptions[]) {
         const ds = deductions(p, state, ['balance'], opts).filter((d) => d.segments.includes(TARGET) || d.xs.includes(TARGET));
-        record(NAME, `-- ${when}, ${opts.stopRoomsAtTies ? 'stop at ties' : 'rooms every way'}: ${state.segments.size} lines, ${state.xs.size} X; ${ds.length} balance deductions draw ${name(p, TARGET)}`);
+        record(NAME, `-- ${when}, rooms every way: ${state.segments.size} lines, ${state.xs.size} X; ${ds.length} balance deductions draw ${name(p, TARGET)}`);
         for (const d of ds.slice(0, 3)) record(NAME, `   area of ${d.cells?.length}: lines ${d.segments.map((e) => name(p, e)).join(' ')} | X ${d.xs.map((e) => name(p, e)).join(' ')}\n   ${d.why}\n${grid(p, d.cells ?? [])}`);
       }
     }
