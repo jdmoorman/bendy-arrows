@@ -9,23 +9,30 @@ import {
   MAX_SIZE,
   MIN_SIZE,
   modeOf,
+  endpointCells,
   openCells,
   endTile,
   endsEqual,
   type End,
   resizePuzzle,
+  transformPuzzle,
+  type Transform,
   type Puzzle,
 } from './model';
 import { padFor, renderBoard } from './render';
+import { ALL_RULES, applyStep, logicStep, RULES, type LogicState, type RuleId } from './logic';
+import { Storage } from './storage';
+import { openSheet } from './ui';
 
-type Tool = 'tiles' | 'walls' | 'ends' | 'checkpoints';
+type Tool = 'tiles' | 'walls' | 'ends' | 'checkpoints' | 'logic';
 
-const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends', checkpoints: 'cells' };
+const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends', checkpoints: 'cells', logic: 'cells' };
 const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
   walls: 'Tap or drag along borders to add walls.',
   ends: 'Tap a dot on the frame to add the entrance, then the exit. With no ends or checkpoints it is a loop.',
   checkpoints: 'Tap tiles to number them 1, 2, 3… The path must run through them in order. Tap a number to remove it.',
+  logic: 'Press Step to apply one round of the chosen simple rules. Press again to keep going.',
 };
 
 const EXCLUSIVE_NOTE = {
@@ -64,6 +71,17 @@ export class EditorView {
   /** Message to show once the current gesture is committed. */
   private note = '';
 
+  // Logic helper state: deductions so far, the latest step's marks, and the chosen rules.
+  private storage = new Storage();
+  private logic: LogicState = { segments: new Set(), xs: new Set() };
+  private logicFresh = new Set<number>();
+  private logicSteps = 0;
+  private logicBad = -1;
+  private logicNote = '';
+  private logicRules = new Set<RuleId>(
+    (new Storage().loadLogicRules() ?? ALL_RULES).filter((r): r is RuleId => ALL_RULES.includes(r as RuleId)),
+  );
+
   constructor() {
     this.el = document.createElement('section');
     this.el.className = 'view editor-view';
@@ -78,7 +96,13 @@ export class EditorView {
             <button class="seg-btn" data-tool="walls">Walls</button>
             <button class="seg-btn" data-tool="ends">Ends</button>
             <button class="seg-btn" data-tool="checkpoints">Checkpoints</button>
+            <button class="seg-btn" data-tool="logic">Logic</button>
           </div>
+        </div>
+        <div class="toolbar-row logic-row hidden">
+          <button class="btn" data-logic="rules">${ICONS.list}<span>Rules</span></button>
+          <button class="btn" data-logic="reset">${ICONS.undo}<span>Reset</span></button>
+          <button class="btn primary" data-logic="step">${ICONS.step}<span>Step</span></button>
         </div>
         <div class="toolbar-row settings-row">
           <label class="size-picker">
@@ -88,6 +112,10 @@ export class EditorView {
             <span class="sr-only">Height</span>
             <select data-size="h" aria-label="Height">${sizeOptions}</select>
           </label>
+          <button class="btn icon-only" data-transform="rotateLeft" aria-label="Rotate left" title="Rotate left">${ICONS.rotateLeft}</button>
+          <button class="btn icon-only" data-transform="rotateRight" aria-label="Rotate right" title="Rotate right">${ICONS.rotateRight}</button>
+          <button class="btn icon-only" data-transform="flipH" aria-label="Flip horizontally" title="Flip horizontally">${ICONS.flipH}</button>
+          <button class="btn icon-only" data-transform="flipV" aria-label="Flip vertically" title="Flip vertically">${ICONS.flipV}</button>
         </div>
         <div class="toolbar-row actions-row">
           <button class="btn" data-act="undo" aria-label="Undo">${ICONS.undo}</button>
@@ -110,12 +138,23 @@ export class EditorView {
       walls: q('[data-tool=walls]'),
       ends: q('[data-tool=ends]'),
       checkpoints: q('[data-tool=checkpoints]'),
+      logic: q('[data-tool=logic]'),
     };
 
     for (const t of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[t].addEventListener('click', () => this.setTool(t));
     const onSize = () => this.edit((p) => resizePuzzle(p, +this.widthSel.value, +this.heightSel.value));
     this.widthSel.addEventListener('change', onSize);
     this.heightSel.addEventListener('change', onSize);
+    q<HTMLButtonElement>('[data-logic=step]').addEventListener('click', () => this.stepLogic());
+    q<HTMLButtonElement>('[data-logic=reset]').addEventListener('click', () => {
+      this.resetLogic();
+      this.clearMessage();
+      this.render();
+    });
+    q<HTMLButtonElement>('[data-logic=rules]').addEventListener('click', () => this.openRulesSheet());
+    for (const b of this.el.querySelectorAll<HTMLButtonElement>('[data-transform]')) {
+      b.addEventListener('click', () => this.edit((p) => transformPuzzle(p, b.dataset.transform as Transform)));
+    }
     this.undoBtn.addEventListener('click', () => this.undo());
     this.redoBtn.addEventListener('click', () => this.redo());
     q<HTMLButtonElement>('[data-act=clear]').addEventListener('click', () =>
@@ -144,10 +183,86 @@ export class EditorView {
 
   load(p: Puzzle): void {
     this.puzzle = clonePuzzle(p);
+    this.resetLogic();
     this.history.clear();
     this.clearMessage();
     this.render();
     for (const fn of this.changeListeners) fn(this.puzzle);
+  }
+
+  // --- Logic helper -------------------------------------------------------
+
+  private resetLogic() {
+    this.logic = { segments: new Set(), xs: new Set() };
+    this.logicFresh = new Set();
+    this.logicSteps = 0;
+    this.logicBad = -1;
+    this.logicNote = '';
+  }
+
+  private stepLogic() {
+    this.clearMessage();
+    const p = this.puzzle;
+    if (modeOf(p) === 'path' && endpointCells(p).length < 2) {
+      this.logicNote = 'Place both ends (or at least two checkpoints) first.';
+      this.render();
+      return;
+    }
+    const step = logicStep(p, this.logic, this.logicRules);
+    this.logicBad = step.contradiction?.cell ?? -1;
+    if (step.contradiction) {
+      this.logicFresh = new Set();
+      this.setMessage(`Contradiction: ${step.contradiction.reason} This puzzle has no solution.`, 'error');
+      return;
+    }
+    if (step.solved) {
+      this.logicFresh = new Set();
+      this.setMessage(`Solved by simple logic in ${this.logicSteps} step${this.logicSteps === 1 ? '' : 's'}!`, 'success');
+      return;
+    }
+    if (!step.segments.length && !step.xs.length) {
+      this.logicFresh = new Set();
+      this.logicNote = this.logicSteps
+        ? `Stuck after ${this.logicSteps} step${this.logicSteps === 1 ? '' : 's'} — the chosen rules find nothing more.`
+        : 'The chosen rules find nothing to fill in.';
+      this.render();
+      return;
+    }
+    this.logic = applyStep(this.logic, step);
+    this.logicFresh = new Set([...step.segments, ...step.xs]);
+    this.logicSteps++;
+    const parts = RULES.filter((r) => step.byRule[r.id]).map((r) => `${r.label.toLowerCase()} ${step.byRule[r.id]}`);
+    const lines = step.segments.length ? `+${step.segments.length} line${step.segments.length === 1 ? '' : 's'}` : '';
+    const xs = step.xs.length ? `+${step.xs.length} X` : '';
+    this.logicNote = `Step ${this.logicSteps}: ${[lines, xs].filter(Boolean).join(', ')} (${parts.join(', ')}).`;
+    this.render();
+  }
+
+  private openRulesSheet() {
+    const body = document.createElement('div');
+    body.className = 'sheet-stack';
+    for (const r of RULES) {
+      const row = document.createElement('label');
+      row.className = 'switch-row';
+      const text = document.createElement('span');
+      text.className = 'switch-text';
+      const small = document.createElement('small');
+      small.textContent = r.hint;
+      text.append(document.createTextNode(r.label), small);
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.className = 'switch';
+      input.setAttribute('role', 'switch');
+      input.checked = this.logicRules.has(r.id);
+      input.addEventListener('change', () => {
+        if (input.checked) this.logicRules.add(r.id);
+        else this.logicRules.delete(r.id);
+        this.storage.saveLogicRules([...this.logicRules]);
+      });
+      row.append(text, input);
+      body.append(row);
+    }
+    openSheet('Logic rules', body);
   }
 
   /** Show a message under the board until the next edit. */
@@ -184,6 +299,8 @@ export class EditorView {
 
   private setTool(t: Tool) {
     this.tool = t;
+    this.el.querySelector('.settings-row')!.classList.toggle('hidden', t === 'logic');
+    this.el.querySelector('.logic-row')!.classList.toggle('hidden', t !== 'logic');
     for (const k of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[k].setAttribute('aria-pressed', String(k === t));
     this.render();
   }
@@ -223,6 +340,7 @@ export class EditorView {
   }
 
   private afterChange() {
+    this.resetLogic();
     this.clearMessage();
     this.render();
     for (const fn of this.changeListeners) fn(this.puzzle);
@@ -248,6 +366,7 @@ export class EditorView {
       if (first) this.toggleCheckpoint(cell);
       return;
     }
+    if (this.tool === 'logic') return; // the board is read-only while using the logic helper
     if (first) this.paintAdd = !p.blocked.has(cell);
     if (this.paintAdd === p.blocked.has(cell)) return;
     if (this.paintAdd) {
@@ -322,11 +441,16 @@ export class EditorView {
 
   render(): void {
     const p = this.puzzle;
+    const logic = this.tool === 'logic';
     renderBoard(this.svg, p, {
       pad: padFor(p, true),
       showBorderTargets: this.tool === 'walls',
       showPortTargets: this.tool === 'ends',
       ghost: this.ghost ?? undefined,
+      segments: logic ? this.logic.segments : undefined,
+      xMarks: logic ? this.logic.xs : undefined,
+      highlight: logic ? this.logicFresh : undefined,
+      errorCells: logic && this.logicBad >= 0 ? new Set([this.logicBad]) : undefined,
     });
     this.widthSel.value = String(p.w);
     this.heightSel.value = String(p.h);
@@ -340,6 +464,7 @@ export class EditorView {
     } else {
       const open = openCells(p).length;
       this.status.textContent = `${modeOf(p) === 'cycle' ? 'Loop' : 'Path'} · ${p.w}×${p.h} · ${open} open tiles. ${TOOL_HINT[this.tool]}`;
+      if (logic && this.logicNote) this.status.textContent = this.logicNote;
     }
   }
 }

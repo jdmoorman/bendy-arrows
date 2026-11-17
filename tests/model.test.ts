@@ -51,3 +51,51 @@ describe('model', () => {
     }
   });
 });
+
+describe('transformPuzzle', async () => {
+  const { transformPuzzle } = await import('../src/model');
+  const { decodePuzzle } = await import('../src/codec');
+  const { SAMPLES } = await import('../src/samples');
+  const { solve } = await import('../src/solver');
+  const { portEnd, portId, puzzlesEqual } = await import('../src/model');
+
+  const sample = () => {
+    const p = createPuzzle(4, 3);
+    p.blocked.add(5);
+    p.walls.add(edgeBetween(p, 0, 1)).add(edgeBetween(p, 6, 10));
+    p.endpoints = [portEnd(portId(p, 'left', 0)), portEnd(portId(p, 'bottom', 3))];
+    return p;
+  };
+
+  test('four quarter turns, or two flips, give back the same puzzle', () => {
+    const p = sample();
+    let q = p;
+    for (let i = 0; i < 4; i++) q = transformPuzzle(q, 'rotateRight');
+    expect(puzzlesEqual(p, q)).toBe(true);
+    expect(puzzlesEqual(p, transformPuzzle(transformPuzzle(p, 'rotateLeft'), 'rotateRight'))).toBe(true);
+    expect(puzzlesEqual(p, transformPuzzle(transformPuzzle(p, 'flipH'), 'flipH'))).toBe(true);
+    expect(puzzlesEqual(p, transformPuzzle(transformPuzzle(p, 'flipV'), 'flipV'))).toBe(true);
+  });
+
+  test('rotating right moves the left frame end to the top', () => {
+    const q = transformPuzzle(sample(), 'rotateRight');
+    expect([q.w, q.h]).toEqual([3, 4]);
+    expect(q.endpoints[0]).toEqual(portEnd(portId(q, 'top', 2)));
+    expect(q.blocked.has(1 * 3 + 1)).toBe(true); // (1,1) -> (1, 1)
+  });
+
+  test('transforms keep the number of solutions', () => {
+    for (const s of SAMPLES) {
+      const p = decodePuzzle(s.code);
+      for (const t of ['rotateLeft', 'rotateRight', 'flipH', 'flipV'] as const) {
+        expect(solve(transformPuzzle(p, t)).status).toBe('unique');
+      }
+    }
+    const c = createPuzzle(4, 4);
+    c.checkpoints = [0, 6, 9, 12];
+    const n = solve(c, { maxSolutions: 1e9 }).solutions.length;
+    for (const t of ['rotateLeft', 'rotateRight', 'flipH', 'flipV'] as const) {
+      expect(solve(transformPuzzle(c, t), { maxSolutions: 1e9 }).solutions.length).toBe(n);
+    }
+  });
+});

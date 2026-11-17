@@ -800,3 +800,28 @@ select {
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
 }
+
+.settings-row > .btn.icon-only {
+  flex: 0 0 var(--tap);
+  padding: 0;
+}
+
+/* Latest logic-helper deductions. */
+.seg.hint {
+  stroke: var(--hint);
+}
+.seg-edge.hint {
+  stroke: var(--hint-edge);
+}
+.xmark.hint {
+  stroke: var(--hint-edge);
+}
+
+.logic-row .btn {
+  flex: 1 1 0;
+}
+
+/* Five editor tools share one row on a phone. */
+.toolbar-row .segmented .seg-btn {
+  padding: 0 6px;
+}

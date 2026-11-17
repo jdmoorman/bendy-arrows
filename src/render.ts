@@ -22,6 +22,8 @@ export interface RenderOptions {
   solved?: boolean;
   /** Margin around the grid in SVG units (default PAD). */
   pad?: number;
+  /** Segments and X marks to draw in the highlight colour (e.g. the latest logic step). */
+  highlight?: Set<number>;
 }
 
 /** Margin to use for a puzzle: room for end arrows when it has (or may get) ends. */
@@ -175,12 +177,14 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   const isErr = (e: number) => !!o.errorEdges?.has(e);
   const player = [...(o.segments ?? [])];
   parts.push('<g class="segments">');
-  const ok = player.filter((e) => !isErr(e));
+  const isHi = (e: number) => !!o.highlight?.has(e);
+  const ok = player.filter((e) => !isErr(e) && !isHi(e));
   const bad = player.filter(isErr);
+  const hi = player.filter((e) => isHi(e) && !isErr(e));
   // Darker outlines first (all of them), then the fills, so outlines never
   // cut across a fill where runs meet.
-  parts.push(strokes(ok, 'seg-edge'), strokes(bad, 'seg-edge error'));
-  parts.push(strokes(ok, 'seg'), strokes(bad, 'seg error'));
+  parts.push(strokes(ok, 'seg-edge'), strokes(bad, 'seg-edge error'), strokes(hi, 'seg-edge hint'));
+  parts.push(strokes(ok, 'seg'), strokes(bad, 'seg error'), strokes(hi, 'seg hint'));
   parts.push('</g>');
 
   // Numbered checkpoints sit on top of the path.
@@ -207,7 +211,8 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
       const [x1, y1, x2, y2] = borderLine(e);
       const cx = (x1 + x2) / 2;
       const cy = (y1 + y2) / 2;
-      parts.push(line(cx - s, cy - s, cx + s, cy + s, 'xmark'), line(cx - s, cy + s, cx + s, cy - s, 'xmark'));
+      const cls = o.highlight?.has(e) ? 'xmark hint' : 'xmark';
+      parts.push(line(cx - s, cy - s, cx + s, cy + s, cls), line(cx - s, cy + s, cx + s, cy - s, cls));
     }
     parts.push('</g>');
   }

@@ -275,3 +275,58 @@ export function puzzlesEqual(a: Puzzle, b: Puzzle): boolean {
     a.checkpoints.every((v, i) => v === b.checkpoints[i])
   );
 }
+
+export type Transform = 'rotateLeft' | 'rotateRight' | 'flipH' | 'flipV';
+
+const SIDE_DIR: Record<Side, [number, number]> = { top: [-1, 0], right: [0, 1], bottom: [1, 0], left: [0, -1] };
+
+/**
+ * Rotate a quarter turn or mirror the whole puzzle. Black tiles, walls,
+ * frame ends (in order) and checkpoints (in order) all move together.
+ */
+export function transformPuzzle(p: Puzzle, t: Transform): Puzzle {
+  const rotates = t === 'rotateLeft' || t === 'rotateRight';
+  const out = createPuzzle(rotates ? p.h : p.w, rotates ? p.w : p.h);
+  const mapRC = (r: number, c: number): [number, number] => {
+    switch (t) {
+      case 'rotateRight':
+        return [c, p.h - 1 - r];
+      case 'rotateLeft':
+        return [p.w - 1 - c, r];
+      case 'flipH':
+        return [r, p.w - 1 - c];
+      case 'flipV':
+        return [p.h - 1 - r, c];
+    }
+  };
+  const mapDir = ([dr, dc]: [number, number]): [number, number] => {
+    switch (t) {
+      case 'rotateRight':
+        return [dc, -dr];
+      case 'rotateLeft':
+        return [-dc, dr];
+      case 'flipH':
+        return [dr, -dc];
+      case 'flipV':
+        return [-dr, dc];
+    }
+  };
+  const mapCell = (cell: number): number => {
+    const [r, c] = mapRC(...cellRC(p, cell));
+    return r * out.w + c;
+  };
+  for (const c of p.blocked) out.blocked.add(mapCell(c));
+  for (const e of p.walls) {
+    const [a, b] = edgeCells(p, e);
+    out.walls.add(edgeBetween(out, mapCell(a), mapCell(b)));
+  }
+  out.checkpoints = p.checkpoints.map(mapCell);
+  out.endpoints = p.endpoints.map((end) => {
+    const [side] = portSide(p, end.port);
+    const [dr, dc] = mapDir(SIDE_DIR[side]);
+    const newSide = (Object.keys(SIDE_DIR) as Side[]).find((s) => SIDE_DIR[s][0] === dr && SIDE_DIR[s][1] === dc)!;
+    const [r, c] = cellRC(out, mapCell(portCell(p, end.port)));
+    return portEnd(portId(out, newSide, newSide === 'top' || newSide === 'bottom' ? c : r));
+  });
+  return out;
+}

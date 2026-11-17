@@ -23,6 +23,8 @@ export type ThemeTokens = Record<
   | 'path-edge'
   | 'path-solved-edge'
   | 'error-edge'
+  | 'hint'
+  | 'hint-edge'
   | 'xmark'
   | 'end'
   | 'error'
@@ -53,6 +55,8 @@ export const THEMES = {
     'path-edge': '#2f86d6',
     'path-solved-edge': '#2fb174',
     'error-edge': '#c23a55',
+    hint: '#ffcf70',
+    'hint-edge': '#d99a1c',
     xmark: '#ff8a65',
     end: '#e6e9f0',
     error: '#ff5c7a',
@@ -80,6 +84,8 @@ export const THEMES = {
     'path-edge': '#4a78c9',
     'path-solved-edge': '#4a9e6c',
     'error-edge': '#9e1f3a',
+    hint: '#ffd27a',
+    'hint-edge': '#c98a00',
     xmark: '#000000',
     end: '#000000',
     error: '#d92d4b',

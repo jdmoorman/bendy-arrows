@@ -34,7 +34,16 @@ The app opens on a sample puzzle in the **Play** tab.
 - **Walls:** tap or drag along borders. Starting on an empty border adds walls along the drag; starting on a wall removes them.
 - **Ends:** tap a dot on the frame outside the grid to place the entrance, then the exit. Each is drawn as a black stub through the frame: the entrance ends in the arrow's tail, the exit in its head. Tap an end again to remove it. Ends can only go on the frame; for a fixed tile inside the grid, use checkpoints. With ends or checkpoints it is a **path** puzzle; with neither it is a **loop** puzzle. If only one end is placed, Play asks for the second first.
 - **Checkpoints:** tap tiles to place numbered circles 1, 2, 3… in order. The path must start at 1, pass through every number in order and finish at the highest one, while filling every tile. Tap a number to remove it (higher numbers move down). A puzzle uses either ends or checkpoints, not both — placing one kind removes the other. Play needs at least two checkpoints.
-- **Width × height** pickers (1 to 30).
+- **Width × height** pickers (1 to 30), and buttons to **rotate left / right** and **flip horizontally / vertically**. Black tiles, walls, ends and checkpoints all move with the grid, and each change can be undone.
+- **Logic:** a helper that shows how far simple reasoning gets. **Step** applies one round of the chosen rules (the new lines and X marks are highlighted) and can be pressed repeatedly; **Reset** starts over; **Rules** is a checklist of which rules to use:
+  - **Corners** — a tile with only two ways out, at a right angle, uses both.
+  - **Passages** — a tile walled in on opposite sides gets a straight line.
+  - **Ends** — a path end with one way out takes it.
+  - **Continue** — a partly drawn tile whose remaining ways out are exactly what it needs takes them.
+  - **Full tiles** — a tile with all its lines gets X marks on its other borders.
+  - **No early loops** — X out a border that would close a loop too soon.
+
+  It reports when it's stuck, when logic alone solves the puzzle, or when it finds a contradiction. Editing the puzzle resets it.
 - **Check** runs the solver in the background and reports whether the puzzle has **no solution** (with a reason, such as a checkerboard parity mismatch), **exactly one**, or **more than one**. The eye button overlays the solutions it found.
 - **Play** switches to the Play tab with your puzzle.
 

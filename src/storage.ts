@@ -30,6 +30,7 @@ const LIBRARY_KEY = 'hamiltonian.library.v1';
 const SESSION_KEY = 'hamiltonian.session.v1';
 const SETTINGS_KEY = 'hamiltonian.settings.v1';
 const TIMES_KEY = 'hamiltonian.times.v1';
+const LOGIC_KEY = 'hamiltonian.logic.v1';
 
 /** Per-device display preferences. */
 export interface Settings {
@@ -127,6 +128,16 @@ export class Storage {
   saveTimes(code: string, times: { ms: number; at: number }[]): void {
     const all = this.read<Record<string, { ms: number; at: number }[]>>(TIMES_KEY, {});
     this.write(TIMES_KEY, { ...(all && typeof all === 'object' ? all : {}), [code]: times });
+  }
+
+  /** Enabled logic-helper rules, or null if never saved. */
+  loadLogicRules(): string[] | null {
+    const r = this.read<unknown>(LOGIC_KEY, null);
+    return Array.isArray(r) ? r.filter((x): x is string => typeof x === 'string') : null;
+  }
+
+  saveLogicRules(rules: string[]): void {
+    this.write(LOGIC_KEY, rules);
   }
 
   loadSettings(): Settings {
