@@ -68,8 +68,6 @@ export class EditorView {
   private status: HTMLElement;
   private undoBtn: HTMLButtonElement;
   private redoBtn: HTMLButtonElement;
-  private widthSel: HTMLSelectElement;
-  private heightSel: HTMLSelectElement;
   private toolBtns: Record<Tool, HTMLButtonElement>;
   /** Extra controls appended by other modules (e.g. the uniqueness check). */
   readonly actions: HTMLElement;
@@ -93,7 +91,6 @@ export class EditorView {
   constructor() {
     this.el = document.createElement('section');
     this.el.className = 'view editor-view';
-    const sizeOptions = Array.from({ length: MAX_SIZE - MIN_SIZE + 1 }, (_, i) => `<option>${i + MIN_SIZE}</option>`).join('');
     this.el.innerHTML = `
       <div class="board-wrap"><svg class="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Puzzle editor board"></svg></div>
       <p class="status" role="status" aria-live="polite"></p>
@@ -106,19 +103,6 @@ export class EditorView {
             <button class="seg-btn" data-tool="checkpoints">Checkpoints</button>
           </div>
         </div>
-        <div class="toolbar-row settings-row">
-          <label class="size-picker">
-            <span class="sr-only">Width</span>
-            <select data-size="w" aria-label="Width">${sizeOptions}</select>
-            <span aria-hidden="true">×</span>
-            <span class="sr-only">Height</span>
-            <select data-size="h" aria-label="Height">${sizeOptions}</select>
-          </label>
-          <button class="btn icon-only" data-transform="rotateLeft" aria-label="Rotate left" title="Rotate left">${ICONS.rotateLeft}</button>
-          <button class="btn icon-only" data-transform="rotateRight" aria-label="Rotate right" title="Rotate right">${ICONS.rotateRight}</button>
-          <button class="btn icon-only" data-transform="flipH" aria-label="Flip horizontally" title="Flip horizontally">${ICONS.flipH}</button>
-          <button class="btn icon-only" data-transform="flipV" aria-label="Flip vertically" title="Flip vertically">${ICONS.flipV}</button>
-        </div>
         <div class="toolbar-row logic-row">
           <button class="btn" data-logic="rules" aria-label="Logic rules">${ICONS.list}<span>Rules</span></button>
           <button class="btn" data-logic="reset" aria-label="Reset logic">${ICONS.undo}<span>Reset</span></button>
@@ -130,6 +114,7 @@ export class EditorView {
           <button class="btn" data-act="redo" aria-label="Redo">${ICONS.redo}</button>
           <button class="btn" data-act="new" aria-label="New puzzle" title="New puzzle">${ICONS.plus}</button>
           <button class="btn" data-act="save" aria-label="Save to the library" title="Save">${ICONS.save}</button>
+          <button class="btn" data-act="transform" aria-label="Size, rotate and flip" title="Size, rotate and flip">${ICONS.transform}</button>
           <button class="btn primary" data-act="play">${ICONS.play}<span>Play</span></button>
         </div>
       </div>`;
@@ -137,8 +122,6 @@ export class EditorView {
     this.status = this.el.querySelector('.status')!;
     this.undoBtn = this.el.querySelector('[data-act=undo]')!;
     this.redoBtn = this.el.querySelector('[data-act=redo]')!;
-    this.widthSel = this.el.querySelector('[data-size=w]')!;
-    this.heightSel = this.el.querySelector('[data-size=h]')!;
     this.actions = this.el.querySelector('.editor-actions')!;
     const q = <T extends Element>(s: string) => this.el.querySelector(s) as T;
     this.toolBtns = {
@@ -149,12 +132,7 @@ export class EditorView {
     };
 
     for (const t of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[t].addEventListener('click', () => this.setTool(t));
-    const onSize = () => {
-      this.marksStillFit = false;
-      this.edit((p) => resizePuzzle(p, +this.widthSel.value, +this.heightSel.value));
-    };
-    this.widthSel.addEventListener('change', onSize);
-    this.heightSel.addEventListener('change', onSize);
+    q<HTMLButtonElement>('[data-act=transform]').addEventListener('click', () => this.openTransformSheet());
     q<HTMLButtonElement>('[data-logic=step]').addEventListener('click', () => this.stepLogic());
     q<HTMLButtonElement>('[data-logic=reset]').addEventListener('click', () => {
       this.resetLogic();
@@ -162,12 +140,6 @@ export class EditorView {
       this.render();
     });
     q<HTMLButtonElement>('[data-logic=rules]').addEventListener('click', () => this.openRulesSheet());
-    for (const b of this.el.querySelectorAll<HTMLButtonElement>('[data-transform]')) {
-      b.addEventListener('click', () => {
-        this.marksStillFit = false;
-        this.edit((p) => transformPuzzle(p, b.dataset.transform as Transform));
-      });
-    }
     this.undoBtn.addEventListener('click', () => this.undo());
     this.redoBtn.addEventListener('click', () => this.redo());
     q<HTMLButtonElement>('[data-act=new]').addEventListener('click', () =>
@@ -266,6 +238,54 @@ export class EditorView {
     const xs = step.xs.length ? `+${step.xs.length} X` : '';
     this.logicNote = `Step ${this.logicSteps}: ${[lines, xs].filter(Boolean).join(', ')} (${parts.join(', ')}).`;
     this.render();
+  }
+
+  /** Grid size, rotate and flip, in one sheet that stays open while you try things. */
+  private openTransformSheet() {
+    const body = document.createElement('div');
+    body.className = 'sheet-stack transform-sheet';
+    const sizeOptions = Array.from({ length: MAX_SIZE - MIN_SIZE + 1 }, (_, i) => `<option>${i + MIN_SIZE}</option>`).join('');
+    const size = document.createElement('label');
+    size.className = 'size-picker';
+    size.innerHTML = `<select aria-label="Width">${sizeOptions}</select><span aria-hidden="true">×</span><select aria-label="Height">${sizeOptions}</select>`;
+    const [w, h] = size.querySelectorAll('select');
+    const sync = () => {
+      w.value = String(this.puzzle.w);
+      h.value = String(this.puzzle.h);
+    };
+    sync();
+    const resize = () => {
+      this.marksStillFit = false;
+      this.edit((p) => resizePuzzle(p, +w.value, +h.value));
+    };
+    w.addEventListener('change', resize);
+    h.addEventListener('change', resize);
+    const label = document.createElement('p');
+    label.className = 'field-label';
+    label.textContent = 'Size (width × height)';
+    body.append(label, size);
+
+    const turns: [Transform, string, string][] = [
+      ['rotateLeft', ICONS.rotateLeft, 'Rotate left'],
+      ['rotateRight', ICONS.rotateRight, 'Rotate right'],
+      ['flipH', ICONS.flipH, 'Flip left–right'],
+      ['flipV', ICONS.flipV, 'Flip up–down'],
+    ];
+    const grid = document.createElement('div');
+    grid.className = 'transform-grid';
+    for (const [t, icon, text] of turns) {
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.innerHTML = `${icon}<span>${text}</span>`;
+      b.addEventListener('click', () => {
+        this.marksStillFit = false;
+        this.edit((p) => transformPuzzle(p, t));
+        sync(); // a quarter turn swaps width and height
+      });
+      grid.append(b);
+    }
+    body.append(grid);
+    openSheet('Size, rotate and flip', body);
   }
 
   /** Whether the easy rules are listed one by one in the Rules sheet. */
@@ -533,8 +553,6 @@ export class EditorView {
       highlight: logic ? this.logicFresh : undefined,
       errorCells: logic && this.logicBad.length ? new Set(this.logicBad) : undefined,
     });
-    this.widthSel.value = String(p.w);
-    this.heightSel.value = String(p.h);
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;
 

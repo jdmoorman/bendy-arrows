@@ -373,14 +373,6 @@ select {
 }
 
 /* ---------- Editor ---------- */
-.settings-row {
-  align-items: stretch;
-}
-
-.settings-row > .mode-switch {
-  flex: 1 1 0;
-}
-
 .size-picker {
   flex: 1 1 0;
   display: flex;
@@ -676,8 +668,25 @@ select {
 }
 
 .lib-solved {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 12px 0 4px;
   color: var(--success);
-  font-weight: 600;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.lib-solved svg {
+  width: 20px;
+  height: 20px;
+  stroke-width: 3;
+}
+/* Solved puzzles get a green outline, like the editor's Unique chip. */
+.lib-item.solved {
+  border-color: var(--success);
+}
+.lib-item.solved .lib-name {
+  color: var(--success);
 }
 
 .empty-note {
@@ -812,11 +821,6 @@ select {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
-}
-
-.settings-row > .btn.icon-only {
-  flex: 0 0 var(--tap);
-  padding: 0;
 }
 
 /* Latest logic-helper deductions. */
@@ -987,22 +991,6 @@ select {
   display: none;
 }
 
-/* Very narrow phones: let the size picker and the turn/flip buttons give a little. */
-@media (max-width: 380px) {
-  .settings-row > .btn.icon-only {
-    flex: 0 1 var(--tap);
-    min-width: 34px;
-  }
-  .settings-row .size-picker {
-    min-width: 0;
-    padding-left: 4px;
-    padding-right: 4px;
-  }
-  .settings-row .size-picker select {
-    min-width: 40px;
-    padding: 6px 4px;
-  }
-}
 @media (max-width: 340px) {
   .actions-row > .btn:not(.primary) {
     flex: 0 1 var(--tap);
@@ -1036,4 +1024,15 @@ select {
 }
 .switch:indeterminate::after {
   transform: translateX(10px);
+}
+
+/* Size, rotate and flip sheet. */
+.transform-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap);
+}
+.transform-sheet .size-picker {
+  flex: none;
+  min-height: var(--tap);
 }

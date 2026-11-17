@@ -25,7 +25,25 @@ export function defaultName(p: Puzzle): string {
 }
 
 function describe(p: Puzzle): string {
-  return `${modeOf(p) === 'cycle' ? 'Loop' : 'Path'} · ${p.w}×${p.h} · ${openCells(p).length} tiles`;
+  const kind = modeOf(p) === 'cycle' ? 'Loop' : p.checkpoints.length ? 'Numbers' : 'Path';
+  return `${kind} · ${p.w}×${p.h} · ${openCells(p).length} tiles`;
+}
+
+/**
+ * How many times a puzzle has been solved, from the recorded solve times (or
+ * 1 if the library entry is marked solved from before times were kept).
+ */
+function solveCount(storage: Storage, code: string, solvedFlag = false): number {
+  return storage.loadTimes(code).length || (solvedFlag ? 1 : 0);
+}
+
+/** Highlight a solved puzzle's row and add a check mark (with "10×" for repeat solves). */
+function markSolved(li: HTMLElement, main: HTMLElement, n: number): void {
+  if (!n) return;
+  li.classList.add('solved');
+  const badge = el('span', 'lib-solved', `${ICONS.check}${n > 1 ? `<span>${n}×</span>` : ''}`);
+  badge.setAttribute('aria-label', n > 1 ? `Solved ${n} times` : 'Solved');
+  main.after(badge);
 }
 
 export function openLibrarySheet(ctx: LibraryContext): void {
@@ -90,7 +108,7 @@ export function openLibrarySheet(ctx: LibraryContext): void {
     dailyTitle.textContent = dailyName(date);
     const dailyCode = storage.loadDaily(date);
     const dailySaved = dailyCode ? storage.findByCode(dailyCode) : undefined;
-    const dailyMeta = el('span', 'lib-meta', dailySaved?.solved ? '<span class="lib-solved">Solved</span>' : 'A new puzzle every day');
+    const dailyMeta = el('span', 'lib-meta', 'A new puzzle every day');
     dailyBtn.append(dailyTitle, dailyMeta);
     dailyBtn.addEventListener('click', async () => {
       const open = (code: string) => {
@@ -113,6 +131,7 @@ export function openLibrarySheet(ctx: LibraryContext): void {
       }
     });
     dailyLi.append(dailyBtn);
+    if (dailyCode) markSolved(dailyLi, dailyBtn, solveCount(storage, dailyCode, dailySaved?.solved));
     daily.append(dailyLi);
     body.append(daily);
 
@@ -133,8 +152,9 @@ export function openLibrarySheet(ctx: LibraryContext): void {
       const main = el('button', 'lib-main');
       const title = el('span', 'lib-name');
       title.textContent = e.name;
-      const state = e.solved ? '<span class="lib-solved">Solved</span>' : e.progress?.segments.length ? 'In progress' : 'New';
-      main.append(title, el('span', 'lib-meta', `${describe(p)} · ${state}`));
+      const solves = solveCount(storage, e.code, e.solved);
+      const state = solves ? '' : e.progress?.segments.length ? ' · In progress' : ' · New';
+      main.append(title, el('span', 'lib-meta', `${describe(p)}${state}`));
       main.addEventListener('click', () => {
         sheet.close();
         ctx.onOpen({ puzzle: p, progress: e.progress, id: e.id, name: e.name }, 'play');
@@ -154,6 +174,7 @@ export function openLibrarySheet(ctx: LibraryContext): void {
         render();
       });
       li.append(main, editBtn, delBtn);
+      markSolved(li, main, solves);
       list.append(li);
     }
     body.append(list);
@@ -167,13 +188,16 @@ export function openLibrarySheet(ctx: LibraryContext): void {
       const main = el('button', 'lib-main');
       const title = el('span', 'lib-name');
       title.textContent = s.name;
-      main.append(title, el('span', 'lib-meta', describe(p)));
+      const saved = storage.findByCode(s.code);
+      const solves = solveCount(storage, s.code, saved?.solved);
+      const state = !solves && saved?.progress?.segments.length ? ' · In progress' : '';
+      main.append(title, el('span', 'lib-meta', `${describe(p)}${state}`));
       main.addEventListener('click', () => {
         sheet.close();
-        const saved = storage.findByCode(s.code);
         ctx.onOpen({ puzzle: p, progress: saved?.progress, id: saved?.id, name: saved?.name ?? s.name }, 'play');
       });
       li.append(main);
+      markSolved(li, main, solves);
       samples.append(li);
     }
     body.append(samples);

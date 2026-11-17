@@ -362,29 +362,44 @@ export class PlayView {
     if (!this.recorded) this.checksUsed++;
     this.onProgress?.(this.progress, this.solved);
     const n = this.segments.size;
+    const x = this.xMarks.size;
     const show = (text: string, kind: '' | 'success' | 'error') => {
       this.checkMsg = { text, kind };
       this.render();
     };
-    if (!n) return show('Nothing drawn yet — every line you draw will be checked against the solution.', '');
+    if (!n && !x) return show('Nothing drawn yet — every line and X you place will be checked against the solution.', '');
     // Obvious problems need no search.
     const live = checkSolution(this.puzzle, this.segments);
     if (live.branches.size || live.loopEdges.size || live.illegalEdges.size || live.checkpointErrors.size) {
       return show('Not all of your lines are right.', 'error');
     }
     show('Checking…', '');
-    const run = solveInBackground(this.puzzle, undefined, { mustUse: [...this.segments], maxSolutions: 1, nodeLimit: 5_000_000 });
-    this.checkRun = run;
-    try {
+    // Is there a solution that uses every line and none of the X'd borders? (X marks act as walls.)
+    const withXs = (p: Puzzle): Puzzle => ({ ...p, walls: new Set([...p.walls, ...this.xMarks]) });
+    const fits = async (puzzle: Puzzle) => {
+      const run = solveInBackground(puzzle, undefined, { mustUse: [...this.segments], maxSolutions: 1, nodeLimit: 5_000_000 });
+      this.checkRun = run;
       const r = await run.result;
-      if (this.checkRun !== run) return;
+      if (this.checkRun !== run) throw new DOMException('Superseded', 'AbortError');
       this.checkRun = null;
-      if (r.solutions.length) show(`All ${n} line${n === 1 ? '' : 's'} so far ${n === 1 ? 'is' : 'are'} correct.`, 'success');
-      else if (r.status === 'aborted') show("Couldn't finish checking — this puzzle is too big to check quickly.", '');
+      return r.solutions.length ? 'yes' : r.status === 'aborted' ? 'unknown' : 'no';
+    };
+    const plural = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+    try {
+      const all = await fits(withXs(this.puzzle));
+      if (all === 'yes') {
+        const what = [n ? plural(n, 'line', 'lines') : '', x ? plural(x, 'X', "X's") : ''].filter(Boolean).join(' and ');
+        if (n + x === 1) return show(`Your ${n ? 'line' : 'X'} is correct.`, 'success');
+        return show(`Your ${what} are all correct so far.`, 'success');
+      }
+      if (all === 'unknown') return show("Couldn't finish checking — this puzzle is too big to check quickly.", '');
+      if (!x) return show('Not all of your lines are right.', 'error');
+      if (!n) return show("Not all of your X's are right — the path needs at least one of those borders.", 'error');
+      // Say which kind of mark is wrong, if the lines alone are fine.
+      const lines = await fits(this.puzzle);
+      if (lines === 'yes') show("Your lines are fine, but at least one X is wrong — the path needs one of those borders.", 'error');
       else show('Not all of your lines are right.', 'error');
     } catch (err) {
-      if (this.checkRun !== run) return;
-      this.checkRun = null;
       if ((err as Error).name !== 'AbortError') show(`Check failed: ${(err as Error).message}`, 'error');
     }
   }
