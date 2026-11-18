@@ -53,6 +53,7 @@ export class LibraryView {
   private filterBtn: HTMLButtonElement;
   private search: HTMLInputElement;
   private dailyBox: HTMLElement;
+  private columnsRow: HTMLElement;
   private renderQueued = false;
 
   constructor(private storage: Storage) {
@@ -80,16 +81,16 @@ export class LibraryView {
     });
     this.filterBtn = el('button', 'btn', '');
     this.filterBtn.addEventListener('click', () => this.openFilters(this.hiddenColumns(), 'Filters for hidden columns'));
-    const colBtn = el('button', 'btn icon-only', ICONS.list);
-    colBtn.setAttribute('aria-label', 'Choose columns');
-    colBtn.title = 'Choose columns';
-    colBtn.addEventListener('click', () => this.openColumns());
-    controls.append(this.search, this.filterBtn, colBtn);
+    controls.append(this.search, this.filterBtn);
     this.count = el('p', 'lib-count');
+    // One toggle per column, in a row that scrolls sideways, just above the table.
+    this.columnsRow = el('div', 'chip-row lib-columns');
+    this.columnsRow.setAttribute('role', 'group');
+    this.columnsRow.setAttribute('aria-label', 'Columns to show');
     const wrap = el('div', 'lib-table-wrap');
     this.table = el('table', 'lib-table');
     wrap.append(this.table);
-    this.el.append(this.dailyBox, controls, this.count, wrap, this.transferRow());
+    this.el.append(this.dailyBox, controls, this.count, this.columnsRow, wrap, this.transferRow());
   }
 
   // --- Export and import ------------------------------------------------------
@@ -253,6 +254,7 @@ export class LibraryView {
       this.count.append(' · ', clear);
     }
 
+    this.renderColumnToggles();
     const cols = this.visibleColumns();
     const head = el('tr');
     for (const c of [NAME_COLUMN, ...cols]) {
@@ -420,39 +422,38 @@ export class LibraryView {
     this.changed();
   }
 
-  private openColumns() {
-    const body = el('div', 'sheet-stack');
-    openSheet('Columns', body);
-    const draw = () => {
-      body.replaceChildren();
-      const reset = el('button', 'btn', '<span>Back to the usual columns</span>');
-      reset.addEventListener('click', () => {
-        this.state.columns = [...DEFAULT_TABLE_STATE.columns];
+  /** The column toggles: tap one to show or hide that column. */
+  private renderColumnToggles() {
+    const chips = COLUMNS.map((c) => {
+      const on = this.state.columns.includes(c.key);
+      const chip = el('button', 'chip', c.short ?? c.label);
+      chip.type = 'button';
+      chip.title = c.label;
+      chip.setAttribute('aria-pressed', String(on));
+      chip.addEventListener('click', () => {
+        // Keep the columns in their usual order.
+        const shown = new Set(this.state.columns);
+        if (on) shown.delete(c.key);
+        else shown.add(c.key);
+        this.state.columns = COLUMNS.map((x) => x.key).filter((k) => shown.has(k));
         this.changed();
-        draw();
       });
-      body.append(reset);
-      for (const c of COLUMNS) {
-        const row = el('label', 'switch-row');
-        row.append(el('span', 'switch-text', c.label));
-        const input = el('input', 'switch') as HTMLInputElement;
-        input.type = 'checkbox';
-        input.setAttribute('role', 'switch');
-        input.checked = this.state.columns.includes(c.key);
-        input.addEventListener('change', () => {
-          // Keep the columns in their usual order.
-          const on = new Set(this.state.columns);
-          if (input.checked) on.add(c.key);
-          else on.delete(c.key);
-          this.state.columns = COLUMNS.map((x) => x.key).filter((k) => on.has(k));
-          this.changed();
-        });
-        row.append(input);
-        body.append(row);
-      }
-    };
-    draw();
+      return chip;
+    });
+    const usual = DEFAULT_TABLE_STATE.columns;
+    if (this.state.columns.length !== usual.length || this.state.columns.some((k) => !usual.includes(k))) {
+      const reset = el('button', 'link-btn', 'Usual columns');
+      reset.addEventListener('click', () => {
+        this.state.columns = [...usual];
+        this.changed();
+      });
+      chips.push(reset);
+    }
+    const scroll = this.columnsRow.scrollLeft;
+    this.columnsRow.replaceChildren(...chips);
+    this.columnsRow.scrollLeft = scroll;
   }
+
 
   // --- Background ratings ---------------------------------------------------
 

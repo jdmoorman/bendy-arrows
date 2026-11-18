@@ -712,6 +712,28 @@ select {
   gap: var(--gap);
   flex-wrap: wrap;
 }
+/* Column toggles: one row that scrolls sideways (it would take several rows on a phone). */
+.lib-columns {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex: none;
+  align-items: center;
+}
+.lib-columns::-webkit-scrollbar {
+  display: none;
+}
+.lib-columns > .chip {
+  flex: none;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 0.85rem;
+}
+.lib-columns > .link-btn {
+  flex: none;
+  white-space: nowrap;
+}
+
 .lib-count {
   margin: 0;
   font-size: 0.85rem;
