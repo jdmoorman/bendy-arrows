@@ -19,8 +19,10 @@ import {
 import type { Puzzle } from './model';
 import type { Progress } from './play';
 import type { RatingMessage } from './rating.worker';
-import type { Storage } from './storage';
-import { el, openSheet } from './ui';
+import { newId, type Storage } from './storage';
+import { exportText, parseImport } from './library-io';
+import { defaultName } from './save-ui';
+import { el, openSheet, toast } from './ui';
 
 export interface OpenRequest {
   puzzle: Puzzle;
@@ -85,7 +87,60 @@ export class LibraryView {
     const wrap = el('div', 'lib-table-wrap');
     this.table = el('table', 'lib-table');
     wrap.append(this.table);
-    this.el.append(this.dailyBox, controls, this.count, wrap);
+    this.el.append(this.dailyBox, controls, this.count, wrap, this.transferRow());
+  }
+
+  // --- Export and import ------------------------------------------------------
+
+  /** Buttons to move every saved puzzle to or from a text file of links. */
+  private transferRow(): HTMLElement {
+    const row = el('div', 'lib-transfer');
+    const exp = el('button', 'btn', `${ICONS.share}<span>Export saved</span>`);
+    exp.addEventListener('click', () => {
+      const entries = this.storage.list();
+      if (!entries.length) return toast('No saved puzzles to export yet.');
+      downloadText(`hamiltonian-puzzles-${dateKey()}.txt`, exportText(entries, location.href));
+      toast(`Exported ${entries.length} puzzle${entries.length === 1 ? '' : 's'}.`);
+    });
+    const file = el('input') as HTMLInputElement;
+    file.type = 'file';
+    file.accept = '.txt,text/plain';
+    file.hidden = true;
+    file.addEventListener('change', async () => {
+      const f = file.files?.[0];
+      file.value = '';
+      if (f) this.importText(await f.text());
+    });
+    const imp = el('button', 'btn', `${ICONS.library}<span>Import</span>`);
+    imp.title = 'Add the puzzles from a text file of links';
+    imp.addEventListener('click', () => file.click());
+    row.append(exp, imp, file);
+    return row;
+  }
+
+  private importText(text: string) {
+    const { puzzles, bad } = parseImport(text);
+    const have = new Set(this.storage.list().map((e) => e.code));
+    let added = 0;
+    let failed = false;
+    const now = Date.now();
+    for (const { code, name } of puzzles) {
+      if (have.has(code)) continue;
+      have.add(code);
+      const entry = { id: newId(), name: name ?? defaultName(decodePuzzle(code)), code, created: now + added, updated: now + added };
+      if (!this.storage.put(entry)) {
+        failed = true;
+        break;
+      }
+      added++;
+    }
+    const skipped = puzzles.length - added;
+    const parts = [`Imported ${added} puzzle${added === 1 ? '' : 's'}`];
+    if (skipped && !failed) parts.push(`${skipped} already saved`);
+    if (bad) parts.push(`${bad} line${bad === 1 ? '' : 's'} not understood`);
+    if (failed) parts.push('storage is full');
+    toast(`${parts.join(', ')}.`, failed || (!added && bad > 0) ? 'error' : '');
+    if (added) this.refresh();
   }
 
   /** Re-read the library and redraw (call when the tab is shown). */
@@ -392,4 +447,14 @@ export class LibraryView {
       this.renderTable();
     });
   }
+}
+
+function downloadText(filename: string, text: string) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  a.download = filename;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }

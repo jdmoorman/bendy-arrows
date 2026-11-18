@@ -707,6 +707,11 @@ select {
   color: var(--text-muted);
 }
 
+.lib-transfer {
+  display: flex;
+  gap: var(--gap);
+  flex-wrap: wrap;
+}
 .lib-count {
   margin: 0;
   font-size: 0.85rem;
