@@ -1,6 +1,6 @@
 import { encodePuzzle } from './codec';
 import { ICONS } from './icons';
-import { modeOf, type Puzzle } from './model';
+import type { Puzzle } from './model';
 import type { Progress } from './play';
 import { newId, type LibraryEntry, type Storage } from './storage';
 import { el, openSheet, toast } from './ui';
@@ -17,7 +17,7 @@ export interface SaveContext {
 }
 
 export function defaultName(p: Puzzle): string {
-  return `${modeOf(p) === 'cycle' ? 'Loop' : 'Path'} ${p.w}×${p.h}`;
+  return `Path ${p.w}×${p.h}`;
 }
 
 /** Save a puzzle to the library under a name (or update the entry it came from). */

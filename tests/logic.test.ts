@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'vitest';
 import { ALL_RULES, applyStep, BASIC_RULES, logicStep, type LogicState, type RuleId } from '../src/logic';
-import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, portEnd, portId, type Puzzle } from '../src/model';
+import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, loopToEnds, portEnd, portId, type Puzzle } from '../src/model';
 import { solve } from '../src/solver';
 import { pathEdges } from './helpers';
+
+/** An open board with two ends side by side at the bottom of the right side (where a loop's ends go). */
+const board = (w: number, h: number): Puzzle => loopToEnds(createPuzzle(w, h));
 
 const empty = (): LogicState => ({ segments: new Set(), xs: new Set() });
 
@@ -19,16 +22,16 @@ function runToEnd(p: Puzzle, rules: RuleId[] = ALL_RULES) {
 }
 
 describe('logic rules', () => {
-  test('corners fill a 2x2 loop in one step', () => {
-    const p = createPuzzle(2, 2);
+  test('corners fill a 2x2 in one step', () => {
+    const p = board(2, 2);
     const step = logicStep(p, empty(), ['corners']);
-    expect(step.segments).toHaveLength(4);
-    expect(step.byRule.corners).toBe(4);
+    expect(step.segments).toHaveLength(3);
+    expect(step.byRule.corners).toBe(3);
     expect(logicStep(p, applyStep(empty(), step), ['corners']).solved).toBe(true);
   });
 
   test('passages: a tile walled on opposite sides gets a straight line', () => {
-    const p = createPuzzle(3, 3);
+    const p = board(3, 3);
     p.walls.add(edgeBetween(p, 1, 4)).add(edgeBetween(p, 4, 7)); // centre walled top and bottom
     const step = logicStep(p, empty(), ['passages']);
     // The centre, and the top/bottom middle tiles (walled toward the centre), get straight lines.
@@ -49,6 +52,7 @@ describe('logic rules', () => {
     // Centre tile 4 has its two lines (left and right); tile 1 above it then has
     // only left and right as ways out, so it is a passage.
     const p = createPuzzle(3, 3);
+    p.endpoints = [portEnd(portId(p, 'bottom', 0)), portEnd(portId(p, 'bottom', 2))];
     const state: LogicState = { segments: new Set([edgeBetween(p, 3, 4), edgeBetween(p, 4, 5)]), xs: new Set() };
     const step = logicStep(p, state, ['passages']);
     expect(step.xs).toEqual([]);
@@ -57,7 +61,7 @@ describe('logic rules', () => {
 
   test('no early loops: the border that would close a small loop gets an X', () => {
     // (On a 3x3 the full tiles would wall the top-right corner off, a contradiction.)
-    const p = createPuzzle(4, 4);
+    const p = board(4, 4);
     const state: LogicState = { segments: pathEdges(p, [[0, 0], [0, 1], [1, 1], [1, 0]]), xs: new Set() };
     const step = logicStep(p, state, ['noLoops']);
     expect(step.xs).toEqual([edgeBetween(p, 0, 4)]);
@@ -83,7 +87,7 @@ describe('logic rules', () => {
   });
 
   test('bottlenecks: an area with two ways in uses both', () => {
-    const p = createPuzzle(4, 4);
+    const p = board(4, 4);
     // The top-left 2x2 is reachable only through 1-2 and 4-8.
     p.walls.add(edgeBetween(p, 5, 6)).add(edgeBetween(p, 5, 9));
     const step = logicStep(p, empty(), ['bottlenecks']);
@@ -91,31 +95,31 @@ describe('logic rules', () => {
   });
 
   test('checkerboard balance: an area with an extra white tile is entered on white tiles', () => {
-    // 3x4 loop: the top row is white, shaded, white, so the loop must enter it on
+    // 3x4, ends low on the right: the top row is white, shaded, white, so the path must enter it on
     // white tiles twice more than on shaded ones: down from both corners, never the middle.
-    const p = createPuzzle(3, 4);
+    const p = board(3, 4);
     const step = logicStep(p, empty(), ['balance']);
     expect(step.segments).toEqual(expect.arrayContaining([edgeBetween(p, 0, 3), edgeBetween(p, 2, 5)]));
     expect(step.xs).toContain(edgeBetween(p, 1, 4));
   });
 
   test('checkerboard balance: a balanced area is left on shaded and white tiles equally', () => {
-    // 4x4 loop: the left column (white, shaded, white, shaded) can only be left from
+    // 4x4, ends low on the right: the left column (white, shaded, white, shaded) can only be left from
     // its top (white) and bottom (shaded) tiles, so both must be used.
-    const p = createPuzzle(4, 4);
+    const p = board(4, 4);
     p.walls.add(edgeBetween(p, 4, 5)).add(edgeBetween(p, 8, 9));
     const step = logicStep(p, empty(), ['balance']);
     expect(step.segments).toEqual(expect.arrayContaining([edgeBetween(p, 0, 1), edgeBetween(p, 12, 13)]));
   });
 
   test('a cut-off area is a contradiction', () => {
-    const p = createPuzzle(4, 2);
+    const p = board(4, 2);
     p.walls.add(edgeBetween(p, 1, 2)).add(edgeBetween(p, 5, 6));
     expect(logicStep(p, empty(), ['bottlenecks']).contradiction?.cells?.length).toBe(4);
   });
 
   test('reports a contradiction', () => {
-    const p = createPuzzle(3, 3);
+    const p = board(3, 3);
     p.walls.add(edgeBetween(p, 0, 1)); // corner tile 0 now has one way out but needs two
     expect(logicStep(p, empty(), ALL_RULES).contradiction).toBeTruthy();
   });
@@ -204,26 +208,26 @@ describe('findHint', async () => {
 
   test('No early loops measures each application by the piece it would close', async () => {
     const { deductions } = await import('../src/logic');
-    const p = createPuzzle(6, 6);
+    const p = board(6, 6);
     const piece = (cells: number[]) => cells.slice(1).map((c, i) => edgeBetween(p, cells[i], c));
-    // A 6-tile U at the top left and a 4-tile U at the bottom right, each one border from closing.
-    const state: LogicState = { segments: new Set([...piece([0, 1, 2, 8, 7, 6]), ...piece([28, 29, 35, 34])]), xs: new Set() };
+    // A 6-tile U at the top left and a 4-tile U in the middle, each one border from closing.
+    const state: LogicState = { segments: new Set([...piece([0, 1, 2, 8, 7, 6]), ...piece([16, 17, 23, 22])]), xs: new Set() };
     const loops = deductions(p, state, ['noLoops']);
     expect(loops.map((d) => [d.xs[0], d.size])).toEqual([
       [edgeBetween(p, 0, 6), 6],
-      [edgeBetween(p, 28, 34), 4],
+      [edgeBetween(p, 16, 22), 4],
     ]);
   });
 
   test('only uses the rules it is given', () => {
-    const p = createPuzzle(2, 2);
+    const p = board(2, 2);
     expect(findHint(p, empty(), ['passages']).kind).toBe('none');
     const h = findHint(p, empty(), ['corners']);
     expect(h.kind === 'deduction' && h.deduction.rule).toBe('corners');
   });
 
   test('the simplest rule comes first, with an explanation', () => {
-    const p = createPuzzle(2, 2);
+    const p = board(2, 2);
     const h = findHint(p, empty());
     expect(h.kind).toBe('deduction');
     if (h.kind !== 'deduction') return;
@@ -234,14 +238,14 @@ describe('findHint', async () => {
   });
 
   test('points out a mistake on the board', () => {
-    const p = createPuzzle(3, 3);
+    const p = board(3, 3);
     const state: LogicState = { segments: new Set([edgeBetween(p, 4, 1), edgeBetween(p, 4, 3), edgeBetween(p, 4, 5)]), xs: new Set() };
     const h = findHint(p, state);
     expect(h.kind).toBe('mistake');
   });
 
   test('says so when no simple rule applies', () => {
-    const p = createPuzzle(4, 4); // a loop with many solutions: the rules get stuck
+    const p = board(4, 4); // many solutions: the rules get stuck
     const end = runToEnd(p);
     expect(end.solved).toBe(false);
     const h = findHint(p, end.state);
@@ -294,9 +298,9 @@ describe('more rules', async () => {
   const { rulesFor } = await import('../src/logic');
 
   test('no sealed areas: a line that would wall tiles off gets an X', () => {
-    // 4x4 loop: the top-left pair 0,1 can only be reached through 0-4 and 1-5. Tiles 4 and 5
+    // 4x4, ends low on the right: the top-left pair 0,1 can only be reached through 0-4 and 1-5. Tiles 4 and 5
     // each already have one line, so joining them would fill both and seal 0,1 off.
-    const p = createPuzzle(4, 4);
+    const p = board(4, 4);
     p.walls.add(edgeBetween(p, 1, 2));
     const state: LogicState = { segments: new Set([edgeBetween(p, 4, 8), edgeBetween(p, 5, 6)]), xs: new Set() };
     expect(logicStep(p, state, ['noSeal']).xs).toContain(edgeBetween(p, 4, 5));
@@ -322,7 +326,7 @@ describe('more rules', async () => {
 describe('runLogic', async () => {
   const { runLogic } = await import('../src/logic');
   test('runs the rules to the end, the same as stepping', () => {
-    const p = createPuzzle(4, 4);
+    const p = board(4, 4);
     const run = runLogic(p, ALL_RULES);
     const stepped = runToEnd(p, ALL_RULES);
     expect(run.solved).toBe(stepped.solved);

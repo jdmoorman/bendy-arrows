@@ -3,7 +3,7 @@ import { createPuzzle, edgeBetween, portEnd, portId } from '../src/model';
 import { symmetryOf } from '../src/symmetry';
 
 describe('symmetry', () => {
-  test('an empty loop is symmetric; a lone off-centre wall breaks it', () => {
+  test('an empty board is symmetric; a lone off-centre wall breaks it', () => {
     const p = createPuzzle(4, 3);
     expect(symmetryOf(p)).not.toBeNull();
     p.walls.add(edgeBetween(p, 0, 1));

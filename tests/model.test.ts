@@ -130,8 +130,8 @@ describe('orientEnds', async () => {
   test('other puzzles are left alone', () => {
     const corner = withEnds(4, 4, ['left', 0], ['top', 2]);
     expect(orientEnds(corner)).toBe(corner);
-    const loop = createPuzzle(4, 4);
-    expect(orientEnds(loop)).toBe(loop);
+    const noEnds = createPuzzle(4, 4);
+    expect(orientEnds(noEnds)).toBe(noEnds);
   });
 
   test('loopToEnds puts two ends side by side on the right, as low as both tiles are open', () => {

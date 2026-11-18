@@ -1,5 +1,5 @@
 import { ALL_RULES, runLogic } from './logic';
-import { cellCount, cellRC, clonePuzzle, edgeBetween, edgeCells, edgeCount, endpointCells, isUsableEdge, modeOf, openCells, type Puzzle } from './model';
+import { cellCount, cellRC, clonePuzzle, edgeBetween, edgeCells, edgeCount, endpointCells, isUsableEdge, openCells, type Puzzle } from './model';
 
 export type SolveStatus = 'none' | 'unique' | 'multiple' | 'aborted';
 
@@ -44,19 +44,15 @@ export function colorOf(p: Puzzle, cell: number): 0 | 1 {
 }
 
 /**
- * Checkerboard parity: every segment joins an A tile to a B tile, so a path or
- * loop alternates colours. A loop needs equal counts; a path needs counts that
- * differ by at most one, with both ends on the majority colour if they differ.
+ * Checkerboard parity: every segment joins an A tile to a B tile, so a path
+ * alternates colours. Its counts differ by at most one, with both ends on the
+ * majority colour if they differ.
  */
 export function parityCheck(p: Puzzle): ParityResult {
   let a = 0;
   let b = 0;
   for (const c of openCells(p)) colorOf(p, c) === 0 ? a++ : b++;
   const counts = `${a} A tiles vs ${b} B tiles`;
-  if (modeOf(p) === 'cycle') {
-    if (a !== b) return { ok: false, a, b, endColor: null, reason: `A loop needs equal checkerboard counts, but there are ${counts}.` };
-    return { ok: true, a, b, endColor: null, reason: `Checkerboard counts balance (${counts}).` };
-  }
   if (Math.abs(a - b) > 1) {
     return { ok: false, a, b, endColor: null, reason: `A path's checkerboard counts can differ by at most one, but there are ${counts}.` };
   }
@@ -79,7 +75,6 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   const n = cellCount(p);
   const open = openCells(p);
   const openCount = open.length;
-  const isCycle = modeOf(p) === 'cycle';
   const endpoints = endpointCells(p);
 
   const result = (status: SolveStatus, reason: string, solutions: number[][] = [], nodes = 0): SolveResult => ({
@@ -98,7 +93,6 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   const cps = p.checkpoints;
   if (cps.some((c) => p.blocked.has(c))) return result('none', 'A checkpoint is on a black tile.');
   if (new Set(cps).size !== cps.length) return result('none', 'Two checkpoints are on the same tile.');
-  if (isCycle && openCount < 4) return result('none', 'A loop needs at least four open tiles.');
   const required = [...(opts.mustUse ?? [])];
   const requiredAt: number[][] = Array.from({ length: n }, () => []);
   for (const e of required) {
@@ -124,16 +118,13 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   }
   for (const c of open) {
     if (adj[c].length === 0) return result('none', 'A tile is completely walled off.');
-    if (isCycle && adj[c].length < 2) return result('none', 'A tile has only one way in or out, so it cannot be on a loop.');
   }
   const deadEnds = open.filter((c) => adj[c].length === 1);
-  if (!isCycle) {
-    if (deadEnds.length > 2) return result('none', `${deadEnds.length} tiles have only one way in or out, but a path has only two ends.`);
-    const fixed = new Set(endpoints);
-    const freeEnds = 2 - endpoints.length;
-    const unfixedDead = deadEnds.filter((c) => !fixed.has(c));
-    if (unfixedDead.length > freeEnds) return result('none', 'A dead-end tile cannot be a path end.');
-  }
+  if (deadEnds.length > 2) return result('none', `${deadEnds.length} tiles have only one way in or out, but a path has only two ends.`);
+  const fixed = new Set(endpoints);
+  const freeEnds = 2 - endpoints.length;
+  const unfixedDead = deadEnds.filter((c) => !fixed.has(c));
+  if (unfixedDead.length > freeEnds) return result('none', 'A dead-end tile cannot be a path end.');
 
   const parity = parityCheck(p);
   if (!parity.ok) return result('none', parity.reason);
@@ -145,7 +136,6 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   let nodes = 0;
   let aborted = false;
   const found = new Map<string, number[]>();
-  let start = -1;
   // Checkpoints must be entered in order: cpIndex[cell] is its position (or -1).
   const cpIndex = new Int32Array(n).fill(-1);
   cps.forEach((c, i) => (cpIndex[c] = i));
@@ -161,10 +151,9 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
     return (seedState >>> 0) / 4294967296;
   };
 
-  const record = (closing: boolean) => {
+  const record = () => {
     const edges: number[] = [];
     for (let i = 1; i < order.length; i++) edges.push(edgeBetween(p, order[i - 1], order[i]));
-    if (closing) edges.push(edgeBetween(p, order[order.length - 1], order[0]));
     if (required.length) {
       const set = new Set(edges);
       if (!required.every((e) => set.has(e))) return;
@@ -196,22 +185,18 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
     if (reached < remaining) return false;
     // Degree: each unvisited tile needs two ways in/out, except a path's final tile.
     let ends = 0;
-    let startLinks = 0;
     for (const u of open) {
       if (visited[u]) continue;
       let avail = 0;
       for (const nb of adj[u]) {
-        if (isCycle && nb === start) startLinks++;
-        if (!visited[nb] || nb === cur || (isCycle && nb === start)) avail++;
+        if (!visited[nb] || nb === cur) avail++;
       }
       if (avail < 2) {
-        if (avail === 0 || isCycle) return false;
+        if (avail === 0) return false;
         if (endpoints.length === 2 && u !== endpoints[1]) return false;
         if (++ends > 1) return false;
       }
     }
-    // A loop's last tile must be next to the start.
-    if (isCycle && startLinks === 0) return false;
     return true;
   };
 
@@ -230,11 +215,7 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
     if (aborted) return;
 
     if (visitedCount === openCount) {
-      if (isCycle) {
-        if (adj[cur].includes(start)) record(true);
-      } else if (endpoints.length < 2 || cur === endpoints[1]) {
-        record(false);
-      }
+      if (endpoints.length < 2 || cur === endpoints[1]) record();
       return;
     }
 
@@ -242,11 +223,8 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
     let forced = -1;
     for (const g of requiredAt[cur]) {
       if (g === prev) continue;
-      if (visited[g]) return; // it could only be a loop's closing edge, and we are not at the end
-      if (forced >= 0) {
-        if (isCycle && cur === start) break; // start of a loop: take one now, the other closes it
-        return;
-      }
+      if (visited[g]) return; // the path can't step back onto itself
+      if (forced >= 0) return;
       forced = g;
     }
     const candidates = forced >= 0 ? [forced] : adj[cur].filter((nb) => !visited[nb]);
@@ -277,23 +255,19 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   };
 
   const runFrom = (s: number) => {
-    start = s;
     nextCp = cpIndex[s] === 0 ? 1 : 0;
     visited[s] = 1;
     visitedCount = 1;
     order.push(s);
     // A path's start is an end, so it can carry at most one required segment.
-    if ((isCycle || requiredAt[s].length <= 1) && feasible(s)) dfs(s, -1);
+    if (requiredAt[s].length <= 1 && feasible(s)) dfs(s, -1);
     order.pop();
     visited[s] = 0;
     visitedCount = 0;
   };
 
   let starts: number[];
-  if (isCycle) {
-    // Every tile is on the loop; start where branching is lowest.
-    starts = [open.reduce((best, c) => (adj[c].length < adj[best].length ? c : best), open[0])];
-  } else if (endpoints.length > 0) {
+  if (endpoints.length > 0) {
     starts = [endpoints[0]];
   } else if (deadEnds.length > 0) {
     starts = [deadEnds[0]];

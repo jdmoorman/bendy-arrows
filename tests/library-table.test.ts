@@ -21,13 +21,13 @@ describe('library table', () => {
   const storage = new Storage(new MemStore());
   const mine = createPuzzle(3, 3);
   mine.walls.add(0);
-  storage.put({ id: 'm', name: 'My little loop', code: encodePuzzle(mine), created: 5, updated: 5 });
+  storage.put({ id: 'm', name: 'My little path', code: encodePuzzle(mine), created: 5, updated: 5 });
   const rows = libraryRows(storage, {});
 
   test('lists saved puzzles and every sample, with their facts', () => {
     expect(rows).toHaveLength(SAMPLES.length + 1);
     const r = rows.find((x) => x.entry)!;
-    expect(r).toMatchObject({ name: 'My little loop', collection: 'Yours', type: 'Loop', w: 3, h: 3, walls: 1, black: 0, obstacles: 1, status: 'New' });
+    expect(r).toMatchObject({ name: 'My little path', collection: 'Yours', type: 'Path', w: 3, h: 3, walls: 1, black: 0, obstacles: 1, status: 'New' });
     // Not rated yet.
     expect(r.difficulty).toBeUndefined();
     expect(rows.find((x) => !x.entry)!.unique).toBe(true);
@@ -49,13 +49,13 @@ describe('library table', () => {
   });
 
   test('filters by choice values, number ranges and name', () => {
-    const loops = applyTable(rows, state({ filters: { type: { values: ['Loop'] } } }));
-    expect(loops.length).toBeGreaterThan(0);
-    expect(loops.every((r) => r.type === 'Loop')).toBe(true);
+    const numbers = applyTable(rows, state({ filters: { type: { values: ['Numbers'] } } }));
+    expect(numbers.length).toBeGreaterThan(0);
+    expect(numbers.every((r) => r.type === 'Numbers')).toBe(true);
     const sparse = applyTable(rows, state({ filters: { obstacles: { max: 1 }, w: { min: 8 } } }));
     expect(sparse.length).toBeGreaterThan(0);
     expect(sparse.every((r) => r.obstacles <= 1 && r.w >= 8)).toBe(true);
-    expect(applyTable(rows, state({ search: 'LITTLE' })).map((r) => r.name)).toEqual(['My little loop']);
+    expect(applyTable(rows, state({ search: 'LITTLE' })).map((r) => r.name)).toEqual(['My little path']);
     // Rows without a value (an unrated difficulty) fail a filter on it.
     expect(applyTable(rows, state({ filters: { difficulty: { values: ['Easy', 'Medium', 'Hard', 'Very hard'] } } })).some((r) => r.entry)).toBe(false);
   });

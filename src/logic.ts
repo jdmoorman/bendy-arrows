@@ -1,4 +1,4 @@
-import { cellCount, cellEdges, edgeCells, edgeCount, endpointCells, isHorizontalEdge, isUsableEdge, modeOf, neighbors, openCells, type Puzzle } from './model';
+import { cellCount, cellEdges, edgeCells, edgeCount, endpointCells, isHorizontalEdge, isUsableEdge, neighbors, openCells, type Puzzle } from './model';
 
 /**
  * Simple, local deduction rules for the editor's logic helper. A "step"
@@ -39,7 +39,6 @@ export const RULES: RuleInfo[] = [
     id: 'noFinish',
     label: 'No early finish',
     hint: 'X out a border that would join both ends of the path before every tile is used.',
-    appliesTo: (p) => modeOf(p) === 'path',
   },
   {
     id: 'order',
@@ -109,16 +108,14 @@ export interface StepResult {
 
 /**
  * How many path segments each open tile must have, or null where that isn't
- * known yet (a path puzzle with fewer than two ends).
+ * known yet (fewer than two ends).
  */
 function needs(p: Puzzle): Int8Array | null {
+  const ends = endpointCells(p);
+  if (ends.length < 2) return null;
   const need = new Int8Array(cellCount(p));
   for (const c of openCells(p)) need[c] = 2;
-  if (modeOf(p) === 'path') {
-    const ends = endpointCells(p);
-    if (ends.length < 2) return null;
-    for (const c of ends) need[c] = 1;
-  }
+  for (const c of ends) need[c] = 1;
   return need;
 }
 
@@ -202,7 +199,7 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
   }
   if (allDone) return { kind: 'solved' };
   if (enabled.has('noLoops')) {
-    for (const { edge: e, size } of earlyLoopEdges(p, state, need, open.length)) {
+    for (const { edge: e, size } of earlyLoopEdges(p, state, need)) {
       deductions.push({ rule: 'noLoops', cell: edgeCells(p, e)[0], segments: [], xs: [e], size });
     }
   }
@@ -435,10 +432,9 @@ function explain(p: Puzzle, state: LogicState, d: Deduction): string {
 
 /**
  * Empty, usable borders joining the two loose ends of one drawn piece. Drawing
- * one would close a loop, which is only allowed for a loop puzzle when that
- * loop takes in every tile.
+ * one would close a loop, which the path never does.
  */
-function earlyLoopEdges(p: Puzzle, state: LogicState, need: Int8Array, openCount: number): { edge: number; size: number }[] {
+function earlyLoopEdges(p: Puzzle, state: LogicState, need: Int8Array): { edge: number; size: number }[] {
   const n = cellCount(p);
   const parent = Int32Array.from({ length: n }, (_, i) => i);
   const size = new Int32Array(n).fill(1);
@@ -459,7 +455,6 @@ function earlyLoopEdges(p: Puzzle, state: LogicState, need: Int8Array, openCount
     }
   }
   const out: { edge: number; size: number }[] = [];
-  const loopPuzzle = modeOf(p) === 'cycle';
   for (const c of openCells(p)) {
     for (const e of cellEdges(p, c)) {
       const [a, b] = edgeCells(p, e);
@@ -468,7 +463,6 @@ function earlyLoopEdges(p: Puzzle, state: LogicState, need: Int8Array, openCount
       if (degree[a] !== 1 || degree[b] !== 1 || need[a] !== 2 || need[b] !== 2) continue;
       const r = find(a);
       if (r !== find(b)) continue;
-      if (loopPuzzle && size[r] === openCount) continue; // closing the full loop is the answer
       out.push({ edge: e, size: size[r] });
     }
   }
@@ -537,10 +531,9 @@ function drawnPieces(p: Puzzle, state: LogicState): Pieces {
 /** Borders that would join two drawn pieces into one that can't be part of the answer. */
 function joinRules(p: Puzzle, state: LogicState, need: Int8Array, closed: Set<number>, openCount: number, enabled: Set<RuleId>): Deduction[] {
   const out: Deduction[] = [];
-  const isPath = modeOf(p) === 'path';
   const cpIndex = new Map(p.checkpoints.map((c, i) => [c, i]));
   const useOrder = enabled.has('order') && p.checkpoints.length >= 3;
-  const useFinish = enabled.has('noFinish') && isPath && new Set(endpointCells(p)).size === 2;
+  const useFinish = enabled.has('noFinish') && new Set(endpointCells(p)).size === 2;
   if (!useOrder && !useFinish) return out;
   const { of, order } = drawnPieces(p, state);
   const numbers = (tiles: number[]) => tiles.filter((c) => cpIndex.has(c)).map((c) => cpIndex.get(c)!);
@@ -813,8 +806,6 @@ function areaRules(
    * on the colours of the stretch's two end tiles. Each stretch ends where the
    * path crosses into the area or at a path end, so
    *   (crossings into shaded tiles + shaded path ends) - (same for white) = 2 x (shaded - white tiles).
-   * For a loop (no path ends) in an area with as many shaded tiles as white,
-   * that's "as many crossings into shaded tiles as into white ones".
    * The path must also cross at least once (twice when the count is even).
    */
   // Satisfied areas (see below), collected for chains when they're switched on.

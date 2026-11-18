@@ -10,7 +10,6 @@ import {
   edgeTouchesBlocked,
   MAX_SIZE,
   MIN_SIZE,
-  modeOf,
   endpointCells,
   openCells,
   endTile,
@@ -36,7 +35,7 @@ const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends
 const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
   walls: 'Tap or drag along borders to add walls.',
-  ends: 'Tap a dot on the frame to add the entrance, then the exit. With no ends or checkpoints it is a loop.',
+  ends: 'Tap a dot on the frame to add the entrance, then the exit.',
   checkpoints: 'Tap tiles to number them 1, 2, 3… The path must run through them in order. Tap a number to remove it.',
 };
 
@@ -249,7 +248,7 @@ export class EditorView {
     this.cancelAutoLogic();
     this.clearMessage();
     const p = this.puzzle;
-    if (modeOf(p) === 'path' && endpointCells(p).length < 2) {
+    if (endpointCells(p).length < 2) {
       this.logicNote = 'Place both ends (or at least two checkpoints) first.';
       this.render();
       return;
@@ -289,7 +288,7 @@ export class EditorView {
   private fastForwardLogic() {
     this.cancelAutoLogic();
     const p = this.puzzle;
-    if (modeOf(p) === 'path' && endpointCells(p).length < 2) {
+    if (endpointCells(p).length < 2) {
       this.clearMessage();
       this.logicNote = 'Place both ends (or at least two checkpoints) first.';
       this.render();
@@ -326,7 +325,7 @@ export class EditorView {
   private runAutoLogic() {
     const p = this.puzzle;
     this.cancelAutoLogic();
-    if (modeOf(p) === 'path' && endpointCells(p).length < 2) return;
+    if (endpointCells(p).length < 2) return;
     const id = ++this.autoId;
     this.autoWorker = new Worker(new URL('./logic.worker.ts', import.meta.url), { type: 'module' });
     this.autoWorker.onmessage = (ev: MessageEvent<LogicReply>) => {
@@ -787,7 +786,7 @@ export class EditorView {
       this.status.textContent = this.message;
     } else {
       const open = openCells(p).length;
-      this.status.textContent = this.logicNote || `${modeOf(p) === 'cycle' ? 'Loop' : 'Path'} · ${p.w}×${p.h} · ${open} open tiles. ${TOOL_HINT[this.tool]}`;
+      this.status.textContent = this.logicNote || `${p.checkpoints.length ? 'Numbers' : 'Path'} · ${p.w}×${p.h} · ${open} open tiles. ${TOOL_HINT[this.tool]}`;
     }
   }
 }

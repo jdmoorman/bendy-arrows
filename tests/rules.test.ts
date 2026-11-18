@@ -112,33 +112,13 @@ describe('checkSolution — checkpoints', () => {
   });
 });
 
-describe('checkSolution — cycle mode', () => {
-  test('a puzzle without ends is a loop, so an open path is not a solution', () => {
-    const p = createPuzzle(3, 3);
-    const r = checkSolution(p, pathEdges(p, snake3x3));
-    expect(r.solved).toBe(false);
-    expect([...r.badEnds].sort()).toEqual([0, 8]);
-    const q = createPuzzle(2, 3);
-    expect(checkSolution(q, pathEdges(q, [[0, 0], [0, 1], [1, 1], [2, 1], [2, 0], [1, 0]])).solved).toBe(false);
-  });
-
-  test('accepts a loop through every tile', () => {
+describe('checkSolution — no ends', () => {
+  test('a puzzle without ends takes any path through every tile, but never a loop', () => {
     const p = createPuzzle(2, 3);
-    const r = checkSolution(p, pathEdges(p, [[0, 0], [0, 1], [1, 1], [2, 1], [2, 0], [1, 0]], true));
-    expect(r.solved).toBe(true);
-  });
-
-  test('rejects an open path', () => {
-    const p = createPuzzle(2, 3);
-    const r = checkSolution(p, pathEdges(p, [[0, 0], [0, 1], [1, 1], [2, 1], [2, 0], [1, 0]]));
+    const tour = [[0, 0], [0, 1], [1, 1], [2, 1], [2, 0], [1, 0]] as [number, number][];
+    expect(checkSolution(p, pathEdges(p, tour)).solved).toBe(true);
+    const r = checkSolution(p, pathEdges(p, tour, true));
     expect(r.solved).toBe(false);
-    expect(r.badEnds.size).toBe(2);
-  });
-
-  test('rejects a premature loop', () => {
-    const p = createPuzzle(2, 3);
-    const r = checkSolution(p, pathEdges(p, [[0, 0], [0, 1], [1, 1], [1, 0]], true));
-    expect(r.solved).toBe(false);
-    expect(r.loopEdges.size).toBe(4);
+    expect(r.loopEdges.size).toBe(6);
   });
 });

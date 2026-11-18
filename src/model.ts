@@ -16,8 +16,6 @@
  *   left   (r, 0) .......... port = 2w + h + r
  */
 
-export type Mode = 'path' | 'cycle';
-
 export interface Puzzle {
   w: number;
   h: number;
@@ -28,14 +26,13 @@ export interface Puzzle {
   /**
    * Up to two ends, each either a tile where the path must start/stop or a
    * port (outer border of the frame, see portCell) where it enters or leaves.
-   * The first is the entrance. A puzzle with ends is a path puzzle; with none
-   * it is a loop (see modeOf).
+   * The first is the entrance. (Loop puzzles, with no ends, are gone: see loopToEnds.)
    */
   endpoints: End[];
   /**
    * Numbered checkpoints (tiles), in order: checkpoints[0] is 1. The path
    * starts at 1, passes through each in order and ends at the last. Puzzles
-   * use either checkpoints or ends, not both; either makes it a path puzzle.
+   * use either checkpoints or ends, not both.
    */
   checkpoints: number[];
 }
@@ -61,11 +58,6 @@ export interface Size {
 
 export const MIN_SIZE = 1;
 export const MAX_SIZE = 30;
-
-/** Puzzles with ends or checkpoints are paths; with neither, a loop. */
-export function modeOf(p: Puzzle): Mode {
-  return p.endpoints.length > 0 || p.checkpoints.length > 0 ? 'path' : 'cycle';
-}
 
 export function createPuzzle(w: number, h: number): Puzzle {
   return { w, h, blocked: new Set(), walls: new Set(), endpoints: [], checkpoints: [] };
@@ -192,7 +184,7 @@ export function endTile(s: Size, end: End): number {
 }
 
 /**
- * Tiles where the path must end (path mode): the ends, or with checkpoints
+ * Tiles where the path must end: the ends, or with checkpoints
  * the first and last checkpoint (just the first while only one is placed).
  */
 export function endpointCells(p: Puzzle): number[] {

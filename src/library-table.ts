@@ -1,6 +1,6 @@
 import { decodePuzzle } from './codec';
 import type { Difficulty } from './generator';
-import { modeOf, openCells, type Puzzle } from './model';
+import { openCells, type Puzzle } from './model';
 import { LEVELS } from './levels';
 import { LOCAL_SAMPLES, type SampleGroup } from './samples';
 import type { LibraryEntry, Storage } from './storage';
@@ -19,7 +19,7 @@ export interface LibRow {
   collection: string;
   /** One of the archived built-in samples (not your own puzzles or an official level). */
   sample: boolean;
-  type: 'Loop' | 'Path' | 'Numbers';
+  type: 'Path' | 'Numbers';
   /** Undefined while not rated yet; null if it can't be rated (no unique solution). */
   difficulty?: Difficulty | null;
   /** Undefined while not checked yet. */
@@ -58,7 +58,7 @@ const DIFFICULTY_ORDER: Difficulty[] = ['easy', 'medium', 'hard', 'veryhard'];
 
 function puzzleFacts(p: Puzzle) {
   return {
-    type: (modeOf(p) === 'cycle' ? 'Loop' : p.checkpoints.length ? 'Numbers' : 'Path') as LibRow['type'],
+    type: (p.checkpoints.length ? 'Numbers' : 'Path') as LibRow['type'],
     w: p.w,
     h: p.h,
     tiles: openCells(p).length,
@@ -147,7 +147,7 @@ const yesNo = (b: boolean | undefined) => (b === undefined ? null : b ? 'Yes' : 
 export const COLUMNS: Column[] = [
   { key: 'collection', label: 'Collection', kind: 'choice', value: (r) => r.collection, choices: Object.values(COLLECTIONS) },
   { key: 'sample', label: 'Sample', kind: 'choice', value: (r) => (r.sample ? 'Yes' : 'No'), choices: ['Yes', 'No'] },
-  { key: 'type', label: 'Type', kind: 'choice', value: (r) => r.type, choices: ['Loop', 'Path', 'Numbers'] },
+  { key: 'type', label: 'Type', kind: 'choice', value: (r) => r.type, choices: ['Path', 'Numbers'] },
   {
     key: 'difficulty',
     label: 'Difficulty',
