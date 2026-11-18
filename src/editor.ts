@@ -184,7 +184,7 @@ export class EditorView {
         const kind = { path: 'path', checkpoints: 'numbers' }[options.type];
         const word = (d: string) => (d === 'veryhard' ? 'very hard' : d);
         const note =
-          options.difficulty === 'any' || difficulty === options.difficulty ? '' : ` (no ${word(options.difficulty)} one turned up, so this is the closest)`;
+          !options.difficulties.length || options.difficulties.includes(difficulty) ? '' : ' (none of the chosen difficulties turned up, so this is the closest)';
         const obstacles = p.walls.size + p.blocked.size;
         this.setMessage(
           `Generated ${difficulty === 'easy' ? 'an' : 'a'} ${word(difficulty)} ${kind} puzzle with ${obstacles} obstacle${obstacles === 1 ? '' : 's'}${note} · seed ${options.seed}`,

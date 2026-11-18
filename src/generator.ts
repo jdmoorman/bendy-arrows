@@ -34,8 +34,8 @@ export interface GenOptions {
   w: number;
   h: number;
   type: GenType;
-  /** The difficulty wanted, or 'any'. */
-  difficulty: Difficulty | 'any';
+  /** The difficulties wanted: it stops at the first puzzle rated one of these (all of them if empty). */
+  difficulties: Difficulty[];
   clues: ClueKind;
   /** Remove every clue that isn't needed for a unique solution. */
   minimal: boolean;
@@ -59,9 +59,6 @@ export interface GenResult {
 }
 
 export const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'veryhard'];
-
-/** A sensible default size for each difficulty. */
-export const DEFAULT_SIZE: Record<Difficulty, number> = { easy: 5, medium: 6, hard: 7, veryhard: 7 };
 
 /** Search budget for each uniqueness check. */
 const NODE_LIMIT = 300_000;
@@ -117,14 +114,13 @@ export function rateDifficulty(p: Puzzle, opts: LogicOptions = {}): Difficulty {
 }
 
 /**
- * Generate a puzzle with a unique solution, trying until one matches the
- * difficulty. With no `attempts` limit it keeps trying (the app cancels it from
+ * Generate a puzzle with a unique solution, trying until one matches one of the
+ * difficulties wanted. With no `attempts` limit it keeps trying (the app cancels it from
  * the generator sheet); with a limit it gives back the closest found.
  */
 export function generate(opts: GenOptions, onProgress?: (attempt: number) => void): GenResult {
   const rand = seededRandom(opts.seed);
-  const wanted = opts.difficulty;
-  const target = wanted === 'any' ? -1 : DIFFICULTIES.indexOf(wanted);
+  const wanted = opts.difficulties.length ? opts.difficulties : DIFFICULTIES;
   let best: GenResult | null = null;
   for (let attempt = 1; attempt <= (opts.attempts ?? Infinity); attempt++) {
     onProgress?.(attempt);
@@ -134,8 +130,9 @@ export function generate(opts: GenOptions, onProgress?: (attempt: number) => voi
     const difficulty = rateDifficulty(p);
     // Paths with ends on opposite sides come in on the left and go out on the right.
     const result = { puzzle: orientEnds(p, true), difficulty, attempts: attempt };
-    if (wanted === 'any' || difficulty === wanted) return result;
-    const off = (r: GenResult) => Math.abs(DIFFICULTIES.indexOf(r.difficulty) - target);
+    if (wanted.includes(difficulty)) return result;
+    // How far from the nearest wanted difficulty, for settling on the closest when attempts run out.
+    const off = (r: GenResult) => Math.min(...wanted.map((d) => Math.abs(DIFFICULTIES.indexOf(r.difficulty) - DIFFICULTIES.indexOf(d))));
     if (!best || off(result) < off(best)) best = result;
   }
   if (best) return best;

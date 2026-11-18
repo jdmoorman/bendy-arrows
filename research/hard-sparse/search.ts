@@ -16,7 +16,7 @@ export function hardSparse(type: GenType, w: number, h: number): void {
     let r;
     try {
       r = generate({
-        w, h, type, difficulty: 'hard', clues: 'mixed', minimal: true, attempts: 40, seed,
+        w, h, type, difficulties: ['hard'], clues: 'mixed', minimal: true, attempts: 40, seed,
         maxObstacles: Number.isFinite(best) ? best + 2 : undefined,
       });
     } catch {

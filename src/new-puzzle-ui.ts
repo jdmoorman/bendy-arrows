@@ -1,5 +1,5 @@
 import { generateInBackground, type GeneratorRun } from './generator-client';
-import { randomSeed, type ClueKind, type Difficulty, type GenOptions, type GenType } from './generator';
+import { DIFFICULTIES, randomSeed, type ClueKind, type Difficulty, type GenOptions, type GenType } from './generator';
 import { ICONS } from './icons';
 import type { Puzzle } from './model';
 import type { Storage } from './storage';
@@ -22,8 +22,7 @@ const TYPES: [GenType, string][] = [
   ['path', 'Path'],
   ['checkpoints', 'Numbers'],
 ];
-const DIFFS: [Difficulty | 'any', string][] = [
-  ['any', 'Any'],
+const DIFFS: [Difficulty, string][] = [
   ['easy', 'Easy'],
   ['medium', 'Medium'],
   ['hard', 'Hard'],
@@ -46,11 +45,41 @@ function savedOptions(storage: Storage): Saved {
   const oneOf = <T extends string>(v: unknown, list: [T, string][], d: T): T => (list.some(([k]) => k === v) ? (v as T) : d);
   return {
     type: oneOf(o.type, TYPES, 'path'),
-    difficulty: oneOf(o.difficulty, DIFFS, 'easy'),
+    difficulties: savedDifficulties(o),
     clues: oneOf(o.clues, CLUES, 'mixed'),
     minimal: typeof o.minimal === 'boolean' ? o.minimal : true,
     maxObstacles: typeof o.maxObstacles === 'number' && o.maxObstacles >= 0 ? o.maxObstacles : undefined,
   };
+}
+
+/** The saved difficulties; older saves kept one difficulty, or 'any' for all of them. */
+function savedDifficulties(o: Record<string, unknown>): Difficulty[] {
+  const saved = Array.isArray(o.difficulties) ? o.difficulties : o.difficulty === 'any' ? DIFFICULTIES : [o.difficulty];
+  const list = DIFFICULTIES.filter((d) => saved.includes(d));
+  return list.length ? list : ['easy'];
+}
+
+/** A row of buttons that each switch on and off; at least one stays on. */
+function multiToggle<T extends string>(label: string, options: [T, string][], value: T[], onChange: (v: T[]) => void): HTMLElement {
+  const group = el('div', 'segmented');
+  group.setAttribute('role', 'group');
+  group.setAttribute('aria-label', label);
+  let chosen = [...value];
+  const buttons = options.map(([k, text]) => {
+    const b = el('button', 'seg-btn', text);
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(chosen.includes(k)));
+    b.addEventListener('click', () => {
+      const on = chosen.includes(k);
+      if (on && chosen.length === 1) return; // keep at least one
+      chosen = options.map(([x]) => x).filter((x) => (x === k ? !on : chosen.includes(x)));
+      b.setAttribute('aria-pressed', String(!on));
+      onChange(chosen);
+    });
+    return b;
+  });
+  group.append(...buttons);
+  return group;
 }
 
 /** A row of mutually exclusive buttons. */
@@ -209,8 +238,9 @@ export function openGeneratorSheet(ctx: NewPuzzleContext): void {
       o.type = v;
       save();
     }),
-    segmented('Difficulty', DIFFS, o.difficulty, (v) => {
-      o.difficulty = v;
+    el('p', 'field-label', 'Difficulty (any of the chosen)'),
+    multiToggle('Difficulty', DIFFS, o.difficulties, (v) => {
+      o.difficulties = v;
       save();
     }),
     segmented('Clues', CLUES, o.clues, (v) => {
