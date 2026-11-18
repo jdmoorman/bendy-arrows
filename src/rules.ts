@@ -9,6 +9,18 @@ export function canPlace(p: Puzzle, e: number): boolean {
   return isUsableEdge(p, e);
 }
 
+/**
+ * What a puzzle still needs before it has a path to find (null when ready): both
+ * ends on the frame, or at least two numbers. Without them nothing fixes where the
+ * path starts and stops, so it counts as having no solution.
+ */
+export function missingEnds(p: Puzzle): string | null {
+  if (!p.endpoints.length && !p.checkpoints.length) return 'Place the entrance and exit on the frame (or at least two numbers) first.';
+  if (p.endpoints.length === 1) return 'Place a second end on the frame first — a path needs an entrance and an exit.';
+  if (p.checkpoints.length === 1) return 'Place a second checkpoint first — the path runs from 1 to the highest number.';
+  return null;
+}
+
 export interface CheckResult {
   solved: boolean;
   /** Open cells that no segment touches. */

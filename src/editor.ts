@@ -20,6 +20,7 @@ import {
   type Puzzle,
 } from './model';
 import { padFor, renderBoard } from './render';
+import { missingEnds } from './rules';
 import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, RULES, rulesFor, runLogic, type AreaSource, type LogicOptions, type LogicState, type RuleId } from './logic';
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
@@ -578,19 +579,9 @@ export class EditorView {
    * least two numbers. If not, a message says what's missing.
    */
   checkPlayable(): boolean {
-    if (!this.puzzle.endpoints.length && !this.puzzle.checkpoints.length) {
-      this.setMessage('Place the entrance and exit on the frame (or at least two numbers) first.', 'error');
-      return false;
-    }
-    if (this.puzzle.endpoints.length === 1) {
-      this.setMessage('Place a second end on the frame first — a path needs an entrance and an exit.', 'error');
-      return false;
-    }
-    if (this.puzzle.checkpoints.length === 1) {
-      this.setMessage('Place a second checkpoint first — the path runs from 1 to the highest number.', 'error');
-      return false;
-    }
-    return true;
+    const missing = missingEnds(this.puzzle);
+    if (missing) this.setMessage(missing, 'error');
+    return !missing;
   }
 
   /** Apply a whole-puzzle change as one undoable step. */

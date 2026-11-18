@@ -2,6 +2,7 @@ import { encodePuzzle } from './codec';
 import type { EditorView } from './editor';
 import type { Difficulty } from './generator';
 import { RULES } from './logic';
+import { missingEnds } from './rules';
 import { defaultName } from './save-ui';
 import type { RatingMessage, RatingRequest } from './rating.worker';
 import { solutionUnionInBackground, solveInBackground, type SolverRun, type UnionRun } from './solver-client';
@@ -166,6 +167,14 @@ export function attachUniquenessCheck(editor: EditorView): void {
   };
 
   const start = async () => {
+    // Without ends (or numbers) the path could start and stop anywhere: no solution yet.
+    const missing = missingEnds(editor.current);
+    if (missing) {
+      last = { status: 'none', solutions: [], reason: missing, nodes: 0 };
+      refreshChip();
+      overlay();
+      return;
+    }
     const thisRun = solveInBackground(editor.current);
     run = thisRun;
     try {
