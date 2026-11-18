@@ -174,7 +174,7 @@ export class EditorView {
       onGenerated: (p, { options, difficulty }) => {
         this.marksStillFit = false;
         this.edit(() => p);
-        const kind = { loop: 'loop', path: 'path', checkpoints: 'numbers' }[options.type];
+        const kind = { path: 'path', checkpoints: 'numbers' }[options.type];
         const word = (d: string) => (d === 'veryhard' ? 'very hard' : d);
         const note =
           options.difficulty === 'any' || difficulty === options.difficulty ? '' : ` (no ${word(options.difficulty)} one turned up, so this is the closest)`;

@@ -19,7 +19,6 @@ export interface NewPuzzleContext {
 }
 
 const TYPES: [GenType, string][] = [
-  ['loop', 'Loop'],
   ['path', 'Path'],
   ['checkpoints', 'Numbers'],
 ];

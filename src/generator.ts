@@ -25,7 +25,7 @@ import { solve } from './solver';
  * give the same puzzle.
  */
 
-export type GenType = 'loop' | 'path' | 'checkpoints';
+export type GenType = 'path' | 'checkpoints';
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'veryhard';
 /** Which clues may be used: walls and black tiles, only walls, or only black tiles. */
 export type ClueKind = 'mixed' | 'walls' | 'tiles';
@@ -122,9 +122,6 @@ export function rateDifficulty(p: Puzzle, opts: LogicOptions = {}): Difficulty {
  * difficulty (or giving back the closest found).
  */
 export function generate(opts: GenOptions, onProgress?: (attempt: number) => void): GenResult {
-  if (opts.type === 'loop' && opts.clues === 'walls' && (opts.w * opts.h) % 2) {
-    throw new Error('A loop needs an even number of tiles. Pick an even width or height, or allow black tiles.');
-  }
   const rand = seededRandom(opts.seed);
   const wanted = opts.difficulty;
   const target = wanted === 'any' ? -1 : DIFFICULTIES.indexOf(wanted);
@@ -158,21 +155,16 @@ function shuffle<T>(rand: () => number, xs: T[]): T[] {
 
 const pick = <T>(rand: () => number, xs: T[]): T => xs[Math.floor(rand() * xs.length)];
 
-const shadedOf = (p: Puzzle, c: number) => {
-  const [r, col] = cellRC(p, c);
-  return (r + col) % 2;
-};
-
 /** One try at a puzzle; null if this try didn't work out. */
 function attemptPuzzle(opts: GenOptions, rand: () => number): Puzzle | null {
   const { w, h, type, clues } = opts;
   const p = createPuzzle(w, h);
   const density = clues === 'walls' ? 0 : clues === 'tiles' ? 0.08 + rand() * 0.12 : rand() * 0.08;
-  if (!addBlackTiles(p, rand, density, type === 'loop')) return null;
+  if (!addBlackTiles(p, rand, density)) return null;
 
   let unique: Puzzle | null;
   if (clues === 'tiles' && type !== 'checkpoints') {
-    unique = uniqueByTiles(p, opts, rand);
+    unique = uniqueByTiles(p, rand);
   } else {
     const order = randomHamiltonian(p, rand, type);
     if (!order) return null;
@@ -187,12 +179,8 @@ function attemptPuzzle(opts: GenOptions, rand: () => number): Puzzle | null {
   return unique;
 }
 
-/**
- * Scatter black tiles, keeping the open tiles connected. For a loop, the
- * open tiles must also split evenly between shaded and white, so tiles of
- * the commoner colour are added until they do. False if that isn't possible.
- */
-function addBlackTiles(p: Puzzle, rand: () => number, density: number, loop: boolean): boolean {
+/** Scatter black tiles, keeping the open tiles connected. False if that isn't possible. */
+function addBlackTiles(p: Puzzle, rand: () => number, density: number): boolean {
   const n = cellCount(p);
   const want = Math.floor(n * density);
   const order = shuffle(rand, Array.from({ length: n }, (_, i) => i));
@@ -206,12 +194,6 @@ function addBlackTiles(p: Puzzle, rand: () => number, density: number, loop: boo
   for (const c of order) {
     if (p.blocked.size >= want) break;
     tryAdd(c);
-  }
-  if (!loop) return true;
-  const balance = () => openCells(p).reduce((s, c) => s + (shadedOf(p, c) ? 1 : -1), 0);
-  for (let b = balance(); b !== 0; b = balance()) {
-    const colour = b > 0 ? 1 : 0;
-    if (!order.some((c) => shadedOf(p, c) === colour && tryAdd(c))) return false;
   }
   return true;
 }
@@ -242,8 +224,8 @@ const onFrame = (p: Puzzle, c: number) => {
 
 /**
  * A random Hamiltonian path through the open tiles (as a tile order), made
- * by "backbite" moves from a starting path. For a loop, the two ends are
- * adjacent; for frame ends, both ends are on the frame.
+ * by "backbite" moves from a starting path. For frame ends, both ends are
+ * on the frame.
  */
 function randomHamiltonian(p: Puzzle, rand: () => number, type: GenType): number[] | null {
   const start = startingPath(p);
@@ -264,7 +246,6 @@ function randomHamiltonian(p: Puzzle, rand: () => number, type: GenType): number
   const done = (): boolean => {
     const a = path[0];
     const b = path[path.length - 1];
-    if (type === 'loop') return neighbors(p, a).includes(b);
     if (type === 'path') return onFrame(p, a) && onFrame(p, b);
     return true;
   };
@@ -328,7 +309,6 @@ function uniqueFromSolution(p: Puzzle, order: number[], opts: GenOptions, rand: 
   const pos = new Map(order.map((c, i) => [c, i]));
   const solution = new Set<number>();
   for (let i = 1; i < order.length; i++) solution.add(edgeBetween(p, order[i - 1], order[i]));
-  if (opts.type === 'loop') solution.add(edgeBetween(p, order[0], order[order.length - 1]));
   if (opts.type === 'path') p.endpoints = [portFor(p, order[0], rand), portFor(p, order[order.length - 1], rand)];
   if (opts.type === 'checkpoints') p.checkpoints = [order[0], order[order.length - 1]];
 
@@ -374,28 +354,20 @@ function solutionCount(p: Puzzle, cap: number): number {
 }
 
 /**
- * Black tiles only, for loops and frame ends: there are no walls to add, so
- * keep adding black tiles while that narrows the solutions down.
+ * Black tiles only, for frame ends: there are no walls to add, so keep
+ * adding black tiles while that narrows the solutions down.
  */
-function uniqueByTiles(p: Puzzle, opts: GenOptions, rand: () => number): Puzzle | null {
+function uniqueByTiles(p: Puzzle, rand: () => number): Puzzle | null {
   const CAP = 40;
-  if (opts.type === 'path') {
-    // Take the ends from a random path, so there is at least one solution.
-    const order = randomHamiltonian(p, rand, 'path');
-    if (!order) return null;
-    p.endpoints = [portFor(p, order[0], rand), portFor(p, order[order.length - 1], rand)];
-  }
+  // Take the ends from a random path, so there is at least one solution.
+  const order = randomHamiltonian(p, rand, 'path');
+  if (!order) return null;
+  p.endpoints = [portFor(p, order[0], rand), portFor(p, order[order.length - 1], rand)];
   let count = solutionCount(p, CAP);
   if (count === 0) return null;
   for (let tries = 0; tries < 6 * cellCount(p) && count > 1; tries++) {
     const candidates = openCells(p);
     const add = [pick(rand, candidates)];
-    if (opts.type === 'loop') {
-      // Keep the colours balanced: add an opposite-coloured partner too.
-      const partner = candidates.filter((c) => c !== add[0] && shadedOf(p, c) !== shadedOf(p, add[0]));
-      if (!partner.length) return null;
-      add.push(pick(rand, partner));
-    }
     for (const c of add) p.blocked.add(c);
     if (p.endpoints.some((e) => p.blocked.has(portCell(p, e.port))) || !openTilesOk(p)) {
       for (const c of add) p.blocked.delete(c);

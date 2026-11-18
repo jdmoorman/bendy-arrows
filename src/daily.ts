@@ -6,7 +6,7 @@ export function dateKey(d = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-const TYPES: GenType[] = ['loop', 'path', 'checkpoints'];
+const TYPES: GenType[] = ['path', 'checkpoints'];
 
 /** Everyone gets the same puzzle on the same date: the seed is the date. */
 export function dailyOptions(date: string): GenOptions {
