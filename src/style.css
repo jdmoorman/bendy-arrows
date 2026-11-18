@@ -1124,6 +1124,9 @@ select {
 .difficulty.inline .journey li + li::before {
   content: ' → ';
 }
+.copy-level {
+  font-size: 0.8rem;
+}
 .difficulty-chip {
   flex: none;
   font: inherit;

@@ -101,6 +101,12 @@ export const SAMPLES: { level: SampleLevel; group?: SampleGroup; name: string; c
   { level: 'hard', group: 'hardsparse', name: 'Path 10×10 · 21 obstacles #2', code: 'BQQKCgAEAAwAAAAAAAAAAAAAAAAAAIEAAAQiAQCBhBAgEgAChIIAAIIAAA' },
 ];
 
+/**
+ * The samples are archived: the library shows them only when the app runs locally (the dev
+ * server, or tests and research scripts). A production build leaves them out entirely.
+ */
+export const LOCAL_SAMPLES = import.meta.env.DEV ? SAMPLES : [];
+
 export function samplePuzzle(i = 0): Puzzle {
   return decodePuzzle(SAMPLES[i].code);
 }

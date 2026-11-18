@@ -192,7 +192,10 @@ describe('advanced rules', () => {
     const p = createPuzzle(30, 30);
     const t = performance.now();
     logicStep(p, empty(), ALL_RULES);
-    expect(performance.now() - t).toBeLessThan(1000);
+    // About 0.8 s on a laptop. GitHub's shared servers (which set CI) run about twice as slowly,
+    // so they get more room: this guards against big slowdowns, not a slow machine.
+    const ci = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env.CI;
+    expect(performance.now() - t).toBeLessThan(ci ? 4000 : 1000);
   });
 });
 

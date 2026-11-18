@@ -1,7 +1,8 @@
 import { decodePuzzle } from './codec';
 import type { Difficulty } from './generator';
 import { modeOf, openCells, type Puzzle } from './model';
-import { SAMPLES, type SampleGroup } from './samples';
+import { LEVELS } from './levels';
+import { LOCAL_SAMPLES, type SampleGroup } from './samples';
 import type { LibraryEntry, Storage } from './storage';
 import { symmetryOf } from './symmetry';
 import { formatTime } from './timer';
@@ -41,7 +42,8 @@ export interface Rating {
   unique: boolean;
 }
 
-export const COLLECTIONS: Record<SampleGroup | 'samples' | 'yours', string> = {
+export const COLLECTIONS: Record<SampleGroup | 'samples' | 'yours' | 'levels', string> = {
+  levels: 'Levels',
   yours: 'Yours',
   samples: 'Samples',
   one: 'Sparse: one obstacle',
@@ -100,8 +102,19 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
     const r = ratings[e.code];
     rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: COLLECTIONS.yours, ...f, difficulty: r?.difficulty, unique: r?.unique, ...play(e.code, e), added: e.created });
   }
+  // Official levels, shipped to everyone.
+  LEVELS.forEach((l, i) => {
+    let f;
+    try {
+      f = facts(l.code);
+    } catch {
+      return;
+    }
+    const saved = storage.findByCode(l.code);
+    rows.push({ key: `level:${i}`, name: l.name, code: l.code, collection: COLLECTIONS.levels, ...f, difficulty: l.level, unique: true, ...play(l.code, saved) });
+  });
   const hidden = new Set(storage.loadHiddenSamples());
-  SAMPLES.forEach((s, i) => {
+  LOCAL_SAMPLES.forEach((s, i) => {
     if (hidden.has(s.code)) return;
     const f = facts(s.code);
     const saved = storage.findByCode(s.code);

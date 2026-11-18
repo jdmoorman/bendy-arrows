@@ -2,6 +2,8 @@ import { encodePuzzle } from './codec';
 import type { EditorView } from './editor';
 import type { Difficulty } from './generator';
 import { RULES } from './logic';
+import { defaultName } from './save-ui';
+import { symmetryOf } from './symmetry';
 import type { RatingMessage, RatingRequest } from './rating.worker';
 import { solutionUnionInBackground, solveInBackground, type SolverRun, type UnionRun } from './solver-client';
 import type { SolveResult } from './solver';
@@ -51,6 +53,24 @@ export function attachUniquenessCheck(editor: EditorView): void {
   const journey = document.createElement('ul');
   journey.className = 'journey';
   info.append(level, journey);
+  // Running locally: copy the puzzle as a line for src/levels.ts, once it's unique and rated.
+  const copyBtn = document.createElement('button');
+  copyBtn.type = 'button';
+  copyBtn.className = 'link-btn copy-level hidden';
+  copyBtn.textContent = 'Copy level entry';
+  let entry = '';
+  copyBtn.addEventListener('click', async () => {
+    const p = editor.current;
+    const warn = symmetryOf(p) ? ' It is symmetric, though, so the level tests will reject it.' : '';
+    try {
+      await navigator.clipboard.writeText(entry);
+      editor.setMessage(`Copied. Paste it into LEVELS in src/levels.ts.${warn}`, warn ? 'error' : 'success');
+    } catch {
+      // No clipboard (e.g. a phone on the dev server over plain http): show it to copy by hand.
+      window.prompt(`Copy this line into LEVELS in src/levels.ts.${warn}`, entry);
+    }
+  });
+  if (import.meta.env.DEV) info.append(copyBtn);
   editor.el.querySelector('.board-info')!.append(info);
   applyInline();
   let rater: Worker | null = null;
@@ -63,6 +83,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
   const rate = () => {
     stopRating();
     if (last?.status !== 'unique') return;
+    copyBtn.classList.add('hidden');
     level.textContent = 'Rating…';
     level.dataset.level = '';
     journey.replaceChildren();
@@ -95,6 +116,9 @@ export function attachUniquenessCheck(editor: EditorView): void {
       );
       journey.classList.toggle('plain', !!j && !steps.length);
       info.setAttribute('aria-label', `Difficulty: ${NAMES[d]}. ${items.join(', ')}`);
+      const p = editor.current;
+      entry = `  { name: '${defaultName(p)}', code: '${ev.data.code}', level: '${d}' },`;
+      copyBtn.classList.remove('hidden');
     };
     worker.postMessage({ codes: [encodePuzzle(editor.current)], journey: true } satisfies RatingRequest);
   };

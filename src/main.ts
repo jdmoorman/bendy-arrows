@@ -4,9 +4,10 @@ import { decodePuzzle, encodePuzzle } from './codec';
 import { EditorView } from './editor';
 import { ICONS } from './icons';
 import { LibraryView } from './library-view';
-import { clonePuzzle, puzzlesEqual, type Puzzle } from './model';
+import { clonePuzzle, createPuzzle, puzzlesEqual, type Puzzle } from './model';
 import { PlayView, type Progress } from './play';
-import { SAMPLES, samplePuzzle } from './samples';
+import { LEVELS } from './levels';
+import { LOCAL_SAMPLES } from './samples';
 import { openSaveSheet } from './save-ui';
 import { openShareSheet, puzzleFromHash } from './share';
 import { openSettingsSheet, applySettings } from './settings-ui';
@@ -49,7 +50,7 @@ play.setShowTimer(settings.showTimer);
 play.setAutoCheck(settings.autoCheck);
 
 /** The puzzle currently loaded in the play view, and where it came from. */
-let playing: Puzzle = samplePuzzle();
+let playing: Puzzle = createPuzzle(6, 6);
 let playingCode = encodePuzzle(playing);
 let libraryId: string | undefined;
 let puzzleName: string | undefined;
@@ -107,7 +108,7 @@ function loadPuzzle(p: Puzzle, meta: LoadMeta = {}, startTab: Tab = 'play') {
   // A puzzle that is already in the library picks up its saved name and progress.
   const saved = meta.id ? storage.get(meta.id) : storage.findByCode(playingCode);
   libraryId = saved && saved.code === playingCode ? saved.id : undefined;
-  puzzleName = meta.name ?? saved?.name ?? SAMPLES.find((s) => s.code === playingCode)?.name;
+  puzzleName = meta.name ?? saved?.name ?? [...LEVELS, ...LOCAL_SAMPLES].find((s) => s.code === playingCode)?.name;
   play.load(playing, meta.progress ?? saved?.progress);
   editor.load(playing);
   updateHeader();
@@ -271,8 +272,11 @@ function start() {
     loadPuzzle(fromLink, same ? { progress: session.progress, id: session.libraryId, name: session.name } : {});
   } else if (session && sessionPuzzle) {
     loadPuzzle(sessionPuzzle, { progress: session.progress, id: session.libraryId, name: session.name });
+  } else if (LOCAL_SAMPLES.length) {
+    loadPuzzle(decodePuzzle(LOCAL_SAMPLES[0].code));
   } else {
-    loadPuzzle(samplePuzzle());
+    // First visit, with no samples to start on: open the library, where the daily puzzle is.
+    loadPuzzle(createPuzzle(6, 6), {}, 'library');
   }
   if (session?.tab === 'edit' && session.editorCode && sessionPuzzle && puzzlesEqual(playing, sessionPuzzle)) {
     try {

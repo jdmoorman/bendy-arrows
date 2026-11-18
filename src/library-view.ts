@@ -233,13 +233,14 @@ export class LibraryView {
         }
         this.refresh();
       });
-      actions.append(del);
+      // Official levels can't be deleted; your puzzles and the archived samples can.
+      if (!r.key.startsWith('level:')) actions.append(del);
       tr.append(actions);
       tbody.append(tr);
     }
     if (!shown.length) {
       const tr = el('tr');
-      const td = el('td', 'lib-empty', 'No puzzles match.');
+      const td = el('td', 'lib-empty', this.rows.length ? 'No puzzles match.' : 'Nothing here yet. Save a puzzle, or try the daily puzzle above.');
       td.colSpan = cols.length + 2;
       tr.append(td);
       tbody.append(tr);
