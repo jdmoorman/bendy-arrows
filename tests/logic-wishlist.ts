@@ -21,7 +21,19 @@ export interface Wish {
   note: string;
 }
 
-export const WISHES: Wish[] = [];
+export const WISHES: Wish[] = [
+  {
+    name: 'Path 8×8 · walls: a notched L of 16 tiles in the bottom right',
+    code: 'BQQICAAOAA8AAAAAAAAAAIiAQiRAAQRAAEQAGAAA',
+    edge: ['8,5', '8,4'],
+    area: ['4,7', '4,8', '5,7', '5,8', '6,5', '6,6', '6,7', '6,8', '7,5', '7,6', '7,7', '7,8', '8,5', '8,6', '8,7', '8,8'],
+    note:
+      'Checkerboard balance on rows 4-5 cols 7-8 plus rows 6-8 cols 5-8: 8 shaded and 8 white tiles, ' +
+      'and the only open border into a shaded tile is the one left of 8,5. Rooms never grow into it: ' +
+      'tile 5,6 sits in the notch of the L and is always the cheapest tile to add. It has 5 exits, ' +
+      'all fixed by walls, so a search for areas cut off by 4-5 borders would find it.',
+  },
+];
 
 /** Wishes the rules now grant, kept as a record (and as regression tests). */
 export const DONE: Wish[] = [];
