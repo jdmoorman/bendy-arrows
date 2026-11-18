@@ -3,7 +3,6 @@ import type { EditorView } from './editor';
 import type { Difficulty } from './generator';
 import { RULES } from './logic';
 import { defaultName } from './save-ui';
-import { symmetryOf } from './symmetry';
 import type { RatingMessage, RatingRequest } from './rating.worker';
 import { solutionUnionInBackground, solveInBackground, type SolverRun, type UnionRun } from './solver-client';
 import type { SolveResult } from './solver';
@@ -60,14 +59,12 @@ export function attachUniquenessCheck(editor: EditorView): void {
   copyBtn.textContent = 'Copy level entry';
   let entry = '';
   copyBtn.addEventListener('click', async () => {
-    const p = editor.current;
-    const warn = symmetryOf(p) ? ' It is symmetric, though, so the level tests will reject it.' : '';
     try {
       await navigator.clipboard.writeText(entry);
-      editor.setMessage(`Copied. Paste it into LEVELS in src/levels.ts.${warn}`, warn ? 'error' : 'success');
+      editor.setMessage('Copied. Paste it into LEVELS in src/levels.ts.', 'success');
     } catch {
       // No clipboard (e.g. a phone on the dev server over plain http): show it to copy by hand.
-      window.prompt(`Copy this line into LEVELS in src/levels.ts.${warn}`, entry);
+      window.prompt('Copy this line into LEVELS in src/levels.ts.', entry);
     }
   });
   if (import.meta.env.DEV) info.append(copyBtn);

@@ -10,7 +10,7 @@ import type { Difficulty } from './generator';
  *      line into LEVELS below (or write one by hand: the code is everything after `#p=`
  *      in the puzzle's share link). Give it a better name if you like.
  *   3. `npm test` checks every level: a unique solution, a difficulty that matches the
- *      rating, not symmetric, and no repeated names or codes.
+ *      rating, and no repeated names or codes.
  *   4. Commit and push to main. GitHub builds the site and publishes it to Pages.
  *
  * Players' progress and solve times are kept by a level's code, so changing a published
