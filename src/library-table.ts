@@ -180,8 +180,7 @@ export const COLUMNS: Column[] = [
 export const DEFAULT_COLUMNS = ['type', 'difficulty', 'w', 'h', 'obstacles', 'symmetric', 'status'];
 
 /** A filter on one column: allowed values for a choice column, a range for a number column. */
-/** `exclude` turns a choice filter around: hide the rows with those values instead. */
-export type Filter = { values: string[]; exclude?: boolean } | { min?: number; max?: number };
+export type Filter = { values: string[] } | { min?: number; max?: number };
 
 export interface TableState {
   /** Text the name must contain. */
@@ -228,8 +227,7 @@ export function applyTable(rows: LibRow[], state: TableState): LibRow[] {
       if (!col) continue;
       const v = col.value(r);
       if ('values' in f) {
-        const listed = v !== null && f.values.includes(String(v));
-        if (f.exclude ? listed : !listed) return false;
+        if (v === null || !f.values.includes(String(v))) return false;
       } else {
         if (typeof v !== 'number') return false;
         if (f.min !== undefined && v < f.min) return false;

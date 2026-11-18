@@ -59,7 +59,8 @@ export class LibraryView {
     const saved = storage.loadLibraryTable() ?? {};
     this.state = {
       search: typeof saved.search === 'string' ? saved.search : '',
-      filters: saved.filters && typeof saved.filters === 'object' ? saved.filters : {},
+      // Drop filters saved with the old "All except" mode: read as Only they'd mean the opposite.
+      filters: Object.fromEntries(Object.entries(saved.filters && typeof saved.filters === 'object' ? saved.filters : {}).filter(([, f]) => !(f as { exclude?: boolean } | null)?.exclude)),
       sort: saved.sort && columnByKey(saved.sort.key) ? saved.sort : null,
       columns: Array.isArray(saved.columns) ? saved.columns.filter((k) => columnByKey(k)) : DEFAULT_TABLE_STATE.columns,
     };
@@ -340,20 +341,6 @@ export class LibraryView {
         if (c.kind === 'choice') {
           const f = this.state.filters[c.key];
           const chosen = f && 'values' in f ? f.values : [];
-          const exclude = !!(f && 'values' in f && f.exclude);
-          // Show only the chosen values, or hide them.
-          const mode = el('div', 'segmented filter-mode');
-          for (const [label, ex] of [['Only', false], ['All except', true]] as const) {
-            const b = el('button', 'seg-btn', label);
-            b.type = 'button';
-            b.setAttribute('aria-pressed', String(exclude === ex));
-            b.addEventListener('click', () => {
-              this.setFilter(c.key, { values: chosen, exclude: ex });
-              draw();
-            });
-            mode.append(b);
-          }
-          field.append(mode);
           const chips = el('div', 'chip-row');
           for (const v of choicesFor(c, this.rows)) {
             const chip = el('button', 'chip');
@@ -362,7 +349,7 @@ export class LibraryView {
             chip.setAttribute('aria-pressed', String(chosen.includes(v)));
             chip.addEventListener('click', () => {
               const next = chosen.includes(v) ? chosen.filter((x) => x !== v) : [...chosen, v];
-              this.setFilter(c.key, { values: next, exclude });
+              this.setFilter(c.key, { values: next });
               draw();
             });
             chips.append(chip);
@@ -399,8 +386,7 @@ export class LibraryView {
   }
 
   private setFilter(key: string, f: Filter) {
-    // An "All except" with nothing chosen yet is kept, so the choice of mode sticks.
-    if (filterActive(f) || ('values' in f && f.exclude)) this.state.filters[key] = f;
+    if (filterActive(f)) this.state.filters[key] = f;
     else delete this.state.filters[key];
     this.changed();
   }

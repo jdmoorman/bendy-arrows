@@ -99,11 +99,4 @@ describe('imported sets', () => {
     const only = applyTable(rows, state({ filters: { collection: { values: ['unique-levels'] } } }));
     expect(only.map((r) => r.name)).toEqual(['In the set']);
   });
-
-  test('"All except" hides the chosen values', () => {
-    const rest = applyTable(rows, state({ filters: { collection: { values: ['unique-levels'], exclude: true } } }));
-    expect(rest.some((r) => r.name === 'In the set')).toBe(false);
-    expect(rest.some((r) => r.name === 'Saved here')).toBe(true);
-    expect(rest).toHaveLength(rows.length - 1);
-  });
 });
