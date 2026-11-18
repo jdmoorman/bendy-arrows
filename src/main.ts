@@ -59,8 +59,8 @@ let ready = false;
 
 /** Switch to Play at the user's request, unless the puzzle being edited isn't ready. */
 function requestPlay() {
-  // Play takes up the editor's puzzle when it differs (even from the Library), so it must be ready.
-  if (!puzzlesEqual(playing, editor.current) && !editor.checkPlayable()) {
+  // Play takes up the editor's puzzle (or already has it), so it must have its ends or numbers.
+  if (!editor.checkPlayable()) {
     setTab('edit');
     return;
   }
@@ -104,7 +104,8 @@ function loadPuzzle(p: Puzzle, meta: LoadMeta = {}, startTab: Tab = 'play') {
   play.load(playing, meta.progress ?? saved?.progress);
   editor.load(playing);
   updateHeader();
-  setTab(startTab);
+  // A puzzle without its ends (or numbers), e.g. from an old link or session, opens in Create.
+  setTab(startTab === 'play' && !editor.checkPlayable() ? 'edit' : startTab);
 }
 
 function updateHeader() {
@@ -286,7 +287,7 @@ function start() {
       /* ignore stale editor state */
     }
   }
-  if (session?.tab && sessionPuzzle && puzzlesEqual(playing, sessionPuzzle)) setTab(session.tab);
+  if (session?.tab && sessionPuzzle && puzzlesEqual(playing, sessionPuzzle)) setTab(session.tab === 'play' && !editor.checkPlayable() ? 'edit' : session.tab);
   ready = true;
   saveSession();
 }
