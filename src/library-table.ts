@@ -96,7 +96,7 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
       continue;
     }
     const r = ratings[e.code];
-    rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: COLLECTIONS.yours, sample: false, ...f, difficulty: r?.difficulty, unique: r?.unique, ...play(e.code, e), added: e.created });
+    rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: e.collection ?? COLLECTIONS.yours, sample: false, ...f, difficulty: r?.difficulty, unique: r?.unique, ...play(e.code, e), added: e.created });
   }
   // Official levels, shipped to everyone.
   LEVELS.forEach((l, i) => {
@@ -180,7 +180,8 @@ export const COLUMNS: Column[] = [
 export const DEFAULT_COLUMNS = ['type', 'difficulty', 'w', 'h', 'obstacles', 'symmetric', 'status'];
 
 /** A filter on one column: allowed values for a choice column, a range for a number column. */
-export type Filter = { values: string[] } | { min?: number; max?: number };
+/** `exclude` turns a choice filter around: hide the rows with those values instead. */
+export type Filter = { values: string[]; exclude?: boolean } | { min?: number; max?: number };
 
 export interface TableState {
   /** Text the name must contain. */
@@ -196,6 +197,17 @@ export const DEFAULT_TABLE_STATE: TableState = { search: '', filters: {}, sort: 
 export function filterActive(f: Filter | undefined): boolean {
   if (!f) return false;
   return 'values' in f ? f.values.length > 0 : f.min !== undefined || f.max !== undefined;
+}
+
+/** A choice column's values: its own list, then any others the rows have (e.g. imported sets). */
+export function choicesFor(c: Column, rows: LibRow[]): string[] {
+  const listed = c.choices ?? [];
+  const extra = new Set<string>();
+  for (const r of rows) {
+    const v = c.value(r);
+    if (v !== null && !listed.includes(String(v))) extra.add(String(v));
+  }
+  return [...listed, ...[...extra].sort((a, b) => a.localeCompare(b))];
 }
 
 export function columnByKey(key: string): Column | undefined {
@@ -216,7 +228,8 @@ export function applyTable(rows: LibRow[], state: TableState): LibRow[] {
       if (!col) continue;
       const v = col.value(r);
       if ('values' in f) {
-        if (v === null || !f.values.includes(String(v))) return false;
+        const listed = v !== null && f.values.includes(String(v));
+        if (f.exclude ? listed : !listed) return false;
       } else {
         if (typeof v !== 'number') return false;
         if (f.min !== undefined && v < f.min) return false;

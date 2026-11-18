@@ -4,6 +4,7 @@ import { generateInBackground } from './generator-client';
 import { ICONS } from './icons';
 import {
   applyTable,
+  choicesFor,
   COLUMNS,
   columnByKey,
   DEFAULT_TABLE_STATE,
@@ -109,7 +110,8 @@ export class LibraryView {
     file.addEventListener('change', async () => {
       const f = file.files?.[0];
       file.value = '';
-      if (f) this.importText(await f.text());
+      // The puzzles become a set named after the file, to filter by in the Collection column.
+      if (f) this.importText(await f.text(), f.name.replace(/\.[^.]*$/, '').trim() || 'Imported');
     });
     const imp = el('button', 'btn', `${ICONS.library}<span>Import</span>`);
     imp.title = 'Add the puzzles from a text file of links';
@@ -118,16 +120,25 @@ export class LibraryView {
     return row;
   }
 
-  private importText(text: string) {
+  private importText(text: string, collection: string) {
     const { puzzles, bad } = parseImport(text);
-    const have = new Set(this.storage.list().map((e) => e.code));
+    const have = new Map(this.storage.list().map((e) => [e.code, e]));
     let added = 0;
+    let tagged = 0;
     let failed = false;
     const now = Date.now();
     for (const { code, name } of puzzles) {
-      if (have.has(code)) continue;
-      have.add(code);
-      const entry = { id: newId(), name: name ?? defaultName(decodePuzzle(code)), code, created: now + added, updated: now + added };
+      const existing = have.get(code);
+      if (existing) {
+        // Already saved: it joins the set too, unless it came in with another one.
+        if (!existing.collection && this.storage.put({ ...existing, collection })) {
+          have.set(code, { ...existing, collection });
+          tagged++;
+        }
+        continue;
+      }
+      const entry = { id: newId(), name: name ?? defaultName(decodePuzzle(code)), code, created: now + added, updated: now + added, collection };
+      have.set(code, entry);
       if (!this.storage.put(entry)) {
         failed = true;
         break;
@@ -136,11 +147,11 @@ export class LibraryView {
     }
     const skipped = puzzles.length - added;
     const parts = [`Imported ${added} puzzle${added === 1 ? '' : 's'}`];
-    if (skipped && !failed) parts.push(`${skipped} already saved`);
+    if (skipped && !failed) parts.push(`${skipped} already saved${tagged ? ` (${tagged} added to the set)` : ''}`);
     if (bad) parts.push(`${bad} line${bad === 1 ? '' : 's'} not understood`);
     if (failed) parts.push('storage is full');
-    toast(`${parts.join(', ')}.`, failed || (!added && bad > 0) ? 'error' : '');
-    if (added) this.refresh();
+    toast(`${parts.join(', ')}.${added || tagged ? ` Filter by Collection “${collection}” to see them.` : ''}`, failed || (!added && bad > 0) ? 'error' : '');
+    if (added || tagged) this.refresh();
   }
 
   /** Re-read the library and redraw (call when the tab is shown). */
@@ -329,15 +340,29 @@ export class LibraryView {
         if (c.kind === 'choice') {
           const f = this.state.filters[c.key];
           const chosen = f && 'values' in f ? f.values : [];
+          const exclude = !!(f && 'values' in f && f.exclude);
+          // Show only the chosen values, or hide them.
+          const mode = el('div', 'segmented filter-mode');
+          for (const [label, ex] of [['Only', false], ['All except', true]] as const) {
+            const b = el('button', 'seg-btn', label);
+            b.type = 'button';
+            b.setAttribute('aria-pressed', String(exclude === ex));
+            b.addEventListener('click', () => {
+              this.setFilter(c.key, { values: chosen, exclude: ex });
+              draw();
+            });
+            mode.append(b);
+          }
+          field.append(mode);
           const chips = el('div', 'chip-row');
-          for (const v of c.choices ?? []) {
+          for (const v of choicesFor(c, this.rows)) {
             const chip = el('button', 'chip');
             chip.type = 'button';
             chip.textContent = v;
             chip.setAttribute('aria-pressed', String(chosen.includes(v)));
             chip.addEventListener('click', () => {
               const next = chosen.includes(v) ? chosen.filter((x) => x !== v) : [...chosen, v];
-              this.setFilter(c.key, { values: next });
+              this.setFilter(c.key, { values: next, exclude });
               draw();
             });
             chips.append(chip);
@@ -374,7 +399,8 @@ export class LibraryView {
   }
 
   private setFilter(key: string, f: Filter) {
-    if (filterActive(f)) this.state.filters[key] = f;
+    // An "All except" with nothing chosen yet is kept, so the choice of mode sticks.
+    if (filterActive(f) || ('values' in f && f.exclude)) this.state.filters[key] = f;
     else delete this.state.filters[key];
     this.changed();
   }

@@ -44,6 +44,7 @@ export function openSaveSheet(ctx: SaveContext): void {
       updated: now,
       progress: ctx.progress ?? (keepProgress ? existing?.progress : undefined),
       solved: ctx.solved ?? (keepProgress ? existing?.solved : false),
+      collection: asNew ? undefined : existing?.collection,
     };
     if (!storage.put(entry)) {
       toast('Could not save — browser storage is unavailable', 'error');

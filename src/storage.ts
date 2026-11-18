@@ -15,6 +15,8 @@ export interface LibraryEntry {
   updated: number;
   progress?: Progress;
   solved?: boolean;
+  /** The imported set it came in with (named after the file); none for puzzles saved here. */
+  collection?: string;
 }
 
 export interface Session {

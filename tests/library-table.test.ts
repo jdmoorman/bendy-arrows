@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { encodePuzzle } from '../src/codec';
-import { applyTable, COLUMNS, DEFAULT_TABLE_STATE, libraryRows, type TableState } from '../src/library-table';
+import { applyTable, choicesFor, COLUMNS, DEFAULT_TABLE_STATE, libraryRows, type TableState } from '../src/library-table';
 import { createPuzzle } from '../src/model';
 import { SAMPLES } from '../src/samples';
 import { Storage, type KeyValueStore } from '../src/storage';
@@ -82,5 +82,28 @@ describe('sample flag', () => {
     expect(rows.filter((r) => !r.entry).every((r) => r.sample)).toBe(true);
     const mine = applyTable(rows, state({ filters: { sample: { values: ['No'] } } }));
     expect(mine.map((r) => r.name)).toEqual(['Mine']);
+  });
+});
+
+describe('imported sets', () => {
+  const storage = new Storage(new MemStore());
+  const a = createPuzzle(2, 2);
+  const b = createPuzzle(2, 3);
+  storage.put({ id: 'a', name: 'In the set', code: encodePuzzle(a), created: 1, updated: 1, collection: 'unique-levels' });
+  storage.put({ id: 'b', name: 'Saved here', code: encodePuzzle(b), created: 2, updated: 2 });
+  const rows = libraryRows(storage, {});
+  const collection = COLUMNS.find((c) => c.key === 'collection')!;
+
+  test('a set is a Collection value to filter by', () => {
+    expect(choicesFor(collection, rows)).toContain('unique-levels');
+    const only = applyTable(rows, state({ filters: { collection: { values: ['unique-levels'] } } }));
+    expect(only.map((r) => r.name)).toEqual(['In the set']);
+  });
+
+  test('"All except" hides the chosen values', () => {
+    const rest = applyTable(rows, state({ filters: { collection: { values: ['unique-levels'], exclude: true } } }));
+    expect(rest.some((r) => r.name === 'In the set')).toBe(false);
+    expect(rest.some((r) => r.name === 'Saved here')).toBe(true);
+    expect(rest).toHaveLength(rows.length - 1);
   });
 });
