@@ -26,6 +26,7 @@ export const ICONS = {
   rotateRight: svg('<path d="M21 4v5h-5"/><path d="M20.5 9A9 9 0 1 0 18 18.4"/>'),
   flipH: svg('<path d="M12 3v18"/><path d="M8 7 3 12l5 5V7z"/><path d="M16 7l5 5-5 5V7z"/>'),
   flipV: svg('<path d="M3 12h18"/><path d="M7 8l5-5 5 5H7z"/><path d="M7 16l5 5 5-5H7z"/>'),
+  filter: svg('<path d="M3 5h18l-7 8v6l-4 2v-8z"/>'),
   list: svg('<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2"/>'),
   step: svg('<path d="M5 5v14l9-7z"/><path d="M18 5v14"/>'),
   fastForward: svg('<path d="M3 5v14l8-7z"/><path d="M12 5v14l8-7z"/>'),

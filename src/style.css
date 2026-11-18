@@ -782,6 +782,34 @@ select {
   font-size: 0.7em;
   color: var(--accent);
 }
+/* The column's filter, beside its name: faint until a filter is on. */
+.lib-filter-btn {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  min-height: 40px;
+  min-width: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  color: var(--text-muted);
+  opacity: 0.55;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.lib-filter-btn svg {
+  width: 14px;
+  height: 14px;
+}
+.lib-filter-btn.active {
+  color: var(--accent);
+  opacity: 1;
+}
+.lib-filter-btn.active svg {
+  fill: currentColor;
+}
 .lib-open {
   appearance: none;
   border: 0;

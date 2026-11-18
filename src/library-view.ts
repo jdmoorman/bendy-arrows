@@ -79,7 +79,7 @@ export class LibraryView {
       this.changed();
     });
     this.filterBtn = el('button', 'btn', '');
-    this.filterBtn.addEventListener('click', () => this.openFilters());
+    this.filterBtn.addEventListener('click', () => this.openFilters(this.hiddenColumns(), 'Filters for hidden columns'));
     const colBtn = el('button', 'btn icon-only', ICONS.list);
     colBtn.setAttribute('aria-label', 'Choose columns');
     colBtn.title = 'Choose columns';
@@ -213,6 +213,10 @@ export class LibraryView {
     this.renderTable();
   }
 
+  private hiddenColumns(): Column[] {
+    return COLUMNS.filter((c) => !this.state.columns.includes(c.key));
+  }
+
   private visibleColumns(): Column[] {
     return COLUMNS.filter((c) => this.state.columns.includes(c.key));
   }
@@ -220,8 +224,13 @@ export class LibraryView {
   private renderTable() {
     const shown = applyTable(this.rows, this.state);
     const active = Object.values(this.state.filters).filter(filterActive).length;
-    this.filterBtn.innerHTML = `<span>Filters${active ? ` (${active})` : ''}</span>`;
-    this.filterBtn.classList.toggle('active', active > 0);
+    // The Filters button holds the filters of hidden columns (shown ones filter from their header).
+    const hiddenCols = this.hiddenColumns();
+    const hiddenActive = hiddenCols.filter((c) => filterActive(this.state.filters[c.key])).length;
+    this.filterBtn.innerHTML = `<span>Filters${hiddenActive ? ` (${hiddenActive})` : ''}</span>`;
+    this.filterBtn.title = 'Filters for columns that are hidden';
+    this.filterBtn.classList.toggle('active', hiddenActive > 0);
+    this.filterBtn.hidden = hiddenCols.length === 0;
     const narrowed = active > 0 || this.state.search.trim() !== '';
     this.count.replaceChildren(`${shown.length === this.rows.length ? 'All' : `${shown.length} of`} ${this.rows.length} puzzles`);
     const hidden = this.storage.loadHiddenSamples().length;
@@ -259,6 +268,15 @@ export class LibraryView {
         this.changed();
       });
       th.append(btn);
+      if (c !== NAME_COLUMN) {
+        // Each column's filter sits in its header.
+        const on = filterActive(this.state.filters[c.key]);
+        const fb = el('button', `lib-filter-btn${on ? ' active' : ''}`, ICONS.filter);
+        fb.setAttribute('aria-label', `Filter by ${c.label.toLowerCase()}${on ? ' (on)' : ''}`);
+        fb.title = `Filter by ${c.label.toLowerCase()}`;
+        fb.addEventListener('click', () => this.openFilters([c], c.label));
+        th.append(fb);
+      }
       head.append(th);
     }
     head.append(el('th', 'lib-actions-head'));
@@ -330,22 +348,25 @@ export class LibraryView {
 
   // --- Filters and columns -------------------------------------------------
 
-  private openFilters() {
+  /** A sheet with the filters of these columns (one column from its header, or the hidden ones). */
+  private openFilters(columns: Column[], title: string) {
     const body = el('div', 'sheet-stack lib-filters');
-    openSheet('Filters', body);
+    openSheet(title, body);
+    const anyOn = () => columns.some((c) => filterActive(this.state.filters[c.key]));
     const draw = () => {
       body.replaceChildren();
-      const clear = el('button', 'btn', '<span>Clear all filters</span>');
-      clear.disabled = !Object.values(this.state.filters).some(filterActive);
+      const clear = el('button', 'btn', `<span>${columns.length === 1 ? 'Clear filter' : 'Clear these filters'}</span>`);
+      clear.disabled = !anyOn();
       clear.addEventListener('click', () => {
-        this.state.filters = {};
+        for (const c of columns) delete this.state.filters[c.key];
         this.changed();
         draw();
       });
       body.append(clear);
-      for (const c of COLUMNS) {
+      if (!columns.length) body.append(el('p', 'field-label', 'Every column is showing: filter from the column headers.'));
+      for (const c of columns) {
         const field = el('div', 'lib-filter');
-        field.append(el('p', 'field-label', c.label));
+        if (columns.length > 1) field.append(el('p', 'field-label', c.label));
         if (c.kind === 'choice') {
           const f = this.state.filters[c.key];
           const chosen = f && 'values' in f ? f.values : [];
@@ -380,7 +401,7 @@ export class LibraryView {
               const n = i.value.trim() === '' ? undefined : Number(i.value);
               const cur = (this.state.filters[c.key] ?? {}) as { min?: number; max?: number };
               this.setFilter(c.key, { ...cur, [which]: Number.isFinite(n) ? n : undefined });
-              clear.disabled = !Object.values(this.state.filters).some(filterActive);
+              clear.disabled = !anyOn();
             });
             return i;
           };
