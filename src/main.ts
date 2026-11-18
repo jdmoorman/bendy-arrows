@@ -13,7 +13,6 @@ import { openSaveSheet } from './save-ui';
 import { openShareSheet, puzzleFromHash } from './share';
 import { openSettingsSheet, applySettings } from './settings-ui';
 import { Storage } from './storage';
-import { LocalLeaderboard } from './leaderboard';
 import { openSolvedSheet } from './solved-ui';
 import { applyTheme, DEFAULT_THEME } from './themes';
 import { toast } from './ui';
@@ -39,7 +38,6 @@ app.innerHTML = `
 
 const storage = new Storage();
 let settings = storage.loadSettings();
-const leaderboard = new LocalLeaderboard(storage);
 applySettings(settings);
 const views = app.querySelector('.views')!;
 const titleEl = app.querySelector<HTMLElement>('.app-title')!;
@@ -47,7 +45,6 @@ const play = new PlayView();
 const editor = new EditorView();
 const library = new LibraryView(storage);
 views.append(play.el, editor.el, library.el);
-play.setShowTimer(settings.showTimer);
 play.setAutoCheck(settings.autoCheck);
 
 /** The puzzle currently loaded in the play view, and where it came from. */
@@ -76,23 +73,13 @@ function requestPlay() {
 editor.onPlay = requestPlay;
 attachUniquenessCheck(editor);
 
-play.onSolved = async (ms, stats, isNew) => {
-  const code = playingCode;
-  // A repeat solve of the same attempt shows the times without adding another.
-  const result = isNew ? await leaderboard.record(code, ms, stats) : { entries: await leaderboard.list(code), index: -1 };
-  if (code !== playingCode) return;
+play.onSolved = () => {
+  storage.markSolved(playingCode);
   openSolvedSheet({
-    ms,
-    result,
     onPlayAgain: () => play.playAgain(),
     onAnotherPuzzle: openLibrary,
   });
 };
-
-/** The timer runs only while Play is in front of the player. */
-function updateTimerActivity() {
-  play.setActive(tab === 'play' && document.visibilityState === 'visible');
-}
 
 play.onProgress = (progress, solved) => {
   if (libraryId) storage.updateProgress(libraryId, playingCode, progress, solved);
@@ -149,7 +136,7 @@ function setTab(t: Tab) {
     const saved = storage.findByCode(playingCode);
     libraryId = saved?.id;
     puzzleName = saved?.name;
-    // An edited puzzle is a new puzzle: keep the marks that still fit, but not the time.
+    // An edited puzzle is a new puzzle: keep the marks that still fit.
     // A replaced, resized or turned puzzle starts with an empty board.
     const { segments, xMarks } = play.progress;
     play.load(playing, saved?.progress ?? (editor.marksStillFit ? { segments, xMarks } : undefined));
@@ -167,7 +154,6 @@ function setTab(t: Tab) {
   for (const b of app.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
     b.setAttribute('aria-selected', String(b.dataset.tab === t));
   }
-  updateTimerActivity();
   saveSession();
 }
 
@@ -182,7 +168,6 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
     // Coordinates change the board's margin, so redraw both boards.
     play.render();
     editor.render();
-    play.setShowTimer(s.showTimer);
     play.setAutoCheck(s.autoCheck);
     storage.saveSettings(s);
   });
@@ -233,8 +218,8 @@ function saveCurrent(fromEditor: boolean) {
 editor.onSave = () => saveCurrent(true);
 library.onSave = () => saveCurrent(lastBoardTab === 'edit');
 library.onOpen = ({ puzzle, progress, id, name }, t) => {
-  // A finished attempt opens fresh for Play: empty board, timer at 0, so the next solve counts.
-  const finished = !!progress && (!!progress.recorded || checkSolution(puzzle, new Set(progress.segments)).solved);
+  // A finished puzzle opens with an empty board for Play.
+  const finished = !!progress && checkSolution(puzzle, new Set(progress.segments)).solved;
   const fresh: Progress = { segments: [], xMarks: [] };
   loadPuzzle(puzzle, { progress: t === 'play' && finished ? fresh : progress, id, name }, t);
 };
@@ -269,7 +254,6 @@ window.addEventListener('hashchange', () => {
 
 // Save progress when the page is hidden (phones often discard background tabs).
 document.addEventListener('visibilitychange', () => {
-  updateTimerActivity();
   if (document.visibilityState === 'hidden') saveSession();
 });
 

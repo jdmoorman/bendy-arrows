@@ -156,11 +156,11 @@ export class LibraryView {
   private renderDaily() {
     const date = dateKey();
     const code = this.storage.loadDaily(date);
-    const solved = code ? this.storage.loadTimes(code).length || (this.storage.findByCode(code)?.solved ? 1 : 0) : 0;
+    const solved = !!code && (this.storage.isSolved(code) || !!this.storage.findByCode(code)?.solved);
     const daily = el('button', `lib-daily${solved ? ' solved' : ''}`);
     const title = el('span', 'lib-name');
     title.textContent = dailyName(date);
-    const meta = el('span', 'lib-meta', solved ? `${ICONS.check} Solved${solved > 1 ? ` ${solved}×` : ''}` : 'A new puzzle every day');
+    const meta = el('span', 'lib-meta', solved ? `${ICONS.check} Solved` : 'A new puzzle every day');
     daily.append(title, meta);
     daily.addEventListener('click', async () => {
       const open = (code: string) => {
@@ -249,14 +249,14 @@ export class LibraryView {
     for (const r of shown) {
       const tr = el('tr');
       if (r.code === this.currentCode) tr.classList.add('current');
-      if (r.solves) tr.classList.add('solved');
+      if (r.status === 'Solved') tr.classList.add('solved');
       const name = el('th', 'lib-name-cell');
       name.scope = 'row';
       const open = el('button', 'lib-open');
       const title = el('span');
       title.textContent = r.name;
       open.append(title);
-      if (r.solves) open.append(el('span', 'lib-check', `${ICONS.check}${r.solves > 1 ? `${r.solves}×` : ''}`));
+      if (r.status === 'Solved') open.append(el('span', 'lib-check', ICONS.check));
       open.setAttribute('aria-label', `Play ${r.name}`);
       open.addEventListener('click', () => this.open(r, 'play'));
       name.append(open);

@@ -62,10 +62,31 @@ describe('Storage', () => {
 describe('settings', () => {
   test('default to checkerboard on and round-trip', () => {
     const s = new Storage(new MemStore());
-    expect(s.loadSettings()).toEqual({ checkerboard: true, showTimer: false, autoCheck: true, darkTheme: false, coordinates: false });
-    s.saveSettings({ checkerboard: false, showTimer: true, autoCheck: false, darkTheme: true, coordinates: true });
-    expect(s.loadSettings()).toEqual({ checkerboard: false, showTimer: true, autoCheck: false, darkTheme: true, coordinates: true });
-    expect(new Storage(null).loadSettings()).toEqual({ checkerboard: true, showTimer: false, autoCheck: true, darkTheme: false, coordinates: false });
+    expect(s.loadSettings()).toEqual({ checkerboard: true, autoCheck: true, darkTheme: false, coordinates: false });
+    s.saveSettings({ checkerboard: false, autoCheck: false, darkTheme: true, coordinates: true });
+    expect(s.loadSettings()).toEqual({ checkerboard: false, autoCheck: false, darkTheme: true, coordinates: true });
+    expect(new Storage(null).loadSettings()).toEqual({ checkerboard: true, autoCheck: true, darkTheme: false, coordinates: false });
   });
 
+});
+
+describe('solved puzzles', () => {
+  test('markSolved and isSolved', () => {
+    const s = new Storage(new MemStore());
+    expect(s.isSolved('A')).toBe(false);
+    s.markSolved('A');
+    s.markSolved('A');
+    expect(s.isSolved('A')).toBe(true);
+    expect(s.isSolved('B')).toBe(false);
+  });
+
+  test('puzzles with old solve times count as solved', () => {
+    const m = new MemStore();
+    m.setItem('hamiltonian.times.v1', JSON.stringify({ A: [{ ms: 1000, at: 0 }] }));
+    const s = new Storage(m);
+    expect(s.isSolved('A')).toBe(true);
+    s.markSolved('B');
+    expect(s.isSolved('A')).toBe(true);
+    expect(s.isSolved('B')).toBe(true);
+  });
 });

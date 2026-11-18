@@ -30,7 +30,8 @@ export interface Session {
 const LIBRARY_KEY = 'hamiltonian.library.v1';
 const SESSION_KEY = 'hamiltonian.session.v1';
 const SETTINGS_KEY = 'hamiltonian.settings.v1';
-const TIMES_KEY = 'hamiltonian.times.v1';
+const TIMES_KEY = 'hamiltonian.times.v1'; // old solve times: read once to seed SOLVED_KEY
+const SOLVED_KEY = 'hamiltonian.solved.v1';
 const LOGIC_KEY = 'hamiltonian.logic.v1';
 const GENERATOR_KEY = 'hamiltonian.generator.v1';
 const DAILY_KEY = 'hamiltonian.daily.v1';
@@ -44,8 +45,6 @@ const HINTS_INLINE_KEY = 'hamiltonian.hintsinline.v1';
 export interface Settings {
   /** Shade alternate tiles faintly. */
   checkerboard: boolean;
-  /** Show the solve timer while playing. */
-  showTimer: boolean;
   /** Highlight mistakes (branches, early loops, numbers out of order) as you play. */
   autoCheck: boolean;
   /** Use the dark colour theme. */
@@ -54,7 +53,7 @@ export interface Settings {
   coordinates: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { checkerboard: true, showTimer: false, autoCheck: true, darkTheme: false, coordinates: false };
+export const DEFAULT_SETTINGS: Settings = { checkerboard: true, autoCheck: true, darkTheme: false, coordinates: false };
 
 export interface KeyValueStore {
   getItem(key: string): string | null;
@@ -132,16 +131,23 @@ export class Storage {
     this.put({ ...e, progress, solved: solved || !!e.solved, updated: Date.now() });
   }
 
-  /** Solve times for a puzzle (by share code), as stored. */
-  loadTimes(code: string): { ms: number; at: number; hints?: number; checks?: number }[] {
-    const all = this.read<Record<string, { ms: number; at: number; hints?: number; checks?: number }[]>>(TIMES_KEY, {});
-    const list = all && typeof all === 'object' ? all[code] : undefined;
-    return Array.isArray(list) ? list.filter((t) => t && typeof t.ms === 'number' && typeof t.at === 'number') : [];
+  /** Share codes of every puzzle solved on this device (saved in the library or not). */
+  private loadSolved(): string[] {
+    const list = this.read<unknown>(SOLVED_KEY, null);
+    if (Array.isArray(list)) return list.filter((c): c is string => typeof c === 'string');
+    // Before this list, solves were kept as times: every puzzle with a time was solved.
+    const times = this.read<unknown>(TIMES_KEY, null);
+    return times && typeof times === 'object' ? Object.keys(times) : [];
   }
 
-  saveTimes(code: string, times: { ms: number; at: number; hints?: number; checks?: number }[]): void {
-    const all = this.read<Record<string, { ms: number; at: number; hints?: number; checks?: number }[]>>(TIMES_KEY, {});
-    this.write(TIMES_KEY, { ...(all && typeof all === 'object' ? all : {}), [code]: times });
+  /** Whether the puzzle with this share code has been solved on this device (see also an entry's `solved`). */
+  isSolved(code: string): boolean {
+    return this.loadSolved().includes(code);
+  }
+
+  markSolved(code: string): void {
+    const list = this.loadSolved();
+    if (!list.includes(code)) this.write(SOLVED_KEY, [...list, code]);
   }
 
   /**

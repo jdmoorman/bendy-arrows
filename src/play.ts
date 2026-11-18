@@ -1,7 +1,6 @@
 import { History } from './history';
 import { solveInBackground, type SolverRun } from './solver-client';
 import { findHint, type Hint } from './logic';
-import { formatTime, SolveTimer } from './timer';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
 import { cellEdges, edgeBetween, isUsableEdge, type Puzzle } from './model';
@@ -11,17 +10,6 @@ import { canPlace, checkSolution } from './rules';
 export interface Progress {
   segments: number[];
   xMarks: number[];
-  /** Time spent on the current attempt so far (never shown while playing). */
-  elapsedMs?: number;
-  /** The current attempt has already been solved and its time recorded. */
-  recorded?: boolean;
-  /** Hints shown during the current attempt. */
-  hints?: number;
-}
-
-/** How much help an attempt used. */
-export interface AttemptStats {
-  hints: number;
 }
 
 /** A hint, or the marks that don't fit the solution. */
@@ -31,18 +19,10 @@ export class PlayView {
   readonly el: HTMLElement;
   /** Called after every change to the player's marks. */
   onProgress?: (progress: Progress, solved: boolean) => void;
-  /**
-   * Called whenever the board becomes solved, with the attempt's time.
-   * `isNew` is true only the first time in an attempt (the time to record).
-   */
-  onSolved?: (elapsedMs: number, stats: AttemptStats, isNew: boolean) => void;
+  /** Called whenever the board becomes solved. */
+  onSolved?: () => void;
 
-  private timer = new SolveTimer();
-  private recorded = false;
-  private hintsUsed = 0;
   private autoCheck = true;
-  private timerEl!: HTMLElement;
-  private timerTick = 0;
 
   private puzzle!: Puzzle;
   private segments = new Set<number>();
@@ -78,7 +58,6 @@ export class PlayView {
     this.el = document.createElement('section');
     this.el.className = 'view play-view';
     this.el.innerHTML = `
-      <p class="play-timer hidden" aria-label="Solve time"></p>
       <div class="board-wrap"><svg class="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Puzzle board"></svg></div>
       <p class="status" role="status" aria-live="polite"></p>
       <div class="toolbar">
@@ -90,7 +69,6 @@ export class PlayView {
         </div>
       </div>`;
     this.svg = this.el.querySelector('svg')!;
-    this.timerEl = this.el.querySelector('.play-timer')!;
     this.status = this.el.querySelector('.status')!;
     this.undoBtn = this.el.querySelector('[data-act=undo]')!;
     this.redoBtn = this.el.querySelector('[data-act=redo]')!;
@@ -151,22 +129,15 @@ export class PlayView {
     this.history.clear();
     this.shownHint = null;
     this.solved = checkSolution(p, this.segments).solved;
-    // A puzzle that opens already solved does not get a new time.
-    this.recorded = !!progress?.recorded || this.solved;
-    this.timer.reset(progress?.elapsedMs ?? 0, this.recorded);
-    this.hintsUsed = progress?.hints ?? 0;
     this.render();
   }
 
-  /** Start a new attempt: empty board, fresh timer, no hints (Play again / Reset puzzle). */
+  /** Start a new attempt: empty board, no undo history (Play again). */
   playAgain(): void {
     this.segments.clear();
     this.xMarks.clear();
     this.history.clear();
     this.solved = false;
-    this.recorded = false;
-    this.hintsUsed = 0;
-    this.timer.reset(0);
     this.render();
     this.onProgress?.(this.progress, false);
   }
@@ -191,30 +162,9 @@ export class PlayView {
     this.render();
   }
 
-  /** Show or hide the running solve time (hidden by default). */
-  setShowTimer(show: boolean): void {
-    this.timerEl.classList.toggle('hidden', !show);
-    clearInterval(this.timerTick);
-    if (show) {
-      const update = () => (this.timerEl.textContent = formatTime(this.timer.elapsed));
-      update();
-      this.timerTick = window.setInterval(update, 500);
-    }
-  }
-
-  /** Whether the play view is in front of the player (so the timer may run). */
-  setActive(active: boolean): void {
-    this.timer.setActive(active);
-  }
-
-  /** Marks plus the attempt's timing, for saving. */
+  /** The player's marks, for saving. */
   get progress(): Progress {
-    return {
-      ...this.snapshot(),
-      elapsedMs: Math.round(this.timer.elapsed),
-      recorded: this.recorded,
-      hints: this.hintsUsed,
-    };
+    return this.snapshot();
   }
 
   get isSolved(): boolean {
@@ -310,7 +260,7 @@ export class PlayView {
     this.changed = false;
   }
 
-  /** Reset: empty the board as one undoable step. The timer and hints carry on. */
+  /** Reset: empty the board as one undoable step. */
   private clearBoard() {
     if (!this.segments.size && !this.xMarks.size) return;
     this.history.push(this.snapshot());
@@ -325,15 +275,10 @@ export class PlayView {
     const wasSolved = this.solved;
     this.solved = checkSolution(this.puzzle, this.segments).solved;
     if (this.solved && !wasSolved) navigator.vibrate?.([30, 60, 30]);
-    const firstSolve = this.solved && !this.recorded;
-    if (firstSolve) {
-      this.timer.stop();
-      this.recorded = true;
-    }
     this.render();
     this.onProgress?.(this.progress, this.solved);
     // Every time the board becomes solved (e.g. again after Reset or Undo), not just the first.
-    if (this.solved && !wasSolved) this.onSolved?.(this.timer.elapsed, { hints: this.hintsUsed }, firstSolve);
+    if (this.solved && !wasSolved) this.onSolved?.();
   }
 
   private undo() {
@@ -369,10 +314,6 @@ export class PlayView {
    */
   private async showHint() {
     const changes = this.changeCount;
-    const count = () => {
-      if (!this.recorded) this.hintsUsed++;
-      this.onProgress?.(this.progress, this.solved);
-    };
     if (this.segments.size || this.xMarks.size) {
       this.shownHint = { kind: 'none', text: 'Thinking…' };
       this.render();
@@ -389,15 +330,12 @@ export class PlayView {
         }
         if (best && best.lines.length + best.xs.length) {
           this.shownHint = { kind: 'wrong', edges: [...best.lines, ...best.xs], text: wrongText(best.lines.length, best.xs.length) };
-          count();
           this.render();
           return;
         }
       }
     }
     this.shownHint = findHint(this.puzzle, { segments: this.segments, xs: this.xMarks });
-    // Count hints that actually help (not "no hint available" or "already solved").
-    if (this.shownHint.kind === 'deduction' || this.shownHint.kind === 'mistake') count();
     this.render();
   }
 

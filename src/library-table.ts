@@ -5,7 +5,6 @@ import { LEVELS } from './levels';
 import { LOCAL_SAMPLES, type SampleGroup } from './samples';
 import type { LibraryEntry, Storage } from './storage';
 import { symmetryOf } from './symmetry';
-import { formatTime } from './timer';
 
 /** One puzzle in the library table: a saved puzzle or a built-in sample. */
 export interface LibRow {
@@ -32,8 +31,6 @@ export interface LibRow {
   obstacles: number;
   numbers: number;
   symmetric: boolean;
-  solves: number;
-  best?: number;
   status: 'New' | 'In progress' | 'Solved';
   added?: number;
 }
@@ -86,12 +83,9 @@ function facts(code: string) {
 export function libraryRows(storage: Storage, ratings: Record<string, Rating>): LibRow[] {
   const rows: LibRow[] = [];
   const play = (code: string, saved?: LibraryEntry) => {
-    const times = storage.loadTimes(code);
-    const solves = times.length || (saved?.solved ? 1 : 0);
+    const solved = storage.isSolved(code) || !!saved?.solved;
     return {
-      solves,
-      best: times.length ? Math.min(...times.map((t) => t.ms)) : undefined,
-      status: (solves ? 'Solved' : saved?.progress?.segments.length ? 'In progress' : 'New') as LibRow['status'],
+      status: (solved ? 'Solved' : saved?.progress?.segments.length ? 'In progress' : 'New') as LibRow['status'],
     };
   };
   for (const e of storage.list()) {
@@ -173,8 +167,6 @@ export const COLUMNS: Column[] = [
   { key: 'symmetric', label: 'Symmetric', short: 'Sym.', kind: 'choice', value: (r) => yesNo(r.symmetric), choices: ['Yes', 'No'] },
   { key: 'unique', label: 'Unique solution', short: 'Unique', kind: 'choice', value: (r) => yesNo(r.unique), show: (r) => yesNo(r.unique) ?? '…', choices: ['Yes', 'No'] },
   { key: 'status', label: 'Status', kind: 'choice', value: (r) => r.status, choices: ['New', 'In progress', 'Solved'] },
-  { key: 'solves', label: 'Times solved', short: 'Solves', kind: 'number', value: (r) => r.solves },
-  { key: 'best', label: 'Best time (seconds)', short: 'Best', kind: 'number', value: (r) => (r.best === undefined ? null : Math.round(r.best / 1000)), show: (r) => (r.best === undefined ? '' : formatTime(r.best)) },
   {
     key: 'added',
     label: 'Added',
