@@ -10,7 +10,6 @@ import {
   edgeTouchesBlocked,
   MAX_SIZE,
   MIN_SIZE,
-  endpointCells,
   openCells,
   endTile,
   endsEqual,
@@ -248,11 +247,6 @@ export class EditorView {
     this.cancelAutoLogic();
     this.clearMessage();
     const p = this.puzzle;
-    if (endpointCells(p).length < 2) {
-      this.logicNote = 'Place both ends (or at least two checkpoints) first.';
-      this.render();
-      return;
-    }
     // One step is exactly what a Play hint would suggest, using the chosen rules.
     const hint = findHint(p, this.logic, this.logicRules, this.logicOpts);
     this.logicFresh = new Set();
@@ -288,12 +282,6 @@ export class EditorView {
   private fastForwardLogic() {
     this.cancelAutoLogic();
     const p = this.puzzle;
-    if (endpointCells(p).length < 2) {
-      this.clearMessage();
-      this.logicNote = 'Place both ends (or at least two checkpoints) first.';
-      this.render();
-      return;
-    }
     const rules = [...this.logicRules].filter((r) => !ADVANCED_RULES.includes(r));
     const before = { logic: this.logic, steps: this.logicSteps };
     // Speed matters here, not the order a hint would pick: run the easy rules to the end.
@@ -325,7 +313,6 @@ export class EditorView {
   private runAutoLogic() {
     const p = this.puzzle;
     this.cancelAutoLogic();
-    if (endpointCells(p).length < 2) return;
     const id = ++this.autoId;
     this.autoWorker = new Worker(new URL('./logic.worker.ts', import.meta.url), { type: 'module' });
     this.autoWorker.onmessage = (ev: MessageEvent<LogicReply>) => {
@@ -587,10 +574,14 @@ export class EditorView {
   }
 
   /**
-   * Whether the puzzle can be played. A single end is not enough; if so, a
-   * message asks for the second one.
+   * Whether the puzzle can be played or saved: it needs both ends, or at
+   * least two numbers. If not, a message says what's missing.
    */
   checkPlayable(): boolean {
+    if (!this.puzzle.endpoints.length && !this.puzzle.checkpoints.length) {
+      this.setMessage('Place the entrance and exit on the frame (or at least two numbers) first.', 'error');
+      return false;
+    }
     if (this.puzzle.endpoints.length === 1) {
       this.setMessage('Place a second end on the frame first — a path needs an entrance and an exit.', 'error');
       return false;

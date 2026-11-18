@@ -62,7 +62,11 @@ let ready = false;
 
 /** Switch to Play at the user's request, unless the puzzle being edited isn't ready. */
 function requestPlay() {
-  if (tab === 'edit' && !editor.checkPlayable()) return;
+  // Play takes up the editor's puzzle when it differs (even from the Library), so it must be ready.
+  if (!puzzlesEqual(playing, editor.current) && !editor.checkPlayable()) {
+    setTab('edit');
+    return;
+  }
   // Lines and X's from the editor's logic steps carry over to the Play board.
   const marks = tab === 'edit' ? editor.logicMarks : null;
   setTab('play');
@@ -200,6 +204,11 @@ function openLibrary() {
 /** Save the editor's puzzle, or the one being played, to the library. */
 function saveCurrent(fromEditor: boolean) {
   const editing = fromEditor && !puzzlesEqual(playing, editor.current);
+  // A puzzle needs its ends (or numbers) before it can be saved; the editor says what's missing.
+  if (editing && !editor.checkPlayable()) {
+    setTab('edit');
+    return;
+  }
   openSaveSheet({
     storage,
     current: editing ? editor.current : playing,

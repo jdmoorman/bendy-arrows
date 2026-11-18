@@ -107,12 +107,12 @@ export interface StepResult {
 }
 
 /**
- * How many path segments each open tile must have, or null where that isn't
- * known yet (fewer than two ends).
+ * How many path segments each open tile must have: one at a path end, two
+ * elsewhere. With fewer than two ends this is wrong for the missing ends'
+ * tiles, so rules that rely on it may find contradictions or wrong marks.
  */
-function needs(p: Puzzle): Int8Array | null {
+function needs(p: Puzzle): Int8Array {
   const ends = endpointCells(p);
-  if (ends.length < 2) return null;
   const need = new Int8Array(cellCount(p));
   for (const c of openCells(p)) need[c] = 2;
   for (const c of ends) need[c] = 1;
@@ -136,7 +136,6 @@ export interface Deduction {
 }
 
 type Analysis =
-  | { kind: 'unknown' }
   | ({ kind: 'contradiction' } & Contradiction)
   | { kind: 'solved' }
   | { kind: 'open'; deductions: Deduction[] };
@@ -174,7 +173,6 @@ export interface LogicOptions {
 
 function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: LogicOptions = {}): Analysis {
   const need = needs(p);
-  if (!need) return { kind: 'unknown' };
   const open = openCells(p);
   const closed = fullTileBorders(p, state, need);
   const deductions: Deduction[] = [];
@@ -234,7 +232,6 @@ export function deductions(p: Puzzle, state: LogicState, rules: Iterable<RuleId>
 export function logicStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>, opts: LogicOptions = {}): StepResult {
   const result: StepResult = { segments: [], xs: [], byRule: {}, solved: false };
   const an = analyse(p, state, new Set(rules), opts);
-  if (an.kind === 'unknown') return result;
   if (an.kind === 'contradiction') {
     const { kind: _, ...c } = an;
     result.contradiction = c;
@@ -383,7 +380,6 @@ export function findHint(p: Puzzle, state: LogicState, rules: Iterable<RuleId> =
   const allowed = new Set(rules);
   const order = HINT_ORDER.filter((r) => allowed.has(r));
   const an = analyse(p, state, new Set(order), opts);
-  if (an.kind === 'unknown') return { kind: 'none', text: 'Hints need the puzzle to have both ends.' };
   if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
   if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
   for (const rule of order) {

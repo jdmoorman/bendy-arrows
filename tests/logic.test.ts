@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { ALL_RULES, applyStep, BASIC_RULES, logicStep, type LogicState, type RuleId } from '../src/logic';
-import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, portEnd, portId, type Puzzle } from '../src/model';
+import { createPuzzle, edgeBetween, edgeCount, endpointCells, isUsableEdge, portEnd, portId, type Puzzle } from '../src/model';
 import { solve } from '../src/solver';
 import { endsBottomRight, pathEdges } from './helpers';
 
@@ -133,11 +133,13 @@ describe('logic rules', () => {
       const p = createPuzzle(w, h);
       for (let c = 0; c < w * h; c++) if (rand() < 0.12) p.blocked.add(c);
       for (let e = 0; e < edgeCount(p); e++) if (rand() < 0.15 && isUsableEdge(p, e)) p.walls.add(e);
-      if (rand() < 0.5) {
+      {
         const a = Math.floor(rand() * 2 * (w + h));
         const b = Math.floor(rand() * 2 * (w + h));
         if (a !== b) p.endpoints = [portEnd(a), portEnd(b)];
       }
+      // Without both ends the rules may go wrong, so only puzzles with both are checked.
+      if (endpointCells(p).length < 2) continue;
       const r = solve(p);
       if (r.status !== 'unique') continue;
       checked++;
@@ -157,7 +159,7 @@ describe('advanced rules', () => {
     const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
     let checked = 0;
     let gained = 0;
-    for (let trial = 0; trial < 5000 && checked < 300; trial++) {
+    for (let trial = 0; trial < 10000 && checked < 300; trial++) {
       const w = 3 + Math.floor(rand() * 4);
       const h = 3 + Math.floor(rand() * 4);
       const p = createPuzzle(w, h);
@@ -175,6 +177,7 @@ describe('advanced rules', () => {
           if (!p.blocked.has(c) && !p.checkpoints.includes(c)) p.checkpoints.push(c);
         }
       }
+      if (endpointCells(p).length < 2) continue;
       const r = solve(p, { maxSolutions: 300, nodeLimit: 2e5 });
       if (r.status === 'aborted' || !r.solutions.length || r.solutions.length >= 300) continue;
       checked++;
