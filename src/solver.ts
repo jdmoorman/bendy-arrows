@@ -28,10 +28,9 @@ export interface SolveOptions {
   /** Break ties between equally good moves in a random order from this seed, to find varied solutions. */
   seed?: number;
   /**
-   * Try the logic rules before searching. Each rule only marks what holds in every
-   * solution, so when they finish the path it is the only one: no search needed.
-   * That matters on open boards, where the search can take very long. (Off by
-   * default: the generator calls solve many times and is tuned without it.)
+   * Try the logic rules before searching (default true). Each rule only marks what
+   * holds in every solution, so when they finish the path it is the only one: no
+   * search needed. That matters on open boards, where the search can take very long.
    */
   logicFirst?: boolean;
 }
@@ -137,7 +136,7 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   const parity = parityCheck(p);
   if (!parity.ok) return result('none', parity.reason);
 
-  if (opts.logicFirst && !required.length) {
+  if ((opts.logicFirst ?? true) && !required.length) {
     const logic = runLogic(p, ALL_RULES);
     // Double-check the finished board, so a rule's mistake can never claim a wrong solution.
     if (logic.solved && checkSolution(p, logic.state.segments).solved) {

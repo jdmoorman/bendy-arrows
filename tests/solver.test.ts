@@ -252,7 +252,7 @@ describe('logic first', () => {
   // A mostly open 8×14 board: the search alone takes very long, the logic rules solve it at once.
   const open = decodePuzzle('BQQIDgATABSDAQAAAAAAAAAAAAAAiAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
   test('a puzzle the rules solve is unique without searching', () => {
-    const r = solve(open, { logicFirst: true });
+    const r = solve(open);
     expect(r.status).toBe('unique');
     expect(r.nodes).toBe(0);
     expect(checkSolution(open, new Set(r.solutions[0])).solved).toBe(true);

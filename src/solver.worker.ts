@@ -28,7 +28,6 @@ ctx.onmessage = (ev: MessageEvent<SolverRequest>) => {
       maxSolutions: ev.data.maxSolutions,
       nodeLimit: ev.data.nodeLimit,
       mustUse: ev.data.mustUse,
-      logicFirst: true,
       onProgress: (nodes) => ctx.postMessage({ type: 'progress', nodes } satisfies SolverMessage),
     });
     ctx.postMessage({ type: 'done', result } satisfies SolverMessage);
