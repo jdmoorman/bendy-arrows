@@ -151,8 +151,16 @@ export class LibraryView {
     if (skipped && !failed) parts.push(`${skipped} already saved${tagged ? ` (${tagged} added to the set)` : ''}`);
     if (bad) parts.push(`${bad} line${bad === 1 ? '' : 's'} not understood`);
     if (failed) parts.push('storage is full');
-    toast(`${parts.join(', ')}.${added || tagged ? ` Filter by Collection “${collection}” to see them.` : ''}`, failed || (!added && bad > 0) ? 'error' : '');
-    if (added || tagged) this.refresh();
+    toast(`${parts.join(', ')}.${added || tagged ? ` Collection: “${collection}”.` : ''}`, failed || (!added && bad > 0) ? 'error' : '');
+    if (added || tagged) {
+      // A Collection filter that leaves the set out would hide what was just imported: add it.
+      const f = this.state.filters.collection;
+      if (f && 'values' in f && f.values.length && !f.values.includes(collection)) {
+        this.state.filters.collection = { values: [...f.values, collection] };
+        this.storage.saveLibraryTable(this.state);
+      }
+      this.refresh();
+    }
   }
 
   /** Re-read the library and redraw (call when the tab is shown). */
