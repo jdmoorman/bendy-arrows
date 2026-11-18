@@ -71,7 +71,6 @@ export class PlayView {
   private redoBtn: HTMLButtonElement;
 
   // Per-gesture state.
-  private before: Progress | null = null;
   private changed = false;
   /**
    * Every drag either only draws or only erases. It is decided where it
@@ -114,7 +113,6 @@ export class PlayView {
     attachBoardInput(this.svg, () => this.puzzle, {
       kind: () => 'path',
       onGestureStart: () => {
-        this.before = this.snapshot();
         this.changed = false;
         this.dragMode = 'draw';
         this.startedOnSegment = false;
@@ -265,26 +263,36 @@ export class PlayView {
     return isUsableEdge(this.puzzle, e);
   }
 
+  /** About to change one mark: save the board first, so Undo takes back one placement at a time. */
+  private placing() {
+    this.history.push(this.snapshot());
+    this.changed = true;
+  }
+
   private setSegment(e: number, on: boolean) {
     if (on) {
       if (!canPlace(this.puzzle, e) || this.segments.has(e)) return;
+      this.placing();
       this.segments.add(e);
       this.xMarks.delete(e);
     } else {
-      if (!this.segments.delete(e)) return;
+      if (!this.segments.has(e)) return;
+      this.placing();
+      this.segments.delete(e);
     }
-    this.changed = true;
   }
 
   private setX(e: number, on: boolean) {
     if (on) {
       if (this.xMarks.has(e)) return;
+      this.placing();
       this.xMarks.add(e);
       this.segments.delete(e);
-    } else if (!this.xMarks.delete(e)) {
-      return;
+    } else {
+      if (!this.xMarks.has(e)) return;
+      this.placing();
+      this.xMarks.delete(e);
     }
-    this.changed = true;
     this.render();
   }
 
@@ -312,11 +320,8 @@ export class PlayView {
   }
 
   private commit() {
-    if (this.changed && this.before) {
-      this.history.push(this.before);
-      this.afterChange();
-    }
-    this.before = null;
+    // Each placement already saved its own undo step; just catch up after the gesture.
+    if (this.changed) this.afterChange();
     this.changed = false;
   }
 

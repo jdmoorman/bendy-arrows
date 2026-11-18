@@ -4,6 +4,7 @@ import { ICONS } from './icons';
 import { attachBoardInput, type DragKind } from './input';
 import {
   cellEdges,
+  edgeCells,
   clonePuzzle,
   createPuzzle,
   edgeTouchesBlocked,
@@ -75,7 +76,6 @@ export class EditorView {
   readonly actions: HTMLElement;
 
   // Per-gesture state.
-  private before: Puzzle | null = null;
   private changed = false;
   private paintAdd = true;
   /** Message to show once the current gesture is committed. */
@@ -193,13 +193,20 @@ export class EditorView {
     attachBoardInput(this.svg, () => this.puzzle, {
       kind: () => TOOL_KIND[this.tool],
       onGestureStart: () => {
-        this.before = clonePuzzle(this.puzzle);
         this.changed = false;
       },
       onGestureEnd: () => this.commitGesture(),
       onPaintCell: (cell, first) => this.paintCell(cell, first),
       onTapEnd: (end) => this.toggleEnd(end),
-      onPaintEdge: (e, first) => this.paintWall(e, first),
+      onPaintEdge: (e, first, cell) => this.paintWall(e, first, cell),
+      // Erasing walls also clears black tiles; erasing black tiles also clears walls.
+      onStrokeCell: (cell) => {
+        if (this.tool === 'walls' && !this.paintAdd) this.clearBlack(cell);
+      },
+      onStrokeEdge: (e) => {
+        if (this.tool === 'tiles' && !this.paintAdd && this.puzzle.walls.has(e)) this.setWall(e, false);
+      },
+      strokeErases: () => !this.paintAdd,
       onSecondaryEdge: (e) => this.toggleWall(e),
     });
     this.setTool('tiles');
@@ -603,14 +610,19 @@ export class EditorView {
     this.afterChange();
   }
 
+  /** About to change one thing: save the puzzle first, so Undo takes back one placement at a time. */
+  private placing() {
+    this.history.push(clonePuzzle(this.puzzle));
+    this.changed = true;
+  }
+
   private commitGesture() {
-    if (this.changed && this.before) {
-      this.history.push(this.before);
+    // Each placement already saved its own undo step; just catch up after the gesture.
+    if (this.changed) {
       this.afterChange();
       if (this.note) this.setMessage(this.note);
     }
     this.note = '';
-    this.before = null;
     this.changed = false;
   }
 
@@ -644,6 +656,7 @@ export class EditorView {
     }
     if (first) this.paintAdd = !p.blocked.has(cell);
     if (this.paintAdd === p.blocked.has(cell)) return;
+    this.placing();
     if (this.paintAdd) {
       p.blocked.add(cell);
       p.endpoints = p.endpoints.filter((end) => endTile(p, end) !== cell);
@@ -651,10 +664,11 @@ export class EditorView {
       for (const e of cellEdges(p, cell)) {
         p.walls.delete(e);
       }
+      // A neighbour walled in on its other sides is now closed in too.
+      for (const e of cellEdges(p, cell)) for (const c of edgeCells(p, e)) if (c !== cell) this.blackenIfWalledIn(c);
     } else {
       p.blocked.delete(cell);
     }
-    this.changed = true;
     this.render();
   }
 
@@ -662,6 +676,7 @@ export class EditorView {
   private toggleEnd(end: End) {
     const p = this.puzzle;
     if (p.blocked.has(endTile(p, end))) return;
+    this.placing();
     const i = p.endpoints.findIndex((e) => endsEqual(e, end));
     if (i < 0 && p.checkpoints.length) {
       p.checkpoints = [];
@@ -670,7 +685,6 @@ export class EditorView {
     if (i >= 0) p.endpoints.splice(i, 1);
     else if (p.endpoints.length < 2) p.endpoints.push(end);
     else p.endpoints[1] = end; // replace the exit
-    this.changed = true;
     this.render();
   }
 
@@ -678,6 +692,7 @@ export class EditorView {
   private toggleCheckpoint(cell: number) {
     const p = this.puzzle;
     if (p.blocked.has(cell)) return;
+    this.placing();
     const i = p.checkpoints.indexOf(cell);
     if (i >= 0) p.checkpoints.splice(i, 1);
     else {
@@ -687,27 +702,59 @@ export class EditorView {
       }
       p.checkpoints.push(cell);
     }
-    this.changed = true;
     this.render();
   }
 
   private setWall(e: number, on: boolean) {
     const p = this.puzzle;
     if (on === p.walls.has(e)) return;
+    // Black tiles are already walled on every side.
+    if (on && edgeTouchesBlocked(p, e)) return;
+    this.placing();
     if (on) {
-      // Black tiles are already walled on every side.
-      if (edgeTouchesBlocked(p, e)) return;
       p.walls.add(e);
+      // A tile now walled in on every side (the frame counts) can never be visited: make it black.
+      for (const c of edgeCells(p, e)) this.blackenIfWalledIn(c);
     } else {
       p.walls.delete(e);
     }
-    this.changed = true;
     this.render();
   }
 
-  private paintWall(e: number, first: boolean) {
-    if (first) this.paintAdd = !this.puzzle.walls.has(e);
+  /**
+   * Turn a tile into a black tile if it's closed in on every side: by walls, the frame, or black
+   * tiles next to it. Then check its neighbours, which this may close in too. Not a tile with an
+   * end or a number on it, and only one with at least two sides that aren't the frame (on a
+   * board one tile wide, one wall would otherwise "close in" the tiles on both sides).
+   */
+  private blackenIfWalledIn(cell: number) {
+    const p = this.puzzle;
+    if (p.blocked.has(cell)) return;
+    const sides = cellEdges(p, cell);
+    const closed = (e: number) => p.walls.has(e) || edgeCells(p, e).some((c) => c !== cell && p.blocked.has(c));
+    if (sides.length < 2 || !sides.every(closed)) return;
+    if (p.checkpoints.includes(cell) || p.endpoints.some((end) => endTile(p, end) === cell)) return;
+    p.blocked.add(cell);
+    for (const x of sides) p.walls.delete(x);
+    for (const x of sides) for (const c of edgeCells(p, x)) if (c !== cell) this.blackenIfWalledIn(c);
+  }
+
+  private paintWall(e: number, first: boolean, cell = -1) {
+    if (first) {
+      // Starting on a black tile (where no wall can go) makes this an erasing stroke too.
+      const onBlack = cell >= 0 && this.puzzle.blocked.has(cell);
+      this.paintAdd = !onBlack && !this.puzzle.walls.has(e);
+      if (onBlack) return this.clearBlack(cell);
+    }
     this.setWall(e, this.paintAdd);
+  }
+
+  /** Turn a black tile back into an open one (one undo step). */
+  private clearBlack(cell: number) {
+    if (!this.puzzle.blocked.has(cell)) return;
+    this.placing();
+    this.puzzle.blocked.delete(cell);
+    this.render();
   }
 
   private toggleWall(e: number) {
