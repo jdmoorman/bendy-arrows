@@ -12,7 +12,11 @@ import { outPath, record } from '../out';
 const NAME = 'end-placements/unique.txt';
 /** The unique ones as a list the Library's Import reads: "Name — #p=CODE" per line. */
 const LIST = 'end-placements/unique-levels.txt';
-const SIZES: [number, number][] = [[2, 2], [2, 3], [3, 3], [4, 3], [4, 4]];
+// Every board from 2×2 to 6×6, one way round (a w×h board is a quarter turn of h×w): wider
+// than tall, except 2×3, kept as first searched so its puzzles' codes stay the same.
+const SIZES: [number, number][] = [];
+for (let h = 2; h <= 6; h++) for (let w = h; w <= 6; w++) SIZES.push(w === 3 && h === 2 ? [2, 3] : [w, h]);
+SIZES.sort((a, b) => a[0] * a[1] - b[0] * b[1] || a[0] - b[0]);
 
 /** Every symmetry that keeps the board's width and height (all eight for a square). */
 function symmetries(w: number, h: number): Transform[][] {
