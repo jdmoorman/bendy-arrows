@@ -7,7 +7,7 @@ export interface TimeEntry {
   at: number;
   /** Hints used during the attempt. */
   hints?: number;
-  /** Checks used during the attempt. */
+  /** Checks used during the attempt (the Check button is gone; older times may have them). */
   checks?: number;
 }
 

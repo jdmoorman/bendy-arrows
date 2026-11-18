@@ -17,14 +17,11 @@ export interface Progress {
   recorded?: boolean;
   /** Hints shown during the current attempt. */
   hints?: number;
-  /** Times Check was used during the current attempt. */
-  checks?: number;
 }
 
 /** How much help an attempt used. */
 export interface AttemptStats {
   hints: number;
-  checks: number;
 }
 
 /** A hint, or the marks that don't fit the solution. */
@@ -44,7 +41,6 @@ export class PlayView {
   private recorded = false;
   private hintsUsed = 0;
   private autoCheck = true;
-  private checksUsed = 0;
   private timerEl!: HTMLElement;
   private timerTick = 0;
 
@@ -52,10 +48,6 @@ export class PlayView {
   private segments = new Set<number>();
   private xMarks = new Set<number>();
   private history = new History<Progress>();
-  /** Full check result shown after pressing Check, until the next change. */
-  /** Result of the last Check, shown until the next change. */
-  private checkMsg: { text: string; kind: '' | 'success' | 'error' } | null = null;
-  private checkRun: SolverRun | null = null;
   /** Hint shown after pressing Hint, until the next change. */
   private shownHint: PlayHint | null = null;
   /** Solutions of the puzzle, found once in the background when Hint first needs them. */
@@ -94,8 +86,7 @@ export class PlayView {
           <button class="btn" data-act="undo" aria-label="Undo">${ICONS.undo}<span>Undo</span></button>
           <button class="btn" data-act="redo" aria-label="Redo">${ICONS.redo}</button>
           <button class="btn" data-act="reset" aria-label="Clear the board" title="Clear the board">${ICONS.rotateLeft}</button>
-          <button class="btn" data-act="hint" aria-label="Hint">${ICONS.bulb}<span>Hint</span></button>
-          <button class="btn primary" data-act="check">${ICONS.check}<span>Check</span></button>
+          <button class="btn primary" data-act="hint" aria-label="Hint">${ICONS.bulb}<span>Hint</span></button>
         </div>
       </div>`;
     this.svg = this.el.querySelector('svg')!;
@@ -107,7 +98,6 @@ export class PlayView {
 
     this.undoBtn.addEventListener('click', () => this.undo());
     this.redoBtn.addEventListener('click', () => this.redo());
-    this.el.querySelector('[data-act=check]')!.addEventListener('click', () => this.check());
     this.el.querySelector('[data-act=hint]')!.addEventListener('click', () => this.showHint());
 
     attachBoardInput(this.svg, () => this.puzzle, {
@@ -159,27 +149,23 @@ export class PlayView {
     this.segments = new Set((progress?.segments ?? []).filter(ok));
     this.xMarks = new Set((progress?.xMarks ?? []).filter(ok));
     this.history.clear();
-    this.clearCheck();
     this.shownHint = null;
     this.solved = checkSolution(p, this.segments).solved;
     // A puzzle that opens already solved does not get a new time.
     this.recorded = !!progress?.recorded || this.solved;
     this.timer.reset(progress?.elapsedMs ?? 0, this.recorded);
     this.hintsUsed = progress?.hints ?? 0;
-    this.checksUsed = progress?.checks ?? 0;
     this.render();
   }
 
-  /** Start a new attempt: empty board, fresh timer, no hints or checks (Play again / Reset puzzle). */
+  /** Start a new attempt: empty board, fresh timer, no hints (Play again / Reset puzzle). */
   playAgain(): void {
     this.segments.clear();
     this.xMarks.clear();
     this.history.clear();
-    this.clearCheck();
     this.solved = false;
     this.recorded = false;
     this.hintsUsed = 0;
-    this.checksUsed = 0;
     this.timer.reset(0);
     this.render();
     this.onProgress?.(this.progress, false);
@@ -228,7 +214,6 @@ export class PlayView {
       elapsedMs: Math.round(this.timer.elapsed),
       recorded: this.recorded,
       hints: this.hintsUsed,
-      checks: this.checksUsed,
     };
   }
 
@@ -325,7 +310,7 @@ export class PlayView {
     this.changed = false;
   }
 
-  /** Reset: empty the board as one undoable step. The timer, hints and checks carry on. */
+  /** Reset: empty the board as one undoable step. The timer and hints carry on. */
   private clearBoard() {
     if (!this.segments.size && !this.xMarks.size) return;
     this.history.push(this.snapshot());
@@ -336,7 +321,6 @@ export class PlayView {
 
   private afterChange() {
     this.changeCount++;
-    this.clearCheck();
     this.shownHint = null;
     const wasSolved = this.solved;
     this.solved = checkSolution(this.puzzle, this.segments).solved;
@@ -349,7 +333,7 @@ export class PlayView {
     this.render();
     this.onProgress?.(this.progress, this.solved);
     // Every time the board becomes solved (e.g. again after Reset or Undo), not just the first.
-    if (this.solved && !wasSolved) this.onSolved?.(this.timer.elapsed, { hints: this.hintsUsed, checks: this.checksUsed }, firstSolve);
+    if (this.solved && !wasSolved) this.onSolved?.(this.timer.elapsed, { hints: this.hintsUsed }, firstSolve);
   }
 
   private undo() {
@@ -364,59 +348,6 @@ export class PlayView {
     if (!next) return;
     this.restore(next);
     this.afterChange();
-  }
-
-  private clearCheck() {
-    this.checkRun?.cancel();
-    this.checkRun = null;
-    this.checkMsg = null;
-  }
-
-  /** Tell the player whether every line drawn so far can be part of the solution. */
-  private async check() {
-    if (this.solved) return;
-    this.shownHint = null;
-    this.clearCheck();
-    if (!this.recorded) this.checksUsed++;
-    this.onProgress?.(this.progress, this.solved);
-    const n = this.segments.size;
-    const x = this.xMarks.size;
-    const show = (text: string, kind: '' | 'success' | 'error') => {
-      this.checkMsg = { text, kind };
-      this.render();
-    };
-    if (!n && !x) return show('Nothing drawn yet — every line and X you place will be checked against the solution.', '');
-    // Obvious problems need no search.
-    const live = checkSolution(this.puzzle, this.segments);
-    if (live.branches.size || live.loopEdges.size || live.illegalEdges.size || live.checkpointErrors.size) {
-      return show('Not all of your lines are right.', 'error');
-    }
-    show('Checking…', '');
-    // Is there a solution that uses every line and none of the X'd borders? (X marks act as walls.)
-    const withXs = (p: Puzzle): Puzzle => ({ ...p, walls: new Set([...p.walls, ...this.xMarks]) });
-    const fits = async (puzzle: Puzzle) => {
-      const run = solveInBackground(puzzle, undefined, { mustUse: [...this.segments], maxSolutions: 1, nodeLimit: 5_000_000 });
-      this.checkRun = run;
-      const r = await run.result;
-      if (this.checkRun !== run) throw new DOMException('Superseded', 'AbortError');
-      this.checkRun = null;
-      return r.solutions.length ? 'yes' : r.status === 'aborted' ? 'unknown' : 'no';
-    };
-    try {
-      const all = await fits(withXs(this.puzzle));
-      if (all === 'yes') {
-        return show('Looks good so far!', 'success');
-      }
-      if (all === 'unknown') return show("Couldn't finish checking — this puzzle is too big to check quickly.", '');
-      if (!x) return show('Not all of your lines are right.', 'error');
-      if (!n) return show("Not all of your X's are right — the path needs at least one of those borders.", 'error');
-      // Say which kind of mark is wrong, if the lines alone are fine.
-      const lines = await fits(this.puzzle);
-      if (lines === 'yes') show("Your lines are fine, but at least one X is wrong — the path needs one of those borders.", 'error');
-      else show('Not all of your lines are right.', 'error');
-    } catch (err) {
-      if ((err as Error).name !== 'AbortError') show(`Check failed: ${(err as Error).message}`, 'error');
-    }
   }
 
   /** The puzzle's solutions (up to 50), solved once in the background; empty if too big to solve. */
@@ -437,7 +368,6 @@ export class PlayView {
    * otherwise show the simplest logical next step (without drawing it).
    */
   private async showHint() {
-    this.clearCheck();
     const changes = this.changeCount;
     const count = () => {
       if (!this.recorded) this.hintsUsed++;
@@ -474,7 +404,6 @@ export class PlayView {
   render(): void {
     if (!this.puzzle) return;
     const live = checkSolution(this.puzzle, this.segments);
-    const check = this.checkMsg;
     const errorCells = new Set<number>(this.autoCheck ? [...live.branches, ...live.checkpointErrors] : []);
     const errorEdges = new Set<number>(this.autoCheck ? [...live.loopEdges, ...live.illegalEdges] : []);
     if (!live.solved && this.shownHint?.kind === 'wrong') for (const e of this.shownHint.edges) errorEdges.add(e);
@@ -493,13 +422,12 @@ export class PlayView {
       solved: live.solved,
     });
 
-    const kind = live.solved ? 'success' : hint ? (hint.kind === 'mistake' || hint.kind === 'wrong' ? 'error' : 'hint') : (check?.kind ?? '');
+    const kind = live.solved ? 'success' : hint ? (hint.kind === 'mistake' || hint.kind === 'wrong' ? 'error' : 'hint') : '';
     this.status.classList.toggle('success', kind === 'success');
     this.status.classList.toggle('error', kind === 'error');
     this.status.classList.toggle('hint', kind === 'hint');
     if (live.solved) this.status.textContent = live.message;
     else if (hint) this.status.textContent = hint.text;
-    else if (check) this.status.textContent = check.text;
     else this.status.textContent = '';
 
     this.undoBtn.disabled = !this.history.canUndo;

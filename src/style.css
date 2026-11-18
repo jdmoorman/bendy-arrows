@@ -1235,13 +1235,12 @@ select {
   .play-view .toolbar-row {
     flex-wrap: wrap;
   }
-  /* Undo, Redo and Reset on one row, Hint and Check on the next. */
+  /* Undo, Redo and Reset on one row, Hint on the next. */
   .play-view .toolbar-row > [data-act='undo'] {
     flex: 1 1 calc(100% - 2 * var(--tap) - 12px);
   }
-  .play-view .toolbar-row > [data-act='hint'],
-  .play-view .toolbar-row > [data-act='check'] {
-    flex: 1 1 40%;
+  .play-view .toolbar-row > [data-act='hint'] {
+    flex: 1 1 100%;
   }
 }
 
