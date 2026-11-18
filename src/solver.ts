@@ -1,4 +1,5 @@
 import { ALL_RULES, runLogic } from './logic';
+import { checkSolution } from './rules';
 import { cellCount, cellRC, clonePuzzle, edgeBetween, edgeCells, edgeCount, endpointCells, isUsableEdge, openCells, type Puzzle } from './model';
 
 export type SolveStatus = 'none' | 'unique' | 'multiple' | 'aborted';
@@ -26,6 +27,13 @@ export interface SolveOptions {
   mustUse?: Iterable<number>;
   /** Break ties between equally good moves in a random order from this seed, to find varied solutions. */
   seed?: number;
+  /**
+   * Try the logic rules before searching. Each rule only marks what holds in every
+   * solution, so when they finish the path it is the only one: no search needed.
+   * That matters on open boards, where the search can take very long. (Off by
+   * default: the generator calls solve many times and is tuned without it.)
+   */
+  logicFirst?: boolean;
 }
 
 export interface ParityResult {
@@ -128,6 +136,14 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
 
   const parity = parityCheck(p);
   if (!parity.ok) return result('none', parity.reason);
+
+  if (opts.logicFirst && !required.length) {
+    const logic = runLogic(p, ALL_RULES);
+    // Double-check the finished board, so a rule's mistake can never claim a wrong solution.
+    if (logic.solved && checkSolution(p, logic.state.segments).solved) {
+      return result('unique', 'The logic rules solve it, so the solution is unique.', [[...logic.state.segments].sort((a, b) => a - b)]);
+    }
+  }
 
   // --- Search -------------------------------------------------------------
   const visited = new Uint8Array(n);

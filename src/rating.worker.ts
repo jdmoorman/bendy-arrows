@@ -20,7 +20,7 @@ ctx.onmessage = (ev: MessageEvent<RatingRequest>) => {
     let steps: RatingMessage['journey'];
     try {
       const p = decodePuzzle(code);
-      const unique = solve(p, { maxSolutions: 2 }).status === 'unique';
+      const unique = solve(p, { maxSolutions: 2, logicFirst: true }).status === 'unique';
       rating = { unique, difficulty: unique ? rateDifficulty(p) : null };
       if (unique && journey) steps = hintJourney(p);
     } catch {

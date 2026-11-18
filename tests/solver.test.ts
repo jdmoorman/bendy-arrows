@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, portCount, portEnd, portId, endsEqual, type Puzzle } from '../src/model';
 import { checkSolution } from '../src/rules';
 import { parityCheck, solve } from '../src/solver';
+import { decodePuzzle } from '../src/codec';
 import { endsBottomRight } from './helpers';
 
 /** Count solutions by checking every subset of usable edges. */
@@ -244,5 +245,21 @@ describe('suggested wall', async () => {
   });
   test('a unique puzzle gets no suggestion', () => {
     expect(solutionUnion(endsBottomRight(2, 2)).suggestedWall).toBeNull();
+  });
+});
+
+describe('logic first', () => {
+  // A mostly open 8×14 board: the search alone takes very long, the logic rules solve it at once.
+  const open = decodePuzzle('BQQIDgATABSDAQAAAAAAAAAAAAAAiAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+  test('a puzzle the rules solve is unique without searching', () => {
+    const r = solve(open, { logicFirst: true });
+    expect(r.status).toBe('unique');
+    expect(r.nodes).toBe(0);
+    expect(checkSolution(open, new Set(r.solutions[0])).solved).toBe(true);
+  });
+
+  test('and it gets a rating', async () => {
+    const { rateDifficulty } = await import('../src/generator');
+    expect(rateDifficulty(open)).toBe('easy');
   });
 });
