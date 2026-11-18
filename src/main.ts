@@ -1,5 +1,6 @@
 import './style.css';
 import { attachUniquenessCheck } from './check-ui';
+import { checkSolution } from './rules';
 import { decodePuzzle, encodePuzzle } from './codec';
 import { EditorView } from './editor';
 import { ICONS } from './icons';
@@ -222,7 +223,12 @@ function saveCurrent(fromEditor: boolean) {
 
 editor.onSave = () => saveCurrent(true);
 library.onSave = () => saveCurrent(lastBoardTab === 'edit');
-library.onOpen = ({ puzzle, progress, id, name }, t) => loadPuzzle(puzzle, { progress, id, name }, t);
+library.onOpen = ({ puzzle, progress, id, name }, t) => {
+  // A finished attempt opens fresh for Play: empty board, timer at 0, so the next solve counts.
+  const finished = !!progress && (!!progress.recorded || checkSolution(puzzle, new Set(progress.segments)).solved);
+  const fresh: Progress = { segments: [], xMarks: [] };
+  loadPuzzle(puzzle, { progress: t === 'play' && finished ? fresh : progress, id, name }, t);
+};
 library.onDeleted = (id) => {
   if (libraryId === id) {
     libraryId = undefined;

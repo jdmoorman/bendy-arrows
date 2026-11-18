@@ -72,3 +72,15 @@ describe('library table', () => {
     }
   });
 });
+
+describe('sample flag', () => {
+  test('samples are flagged, your own puzzles are not, and the filter separates them', () => {
+    const storage = new Storage(new MemStore());
+    storage.put({ id: 'm', name: 'Mine', code: encodePuzzle(createPuzzle(4, 4)), created: 1, updated: 1 });
+    const rows = libraryRows(storage, {});
+    expect(rows.find((r) => r.name === 'Mine')!.sample).toBe(false);
+    expect(rows.filter((r) => !r.entry).every((r) => r.sample)).toBe(true);
+    const mine = applyTable(rows, state({ filters: { sample: { values: ['No'] } } }));
+    expect(mine.map((r) => r.name)).toEqual(['Mine']);
+  });
+});

@@ -17,6 +17,8 @@ export interface LibRow {
   /** The saved entry, for your own puzzles. */
   entry?: LibraryEntry;
   collection: string;
+  /** One of the archived built-in samples (not your own puzzles or an official level). */
+  sample: boolean;
   type: 'Loop' | 'Path' | 'Numbers';
   /** Undefined while not rated yet; null if it can't be rated (no unique solution). */
   difficulty?: Difficulty | null;
@@ -100,7 +102,7 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
       continue;
     }
     const r = ratings[e.code];
-    rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: COLLECTIONS.yours, ...f, difficulty: r?.difficulty, unique: r?.unique, ...play(e.code, e), added: e.created });
+    rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: COLLECTIONS.yours, sample: false, ...f, difficulty: r?.difficulty, unique: r?.unique, ...play(e.code, e), added: e.created });
   }
   // Official levels, shipped to everyone.
   LEVELS.forEach((l, i) => {
@@ -111,14 +113,14 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
       return;
     }
     const saved = storage.findByCode(l.code);
-    rows.push({ key: `level:${i}`, name: l.name, code: l.code, collection: COLLECTIONS.levels, ...f, difficulty: l.level, unique: true, ...play(l.code, saved) });
+    rows.push({ key: `level:${i}`, name: l.name, code: l.code, collection: COLLECTIONS.levels, sample: false, ...f, difficulty: l.level, unique: true, ...play(l.code, saved) });
   });
   const hidden = new Set(storage.loadHiddenSamples());
   LOCAL_SAMPLES.forEach((s, i) => {
     if (hidden.has(s.code)) return;
     const f = facts(s.code);
     const saved = storage.findByCode(s.code);
-    rows.push({ key: `sample:${i}`, name: s.name, code: s.code, collection: COLLECTIONS[s.group ?? 'samples'], ...f, difficulty: s.level, unique: true, ...play(s.code, saved) });
+    rows.push({ key: `sample:${i}`, name: s.name, code: s.code, collection: COLLECTIONS[s.group ?? 'samples'], sample: true, ...f, difficulty: s.level, unique: true, ...play(s.code, saved) });
   });
   return rows;
 }
@@ -144,6 +146,7 @@ const yesNo = (b: boolean | undefined) => (b === undefined ? null : b ? 'Yes' : 
 
 export const COLUMNS: Column[] = [
   { key: 'collection', label: 'Collection', kind: 'choice', value: (r) => r.collection, choices: Object.values(COLLECTIONS) },
+  { key: 'sample', label: 'Sample', kind: 'choice', value: (r) => (r.sample ? 'Yes' : 'No'), choices: ['Yes', 'No'] },
   { key: 'type', label: 'Type', kind: 'choice', value: (r) => r.type, choices: ['Loop', 'Path', 'Numbers'] },
   {
     key: 'difficulty',
