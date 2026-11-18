@@ -1,7 +1,7 @@
 import './style.css';
 import { attachUniquenessCheck } from './check-ui';
 import { checkSolution } from './rules';
-import { decodePuzzle, encodePuzzle, upgradeCode } from './codec';
+import { decodePuzzle, encodePuzzle } from './codec';
 import { EditorView } from './editor';
 import { ICONS } from './icons';
 import { LibraryView } from './library-view';
@@ -38,8 +38,6 @@ app.innerHTML = `
 `;
 
 const storage = new Storage();
-// Loop puzzles are gone: saved ones become the same puzzle with two ends.
-storage.upgradeCodes(upgradeCode);
 let settings = storage.loadSettings();
 const leaderboard = new LocalLeaderboard(storage);
 applySettings(settings);

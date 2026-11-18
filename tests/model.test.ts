@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createPuzzle, edgeBetween, loopToEnds, edgeCells, edgeCount, neighbors, portCell, portCount, portEnd, portId, portSide, resizePuzzle, type Puzzle, type Side } from '../src/model';
+import { createPuzzle, edgeBetween, edgeCells, edgeCount, neighbors, portCell, portCount, portEnd, portId, portSide, resizePuzzle, type Puzzle, type Side } from '../src/model';
 
 describe('model', () => {
   test('edge ids round-trip through edgeCells/edgeBetween', () => {
@@ -134,17 +134,4 @@ describe('orientEnds', async () => {
     expect(orientEnds(noEnds)).toBe(noEnds);
   });
 
-  test('loopToEnds puts two ends side by side on the right, as low as both tiles are open', () => {
-    const p = createPuzzle(4, 5);
-    expect(loopToEnds(p).endpoints).toEqual([portEnd(portId(p, 'right', 3)), portEnd(portId(p, 'right', 4))]);
-    p.blocked.add(19); // bottom-right corner
-    expect(loopToEnds(p).endpoints).toEqual([portEnd(portId(p, 'right', 2)), portEnd(portId(p, 'right', 3))]);
-    p.blocked.add(11); // row 3: rows 4 and 2 are open but not side by side
-    expect(loopToEnds(p).endpoints).toEqual([portEnd(portId(p, 'right', 0)), portEnd(portId(p, 'right', 1))]);
-    p.blocked.add(3);
-    expect(loopToEnds(p).endpoints).toEqual([]);
-    const withEnds = createPuzzle(3, 3);
-    withEnds.endpoints = [portEnd(0), portEnd(5)];
-    expect(loopToEnds(withEnds).endpoints).toEqual(withEnds.endpoints);
-  });
 });

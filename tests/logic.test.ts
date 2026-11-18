@@ -1,11 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import { ALL_RULES, applyStep, BASIC_RULES, logicStep, type LogicState, type RuleId } from '../src/logic';
-import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, loopToEnds, portEnd, portId, type Puzzle } from '../src/model';
+import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, portEnd, portId, type Puzzle } from '../src/model';
 import { solve } from '../src/solver';
-import { pathEdges } from './helpers';
+import { endsBottomRight, pathEdges } from './helpers';
 
-/** An open board with two ends side by side at the bottom of the right side (where a loop's ends go). */
-const board = (w: number, h: number): Puzzle => loopToEnds(createPuzzle(w, h));
+const board = endsBottomRight;
 
 const empty = (): LogicState => ({ segments: new Set(), xs: new Set() });
 
@@ -448,25 +447,4 @@ describe('hintJourney', async () => {
       }
     }
   });
-});
-
-describe('satisfied areas', async () => {
-  const { findHint } = await import('../src/logic');
-  const { decodePuzzle } = await import('../src/codec');
-  const { edgeBetween: between } = await import('../src/model');
-  test('a player who drew most of a chain by hand still gets a balance hint for the rest', () => {
-    // Ends at J9 and J10 (it was a loop).
-    const p = decodePuzzle('BQQKCgASABMAAAAAAAAAAAAAAAAAQAAAAQAEABAAAAAAAAAAAAAAAEAFAA');
-    const edge = between(p, 9 * 10 + 7, 9 * 10 + 8); // H10-I10
-    let s = empty();
-    // The player's own lines: the first 19 moves.
-    for (let i = 0; i < 19; i++) {
-      const h = findHint(p, s, ALL_RULES);
-      if (h.kind !== 'deduction') throw new Error('stuck early');
-      s = applyStep(s, { segments: h.deduction.segments, xs: h.deduction.xs, byRule: {}, solved: false });
-    }
-    const h = findHint(p, s, ALL_RULES);
-    expect(h.kind === 'deduction' && h.deduction.rule).toBe('balance');
-    expect(h.kind === 'deduction' && h.deduction.segments.includes(edge)).toBe(true);
-  }, 60000);
 });

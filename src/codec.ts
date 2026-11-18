@@ -1,4 +1,4 @@
-import { cellCount, createPuzzle, edgeCount, loopToEnds, MAX_SIZE, MIN_SIZE, portCount, portEnd, type End, type Puzzle } from './model';
+import { cellCount, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, portCount, portEnd, type End, type Puzzle } from './model';
 
 /**
  * Compact share code for a puzzle.
@@ -12,8 +12,7 @@ import { cellCount, createPuzzle, edgeCount, loopToEnds, MAX_SIZE, MIN_SIZE, por
  *
  * Layout (0.5):
  *   byte 0      format minor version (5)
- *   byte 1      bit 0 = loop (no longer written: an old loop code opens as
- *               the same puzzle with two ends, see loopToEnds), bits 1-2 = number of ends,
+ *   byte 1      bit 0 unused, bits 1-2 = number of ends,
  *               bit 3 = checkpoints follow the ends
  *   byte 2, 3   width, height
  *   2 bytes per end, big-endian, entrance first:
@@ -104,29 +103,13 @@ export function decodePuzzle(code: string): Puzzle {
   const get = (i: number) => (bytes[off + (i >> 3)] >> (i & 7)) & 1;
   for (let i = 0; i < n; i++) if (get(i)) p.blocked.add(i);
   for (let i = 0; i < e; i++) if (get(n + i)) p.walls.add(i);
-  return flags & 1 ? loopToEnds(p) : p;
-}
-
-/**
- * The current code for a code saved as a loop (it opens with two ends now),
- * or the code unchanged.
- */
-export function upgradeCode(code: string): string {
-  try {
-    const flags = fromBase64Url(code.trim())[1];
-    if (flags & 1) return encodePuzzle(decodePuzzle(code));
-  } catch {
-    /* not a code we can read: leave it */
-  }
-  return code;
+  return p;
 }
 
 export interface PuzzleJson {
   format: 'hamiltonian-puzzle';
   /** Format version, e.g. "0.2". */
   version: string;
-  /** Informational, always "path". Files from before loops were dropped may say "cycle": those open with two ends (see loopToEnds). */
-  mode: 'path' | 'cycle';
   width: number;
   height: number;
   blocked: number[];
@@ -147,7 +130,6 @@ export function puzzleToJson(p: Puzzle): PuzzleJson {
   return {
     format: 'hamiltonian-puzzle',
     version: FORMAT_VERSION,
-    mode: 'path',
     width: p.w,
     height: p.h,
     blocked: sorted(p.blocked),
@@ -185,7 +167,7 @@ export function puzzleFromJson(value: unknown): Puzzle {
   p.endpoints = ports.slice(0, 2);
   p.checkpoints = ints(j.checkpoints, n, 'checkpoints');
   adoptLegacyTileEnds(p, tiles);
-  return j.mode === 'cycle' ? loopToEnds(p) : p;
+  return p;
 }
 
 /**

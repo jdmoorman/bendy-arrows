@@ -26,7 +26,7 @@ export interface Puzzle {
   /**
    * Up to two ends, each either a tile where the path must start/stop or a
    * port (outer border of the frame, see portCell) where it enters or leaves.
-   * The first is the entrance. (Loop puzzles, with no ends, are gone: see loopToEnds.)
+   * The first is the entrance.
    */
   endpoints: End[];
   /**
@@ -250,26 +250,6 @@ export function resizePuzzle(p: Puzzle, w: number, h: number): Puzzle {
     const [side, i] = portSide(p, end.port);
     const limit = side === 'top' || side === 'bottom' ? w : h;
     if (i < limit) out.endpoints.push(portEnd(portId(out, side, i)));
-  }
-  return out;
-}
-
-/**
- * The ends puzzle equivalent to a loop puzzle (one with no ends or checkpoints):
- * two ends side by side on the right of the frame, as low as both tiles are
- * open. The lower of the two has a black tile or the frame below it, so every
- * loop must step between them; cutting that step gives the path. With no such
- * pair (no loop fits anyway) the puzzle is returned without ends.
- */
-export function loopToEnds(p: Puzzle): Puzzle {
-  const out = clonePuzzle(p);
-  if (p.endpoints.length || p.checkpoints.length) return out;
-  for (let r = p.h - 2; r >= 0; r--) {
-    const upper = cellAt(p, r, p.w - 1);
-    if (!p.blocked.has(upper) && !p.blocked.has(upper + p.w)) {
-      out.endpoints = [portEnd(portId(p, 'right', r)), portEnd(portId(p, 'right', r + 1))];
-      break;
-    }
   }
   return out;
 }

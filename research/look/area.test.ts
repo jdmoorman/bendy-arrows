@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { decodePuzzle } from '../../src/codec';
 import { RATING_RULES } from '../../src/generator';
 import { deductions, runLogic, type LogicState } from '../../src/logic';
-import { cellEdges, edgeBetween, edgeCells, endpointCells, isUsableEdge, modeOf, type Puzzle } from '../../src/model';
+import { cellEdges, edgeBetween, edgeCells, endpointCells, isUsableEdge, type Puzzle } from '../../src/model';
 import { solve } from '../../src/solver';
 import { outPath, record } from '../out';
 
@@ -47,7 +47,7 @@ test('area', () => {
     // Borders out of the area by colour, as the engine sees them.
     const deg = new Map<number, number>();
     for (const e of s.segments) for (const c of edgeCells(p, e)) deg.set(c, (deg.get(c) ?? 0) + 1);
-    const ends = new Set(modeOf(p) === 'cycle' ? [] : endpointCells(p));
+    const ends = new Set(endpointCells(p));
     const full = (c: number) => (deg.get(c) ?? 0) >= (ends.has(c) ? 1 : 2);
     let diff = 0;
     for (const c of area) diff += (Math.floor(c / p.w) + (c % p.w)) % 2 === 1 ? 1 : -1;

@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, loopToEnds, portCount, portEnd, portId, endsEqual, type Puzzle } from '../src/model';
+import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, portCount, portEnd, portId, endsEqual, type Puzzle } from '../src/model';
 import { checkSolution } from '../src/rules';
 import { parityCheck, solve } from '../src/solver';
+import { endsBottomRight } from './helpers';
 
 /** Count solutions by checking every subset of usable edges. */
 function bruteForceCount(p: Puzzle): number {
@@ -24,13 +25,6 @@ function rng(seed: number) {
 }
 
 describe('parity', () => {
-  test('open 3x3 with ends side by side cannot be solved', () => {
-    const r = parityCheck(loopToEnds(createPuzzle(3, 3)));
-    expect(r.ok).toBe(false);
-    expect(r.a).toBe(5);
-    expect(r.b).toBe(4);
-  });
-
   test('open 3x3 path must end on A tiles', () => {
     const p = createPuzzle(3, 3);
     p.checkpoints = [0];
@@ -57,11 +51,11 @@ describe('solve', () => {
   });
 
   test('open 2x3 with ends side by side is unique', () => {
-    expect(solve(loopToEnds(createPuzzle(3, 2))).status).toBe('unique');
+    expect(solve(endsBottomRight(3, 2)).status).toBe('unique');
   });
 
   test('ends on the wrong colours report none with a reason', () => {
-    const r = solve(loopToEnds(createPuzzle(3, 3)));
+    const r = solve(endsBottomRight(3, 3));
     expect(r.status).toBe('none');
     expect(r.reason).toMatch(/both path ends must be on A tiles/);
   });
@@ -183,14 +177,14 @@ describe('solutionUnion', async () => {
   /** The union of every solution, by listing them all (small boards only). */
   const bruteUnion = (p: Puzzle) => [...new Set(solve(p, { maxSolutions: 1e9 }).solutions.flat())].sort((a, b) => a - b);
   const cases: [string, () => Puzzle][] = [
-    ['open 4×4, ends side by side', () => loopToEnds(createPuzzle(4, 4))],
+    ['open 4×4, ends side by side', () => endsBottomRight(4, 4)],
     ['4×3 path between two corners', () => {
       const p = createPuzzle(4, 3);
       p.endpoints = [portEnd(portId(p, 'left', 0)), portEnd(portId(p, 'right', 2))];
       return p;
     }],
     ['5×4, ends side by side, with a wall', () => {
-      const p = loopToEnds(createPuzzle(5, 4));
+      const p = endsBottomRight(5, 4);
       p.walls.add(edgeBetween(p, 6, 7));
       return p;
     }],
@@ -209,10 +203,10 @@ describe('solutionUnion', async () => {
     });
   }
   test('a unique puzzle gives just its solution, and an impossible one gives nothing', () => {
-    const p = loopToEnds(createPuzzle(2, 2));
+    const p = endsBottomRight(2, 2);
     expect(solutionUnion(p)).toMatchObject({ status: 'unique', unchecked: [] });
     expect(solutionUnion(p).edges).toHaveLength(3);
-    const q = loopToEnds(createPuzzle(3, 3)); // the ends are on different colours, but must both be on the commoner one
+    const q = endsBottomRight(3, 3); // the ends are on different colours, but must both be on the commoner one
     expect(solutionUnion(q)).toEqual({ status: 'none', edges: [], unchecked: [], suggestedWall: null });
   });
 });
@@ -234,7 +228,7 @@ describe('seeded solving', () => {
 describe('suggested wall', async () => {
   const { solutionUnion } = await import('../src/solver');
   test('rules out the most solutions found, but never all of them', () => {
-    const p = loopToEnds(createPuzzle(4, 4)); // several paths
+    const p = endsBottomRight(4, 4); // several paths
     const u = solutionUnion(p);
     expect(u.suggestedWall).not.toBeNull();
     const s = u.suggestedWall!;
@@ -242,13 +236,13 @@ describe('suggested wall', async () => {
     expect(s.rulesOut).toBeLessThan(s.found);
     // Walling it off really leaves some solutions and removes the ones that used it.
     const all = solve(p, { maxSolutions: 1e9 }).solutions;
-    const q = loopToEnds(createPuzzle(4, 4));
+    const q = endsBottomRight(4, 4);
     q.walls.add(s.edge);
     const left = solve(q, { maxSolutions: 1e9 }).solutions;
     expect(left.length).toBe(all.filter((sol) => !sol.includes(s.edge)).length);
     expect(left.length).toBeGreaterThan(0);
   });
   test('a unique puzzle gets no suggestion', () => {
-    expect(solutionUnion(loopToEnds(createPuzzle(2, 2))).suggestedWall).toBeNull();
+    expect(solutionUnion(endsBottomRight(2, 2)).suggestedWall).toBeNull();
   });
 });

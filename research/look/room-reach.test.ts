@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { decodePuzzle } from '../../src/codec';
 import { RATING_RULES } from '../../src/generator';
 import { runLogic, type LogicState } from '../../src/logic';
-import { cellEdges, edgeCells, endpointCells, isUsableEdge, modeOf, neighbors, type Puzzle } from '../../src/model';
+import { cellEdges, edgeCells, endpointCells, isUsableEdge, neighbors, type Puzzle } from '../../src/model';
 import { outPath, record } from '../out';
 
 // Replay the engine's room growth (borders counted open or drawn; 8 tie-break orders) from every
@@ -18,7 +18,7 @@ test('room reach', () => {
   for (const [label, s] of [['empty board', { segments: new Set<number>(), xs: new Set<number>() }], ['where the rating rules stall', runLogic(p, RATING_RULES).state]] as [string, LogicState][]) {
     const deg = new Map<number, number>();
     for (const e of s.segments) for (const c of edgeCells(p, e)) deg.set(c, (deg.get(c) ?? 0) + 1);
-    const ends = new Set(modeOf(p) === 'cycle' ? [] : endpointCells(p));
+    const ends = new Set(endpointCells(p));
     const full = (c: number) => (deg.get(c) ?? 0) >= (ends.has(c) ? 1 : 2);
     // The engine's borders: usable, not X, and drawn or not closed by a full tile.
     const live = (e: number) => isUsableEdge(p, e) && !s.xs.has(e) && (s.segments.has(e) || !edgeCells(p, e).some(full));

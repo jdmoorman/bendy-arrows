@@ -10,7 +10,7 @@ import { outPath, record } from '../out';
 test('check hard sparse finds', () => {
   const dir = outPath('hard-sparse/');
   writeFileSync(outPath('hard-sparse/checked.txt'), '');
-  for (const f of readdirSync(dir).filter((x) => /^(loop|path)-.*\.txt$/.test(x))) {
+  for (const f of readdirSync(dir).filter((x) => /^path-.*\.txt$/.test(x))) {
     const finds = readFileSync(dir + f, 'utf8').split('\n').filter((l) => l.startsWith('HARD'));
     const seen = new Set<string>();
     const best = finds.map((l) => l.split(' ')).sort((a, b) => +a[1] - +b[1]).filter(([, , , , code]) => !seen.has(code) && seen.add(code)).slice(0, 4);

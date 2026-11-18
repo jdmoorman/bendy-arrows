@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { decodePuzzle, encodePuzzle, puzzleFromJson, puzzleToJson, upgradeCode } from '../src/codec';
+import { decodePuzzle, encodePuzzle, puzzleFromJson, puzzleToJson } from '../src/codec';
 import { createPuzzle, edgeBetween, portEnd, portId, puzzlesEqual } from '../src/model';
 
 function sample() {
@@ -54,21 +54,6 @@ describe('codec', () => {
     expect(decodePuzzle(btoa(String.fromCharCode(...bytes)).replace(/=+$/, '')).endpoints).toEqual([]);
     const j = { ...puzzleToJson(createPuzzle(3, 3)), mode: 'path', endpoints: [] };
     expect(puzzleFromJson(j).endpoints).toEqual([]);
-  });
-
-  test('a loop code opens with two ends side by side, low on the right', () => {
-    // Format 0.5 loop, 4x4: the bottom-right tile and the one above it are black.
-    const p = createPuzzle(4, 4);
-    p.blocked.add(15).add(11);
-    const bits = new Uint8Array(Math.ceil((16 + 24) / 8));
-    for (const c of p.blocked) bits[c >> 3] |= 1 << (c & 7);
-    const code = btoa(String.fromCharCode(5, 1, 4, 4, ...bits)).replace(/=+$/, '');
-    const q = decodePuzzle(code);
-    expect(q.endpoints).toEqual([portEnd(portId(q, 'right', 0)), portEnd(portId(q, 'right', 1))]);
-    expect(upgradeCode(code)).toBe(encodePuzzle(q));
-    expect(upgradeCode(encodePuzzle(q))).toBe(encodePuzzle(q));
-    const j = { ...puzzleToJson(p), mode: 'cycle', endpoints: [] };
-    expect(puzzleFromJson(j).endpoints).toEqual(q.endpoints);
   });
 
   test('givens in older codes and JSON are ignored', () => {

@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { decodePuzzle } from '../../src/codec';
 import { EASY_RULES } from '../../src/generator';
 import { applyStep, deductions, logicStep, type Deduction, type LogicState } from '../../src/logic';
-import { cellEdges, edgeCells, endpointCells, isUsableEdge, modeOf, neighbors, type Puzzle } from '../../src/model';
+import { cellEdges, edgeCells, endpointCells, isUsableEdge, neighbors, type Puzzle } from '../../src/model';
 import { SAMPLES } from '../../src/samples';
 import { outPath, record } from '../out';
 
@@ -31,7 +31,7 @@ test('the odd one out', () => {
   // The engine's view of borders: usable, not X, and either drawn or not closed by a full tile.
   const deg = new Map<number, number>();
   for (const e of st.segments) for (const c of edgeCells(p, e)) deg.set(c, (deg.get(c) ?? 0) + 1);
-  const ends = new Set(modeOf(p) === 'cycle' ? [] : endpointCells(p));
+  const ends = new Set(endpointCells(p));
   const full = (c: number) => (deg.get(c) ?? 0) >= (ends.has(c) ? 1 : 2);
   const live = (e: number) => isUsableEdge(p, e) && !st.xs.has(e) && (st.segments.has(e) || !edgeCells(p, e).some(full));
   const marks = (d: Deduction) => JSON.stringify([[...d.segments].sort(), [...d.xs].sort()]);

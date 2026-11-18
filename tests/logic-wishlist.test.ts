@@ -18,6 +18,7 @@ function check(w: Wish) {
 }
 
 describe('logic wishlist', () => {
+  if (!WISHES.length && !DONE.length) test.skip('no wishes recorded yet', () => {});
   for (const w of WISHES) {
     test(`${w.name}: the edge is in the puzzle's only solution`, () => {
       const { p, edge } = check(w);

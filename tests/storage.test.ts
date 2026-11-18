@@ -68,28 +68,4 @@ describe('settings', () => {
     expect(new Storage(null).loadSettings()).toEqual({ checkerboard: true, showTimer: false, autoCheck: true, darkTheme: false, coordinates: false });
   });
 
-  test('upgradeCodes rewrites every stored code, merging solve times', () => {
-    const m = new MemStore();
-    const s = new Storage(m);
-    const up = (c: string) => (c.startsWith('OLD') ? 'NEW' + c.slice(3) : c);
-    s.put(entry('OLDa', 1));
-    s.put(entry('b', 2));
-    s.saveTimes('OLDa', [{ ms: 1, at: 1 }]);
-    s.saveTimes('NEWa', [{ ms: 2, at: 2 }]);
-    s.saveRating('OLDb', { difficulty: 'easy', unique: true } as never);
-    s.saveDaily('2026-11-18', 'OLDd');
-    s.saveHiddenSamples(['OLDh', 'x']);
-    s.saveSession({ code: 'OLDs', editorCode: 'OLDe', progress: { segments: [1], xMarks: [] } });
-    s.upgradeCodes(up);
-    expect(s.list().map((e) => e.code).sort()).toEqual(['CODEOLDa', 'CODEb']);
-    s.put({ ...entry('c', 3), code: 'OLDc' });
-    s.upgradeCodes(up);
-    expect(s.get('c')?.code).toBe('NEWc');
-    expect(s.loadTimes('NEWa').map((t) => t.ms).sort()).toEqual([1, 2]);
-    expect(s.loadTimes('OLDa')).toEqual([]);
-    expect(Object.keys(s.loadRatings())).toEqual(['NEWb']);
-    expect(s.loadDaily('2026-11-18')).toBe('NEWd');
-    expect(s.loadHiddenSamples()).toEqual(['NEWh', 'x']);
-    expect(s.loadSession()).toMatchObject({ code: 'NEWs', editorCode: 'NEWe', progress: { segments: [1] } });
-  });
 });

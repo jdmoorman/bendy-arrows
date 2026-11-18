@@ -1,4 +1,4 @@
-import { edgeBetween, type Size } from '../src/model';
+import { createPuzzle, edgeBetween, portEnd, portId, type Puzzle, type Size } from '../src/model';
 
 /** Segments joining consecutive cells, given as [r, c] pairs. */
 export function pathEdges(s: Size, cells: [number, number][], close = false): Set<number> {
@@ -11,4 +11,11 @@ export function pathEdges(s: Size, cells: [number, number][], close = false): Se
     out.add(e);
   }
   return out;
+}
+
+/** An open board with its two ends side by side at the bottom of the right side. */
+export function endsBottomRight(w: number, h: number): Puzzle {
+  const p = createPuzzle(w, h);
+  p.endpoints = [portEnd(portId(p, 'right', h - 2)), portEnd(portId(p, 'right', h - 1))];
+  return p;
 }
