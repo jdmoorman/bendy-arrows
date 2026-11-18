@@ -451,11 +451,12 @@ describe('satisfied areas', async () => {
   const { decodePuzzle } = await import('../src/codec');
   const { edgeBetween: between } = await import('../src/model');
   test('a player who drew most of a chain by hand still gets a balance hint for the rest', () => {
-    const p = decodePuzzle('BQEKCgAAAAAAAAAAAAAAAABAAAABAAQAEAAAAAAAAAAAAAAAQAUA');
+    // Ends at J9 and J10 (it was a loop).
+    const p = decodePuzzle('BQQKCgASABMAAAAAAAAAAAAAAAAAQAAAAQAEABAAAAAAAAAAAAAAAEAFAA');
     const edge = between(p, 9 * 10 + 7, 9 * 10 + 8); // H10-I10
     let s = empty();
-    // The player's own lines: the first 18 moves, down columns A-B and along rows 9-10 to G9-H9.
-    for (let i = 0; i < 18; i++) {
+    // The player's own lines: the first 19 moves.
+    for (let i = 0; i < 19; i++) {
       const h = findHint(p, s, ALL_RULES);
       if (h.kind !== 'deduction') throw new Error('stuck early');
       s = applyStep(s, { segments: h.deduction.segments, xs: h.deduction.xs, byRule: {}, solved: false });

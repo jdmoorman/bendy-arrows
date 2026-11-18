@@ -1,4 +1,4 @@
-import { cellCount, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, modeOf, portCount, portEnd, type End, type Puzzle } from './model';
+import { cellCount, createPuzzle, edgeCount, loopToEnds, MAX_SIZE, MIN_SIZE, portCount, portEnd, type End, type Puzzle } from './model';
 
 /**
  * Compact share code for a puzzle.
@@ -12,7 +12,8 @@ import { cellCount, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, modeOf, portCou
  *
  * Layout (0.5):
  *   byte 0      format minor version (5)
- *   byte 1      bit 0 = loop (informational), bits 1-2 = number of ends,
+ *   byte 1      bit 0 = loop (no longer written: an old loop code opens as
+ *               the same puzzle with two ends, see loopToEnds), bits 1-2 = number of ends,
  *               bit 3 = checkpoints follow the ends
  *   byte 2, 3   width, height
  *   2 bytes per end, big-endian, entrance first:
@@ -34,7 +35,7 @@ export function encodePuzzle(p: Puzzle): string {
   const e = edgeCount(p);
   const endpoints = p.endpoints.slice(0, 2);
   const cps = p.checkpoints;
-  const flags = (modeOf(p) === 'cycle' ? 1 : 0) | (endpoints.length << 1) | (cps.length ? 8 : 0);
+  const flags = (endpoints.length << 1) | (cps.length ? 8 : 0);
   const header = [VERSION_BYTE, flags, p.w, p.h];
   for (const end of endpoints) {
     const v = end.port;
@@ -66,7 +67,6 @@ export function decodePuzzle(code: string): Puzzle {
   const w = bytes[2];
   const h = bytes[3];
   checkSize(w, h);
-  // The puzzle type follows from the ends, so the loop flag is not needed.
   const p = createPuzzle(w, h);
   const n = cellCount(p);
   const e = edgeCount(p);
@@ -104,14 +104,28 @@ export function decodePuzzle(code: string): Puzzle {
   const get = (i: number) => (bytes[off + (i >> 3)] >> (i & 7)) & 1;
   for (let i = 0; i < n; i++) if (get(i)) p.blocked.add(i);
   for (let i = 0; i < e; i++) if (get(n + i)) p.walls.add(i);
-  return p;
+  return flags & 1 ? loopToEnds(p) : p;
+}
+
+/**
+ * The current code for a code saved as a loop (it opens with two ends now),
+ * or the code unchanged.
+ */
+export function upgradeCode(code: string): string {
+  try {
+    const flags = fromBase64Url(code.trim())[1];
+    if (flags & 1) return encodePuzzle(decodePuzzle(code));
+  } catch {
+    /* not a code we can read: leave it */
+  }
+  return code;
 }
 
 export interface PuzzleJson {
   format: 'hamiltonian-puzzle';
   /** Format version, e.g. "0.2". */
   version: string;
-  /** Informational: "path" when there are ends, else "cycle". Ignored on import. */
+  /** Informational, always "path". Files from before loops were dropped may say "cycle": those open with two ends (see loopToEnds). */
   mode: 'path' | 'cycle';
   width: number;
   height: number;
@@ -133,7 +147,7 @@ export function puzzleToJson(p: Puzzle): PuzzleJson {
   return {
     format: 'hamiltonian-puzzle',
     version: FORMAT_VERSION,
-    mode: modeOf(p),
+    mode: 'path',
     width: p.w,
     height: p.h,
     blocked: sorted(p.blocked),
@@ -171,7 +185,7 @@ export function puzzleFromJson(value: unknown): Puzzle {
   p.endpoints = ports.slice(0, 2);
   p.checkpoints = ints(j.checkpoints, n, 'checkpoints');
   adoptLegacyTileEnds(p, tiles);
-  return p;
+  return j.mode === 'cycle' ? loopToEnds(p) : p;
 }
 
 /**

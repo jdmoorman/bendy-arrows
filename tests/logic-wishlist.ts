@@ -23,8 +23,8 @@ export interface Wish {
 
 export const WISHES: Wish[] = [
   {
-    name: 'Loop 8×8 · walls 2 (sample): a notched L of 16 tiles in the bottom right',
-    code: 'BQEICAAAAAAAAAAAiIBCJEABBEAARAAYAAA',
+    name: 'Path 8×8 · walls 2 (was loop) (sample): a notched L of 16 tiles in the bottom right',
+    code: 'BQQICAAOAA8AAAAAAAAAAIiAQiRAAQRAAEQAGAAA',
     edge: ['8,5', '8,4'],
     area: ['4,7', '4,8', '5,7', '5,8', '6,5', '6,6', '6,7', '6,8', '7,5', '7,6', '7,7', '7,8', '8,5', '8,6', '8,7', '8,8'],
     note:
@@ -38,8 +38,8 @@ export const WISHES: Wish[] = [
 /** Wishes the rules now grant, kept as a record (and as regression tests). */
 export const DONE: Wish[] = [
   {
-    name: '10×10 loop: an L of columns A-B and rows 9-10 (granted by chains)',
-    code: 'BQEKCgAAAAAAAAAAAAAAAABAAAABAAQAEAAAAAAAAAAAAAAAQAUA',
+    name: '10×10 path (was loop): an L of columns A-B and rows 9-10 (granted by chains)',
+    code: 'BQQKCgASABMAAAAAAAAAAAAAAAAAQAAAAQAEABAAAAAAAAAAAAAAAEAFAA',
     edge: ['10,8', '10,9'],
     area: [
       ...['1', '2', '3', '4', '5', '6', '7', '8'].flatMap((r) => [`${r},1`, `${r},2`]),

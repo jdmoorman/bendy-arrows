@@ -236,6 +236,45 @@ export class Storage {
     this.write(DAILY_KEY, { date, code });
   }
 
+  /**
+   * Pass every stored puzzle code through `upgrade` (library entries, solve
+   * times and ratings by code, the daily puzzle, hidden samples, the session),
+   * writing back only what changed. Used to turn saved loops into ends puzzles.
+   */
+  upgradeCodes(upgrade: (code: string) => string): void {
+    const items = this.read<unknown>(LIBRARY_KEY, []);
+    if (Array.isArray(items) && items.some((e) => e && typeof e.code === 'string' && upgrade(e.code) !== e.code)) {
+      this.write(
+        LIBRARY_KEY,
+        items.map((e) => (e && typeof e.code === 'string' ? { ...e, code: upgrade(e.code) } : e)),
+      );
+    }
+    const rekey = <T>(key: string, merge: (a: T, b: T) => T) => {
+      const all = this.read<unknown>(key, {});
+      if (!all || typeof all !== 'object' || Array.isArray(all)) return;
+      const entries = Object.entries(all as Record<string, T>);
+      if (!entries.some(([code]) => upgrade(code) !== code)) return;
+      const out: Record<string, T> = {};
+      for (const [code, v] of entries) {
+        const k = upgrade(code);
+        out[k] = k in out ? merge(out[k], v) : v;
+      }
+      this.write(key, out);
+    };
+    rekey<unknown>(TIMES_KEY, (a, b) => (Array.isArray(a) && Array.isArray(b) ? [...a, ...b] : a));
+    rekey<unknown>(RATINGS_KEY, (a) => a);
+    const daily = this.read<{ date?: unknown; code?: unknown } | null>(DAILY_KEY, null);
+    if (daily && typeof daily.code === 'string' && upgrade(daily.code) !== daily.code) {
+      this.write(DAILY_KEY, { ...daily, code: upgrade(daily.code) });
+    }
+    const hidden = this.loadHiddenSamples();
+    if (hidden.some((c) => upgrade(c) !== c)) this.saveHiddenSamples(hidden.map(upgrade));
+    const session = this.loadSession();
+    if (session && (upgrade(session.code) !== session.code || (session.editorCode && upgrade(session.editorCode) !== session.editorCode))) {
+      this.saveSession({ ...session, code: upgrade(session.code), ...(session.editorCode ? { editorCode: upgrade(session.editorCode) } : {}) });
+    }
+  }
+
   loadSettings(): Settings {
     const s = this.read<Partial<Settings> | null>(SETTINGS_KEY, null);
     return { ...DEFAULT_SETTINGS, ...(s && typeof s === 'object' ? s : {}) };
