@@ -288,9 +288,6 @@ describe('hint choice', async () => {
 });
 
 describe('more rules', async () => {
-  const { SAMPLES } = await import('../src/samples');
-  const { decodePuzzle } = await import('../src/codec');
-  const { RATING_RULES } = await import('../src/generator');
   const { rulesFor } = await import('../src/logic');
 
   test('no sealed areas: a line that would wall tiles off gets an X', () => {
@@ -316,17 +313,6 @@ describe('more rules', async () => {
     expect(rulesFor(p).some((r) => r.id === 'spacing')).toBe(false);
     p.checkpoints = [0, 3, 8];
     expect(rulesFor(p).some((r) => r.id === 'spacing')).toBe(true);
-  });
-
-  test('the one-step trial finds a correct mark where the other rules stall', () => {
-    const s = SAMPLES.find((x) => x.level === 'veryhard')!;
-    const p = decodePuzzle(s.code);
-    const sol = new Set(solve(p).solutions[0]);
-    const state = runToEnd(p, RATING_RULES).state;
-    const step = logicStep(p, state, ['trial']);
-    expect(step.segments.length + step.xs.length).toBeGreaterThan(0);
-    for (const e of step.segments) expect(sol.has(e)).toBe(true);
-    for (const e of step.xs) expect(sol.has(e)).toBe(false);
   });
 });
 
@@ -455,4 +441,24 @@ describe('hintJourney', async () => {
       }
     }
   });
+});
+
+describe('satisfied areas', async () => {
+  const { findHint } = await import('../src/logic');
+  const { decodePuzzle } = await import('../src/codec');
+  const { edgeBetween: between } = await import('../src/model');
+  test('a player who drew most of a chain by hand still gets a balance hint for the rest', () => {
+    const p = decodePuzzle('BQEKCgAAAAAAAAAAAAAAAABAAAABAAQAEAAAAAAAAAAAAAAAQAUA');
+    const edge = between(p, 9 * 10 + 7, 9 * 10 + 8); // H10-I10
+    let s = empty();
+    // The player's own lines: the first 18 moves, down columns A-B and along rows 9-10 to G9-H9.
+    for (let i = 0; i < 18; i++) {
+      const h = findHint(p, s, ALL_RULES);
+      if (h.kind !== 'deduction') throw new Error('stuck early');
+      s = applyStep(s, { segments: h.deduction.segments, xs: h.deduction.xs, byRule: {}, solved: false });
+    }
+    const h = findHint(p, s, ALL_RULES);
+    expect(h.kind === 'deduction' && h.deduction.rule).toBe('balance');
+    expect(h.kind === 'deduction' && h.deduction.segments.includes(edge)).toBe(true);
+  }, 60000);
 });

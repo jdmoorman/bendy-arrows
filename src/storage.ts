@@ -50,9 +50,11 @@ export interface Settings {
   autoCheck: boolean;
   /** Use the dark colour theme. */
   darkTheme: boolean;
+  /** Label columns with letters (A, B, …) and rows with numbers (1, 2, …) around the board. */
+  coordinates: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { checkerboard: true, showTimer: false, autoCheck: true, darkTheme: false };
+export const DEFAULT_SETTINGS: Settings = { checkerboard: true, showTimer: false, autoCheck: true, darkTheme: false, coordinates: false };
 
 export interface KeyValueStore {
   getItem(key: string): string | null;

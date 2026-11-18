@@ -173,6 +173,9 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
   openSettingsSheet(settings, (s) => {
     settings = s;
     applySettings(s);
+    // Coordinates change the board's margin, so redraw both boards.
+    play.render();
+    editor.render();
     play.setShowTimer(s.showTimer);
     play.setAutoCheck(s.autoCheck);
     storage.saveSettings(s);

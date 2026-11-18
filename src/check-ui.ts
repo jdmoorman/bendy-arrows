@@ -101,7 +101,8 @@ export function attachUniquenessCheck(editor: EditorView): void {
 
   const setChip = (state: 'checking' | 'unique' | 'none' | 'multiple' | 'aborted', label: string) => {
     chip.dataset.state = state;
-    chip.innerHTML = state === 'checking' ? `<span class="spinner" aria-hidden="true"></span><span>${label}</span>` : `<span>${label}</span>`;
+    // While checking, just the spinner: "Checking" beside it squeezed the Rules button on phones.
+    chip.innerHTML = state === 'checking' ? '<span class="spinner" aria-hidden="true"></span>' : `<span>${label}</span>`;
     chip.setAttribute('aria-pressed', String(showing));
     chip.setAttribute('aria-label', `${state === 'checking' ? 'Checking the puzzle' : label}. ${showing ? 'Hide' : 'Show'} the solution lines.`);
   };

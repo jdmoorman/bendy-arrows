@@ -6,6 +6,19 @@ export const CELL = 100;
 export const PAD = 10;
 /** Space around the grid when end arrows are drawn outside the frame. */
 export const PORT_PAD = 62;
+/** Extra space, outside everything else, for the column letters and row numbers. */
+export const COORD_PAD = 44;
+
+/** Whether boards show coordinates (a display setting shared by every view). */
+let showCoordinates = false;
+export function setShowCoordinates(on: boolean): void {
+  showCoordinates = on;
+}
+
+/** Column letters: A … Z, then AA, AB, … (boards are at most 30 wide). */
+export function columnName(c: number): string {
+  return c < 26 ? String.fromCharCode(65 + c) : String.fromCharCode(64 + Math.floor(c / 26)) + String.fromCharCode(65 + (c % 26));
+}
 
 export interface RenderOptions {
   segments?: Set<number>;
@@ -32,7 +45,8 @@ export interface RenderOptions {
 
 /** Margin to use for a puzzle: room for end arrows when it has (or may get) ends. */
 export function padFor(p: Puzzle, editing = false): number {
-  return editing || p.endpoints.some((e) => e.kind === 'port') ? PORT_PAD : PAD;
+  const base = editing || p.endpoints.some((e) => e.kind === 'port') ? PORT_PAD : PAD;
+  return base + (showCoordinates ? COORD_PAD : 0);
 }
 
 export function boardSize(p: Puzzle, pad = PAD): { width: number; height: number } {
@@ -226,6 +240,16 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
       const cls = o.highlight?.has(e) ? 'xmark hint' : o.errorEdges?.has(e) ? 'xmark error' : 'xmark';
       parts.push(line(cx - s, cy - s, cx + s, cy + s, cls), line(cx - s, cy + s, cx + s, cy - s, cls));
     }
+    parts.push('</g>');
+  }
+
+  // Coordinates in the outermost band of the margin, clear of end arrows: letters above the
+  // columns, numbers left of the rows.
+  if (showCoordinates && pad >= COORD_PAD) {
+    const mid = COORD_PAD / 2;
+    parts.push('<g class="coords">');
+    for (let c = 0; c < p.w; c++) parts.push(`<text x="${pad + (c + 0.5) * CELL}" y="${mid}">${columnName(c)}</text>`);
+    for (let r = 0; r < p.h; r++) parts.push(`<text x="${mid}" y="${pad + (r + 0.5) * CELL}">${r + 1}</text>`);
     parts.push('</g>');
   }
 

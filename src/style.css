@@ -198,6 +198,17 @@ select {
   stroke-width: 2;
 }
 
+/* Column letters and row numbers around the board. */
+.coords text {
+  fill: var(--text-muted);
+  font-size: 30px;
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  user-select: none;
+}
+
 .wall {
   stroke: var(--wall);
   stroke-width: 12;

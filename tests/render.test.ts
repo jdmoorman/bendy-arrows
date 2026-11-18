@@ -38,3 +38,10 @@ describe('edgeRuns', () => {
     expect(edgesIn(runs, p)).toEqual([...edges].sort((a, b) => a - b));
   });
 });
+
+describe('coordinates', async () => {
+  const { columnName } = await import('../src/render');
+  test('columns are letters from A, then AA, AB … past Z', () => {
+    expect([0, 1, 25, 26, 27, 29].map(columnName)).toEqual(['A', 'B', 'Z', 'AA', 'AB', 'AD']);
+  });
+});

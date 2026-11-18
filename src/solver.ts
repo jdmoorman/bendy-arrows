@@ -332,7 +332,7 @@ export interface UnionResult {
  * Every line that belongs to at least one solution.
  *
  * 1. Solve once (that's the verdict: unique, multiple, none or aborted).
- *    Then run the logic rules (all but the trial) until they stall: they hold for every
+ *    Then run the logic rules until they stall: they hold for every
  *    solution, so their lines go into every search below as required, and their X marks
  *    become walls (no solution uses them, so those borders need no search at all).
  * 2. Sample: quick solves that break ties in random orders, each finding a different
@@ -370,7 +370,7 @@ export function solutionUnion(
   let required: number[] = [];
   let q = p;
   if (opts.useLogic ?? true) {
-    const logic = runLogic(p, ALL_RULES.filter((r) => r !== 'trial'));
+    const logic = runLogic(p, ALL_RULES);
     if (!logic.contradiction) {
       required = [...logic.state.segments];
       q = clonePuzzle(p);

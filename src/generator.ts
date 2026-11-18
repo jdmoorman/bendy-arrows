@@ -96,8 +96,8 @@ export function logicSolves(p: Puzzle, rules: RuleId[], opts: LogicOptions = {})
   return false;
 }
 
-/** The rules difficulty is rated with: all but the one-step trial (it is trial and error). */
-export const RATING_RULES: RuleId[] = ALL_RULES.filter((r) => r !== 'trial');
+/** The rules difficulty is rated with: all of them. */
+export const RATING_RULES: RuleId[] = ALL_RULES;
 
 /** Every rated rule except Checkerboard balance: what an Easy puzzle may need. */
 export const EASY_RULES: RuleId[] = RATING_RULES.filter((r) => r !== 'balance');
