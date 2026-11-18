@@ -74,7 +74,7 @@ export function openShareSheet(opts: { puzzle: Puzzle; name?: string; onOpen: (p
   shareBtn.addEventListener('click', async () => {
     if (canNativeShare) {
       try {
-        await navigator.share({ title: opts.name || 'Hamiltonian puzzle', url });
+        await navigator.share({ title: opts.name || 'BendyArrows puzzle', url });
         return;
       } catch (err) {
         if ((err as Error).name === 'AbortError') return;

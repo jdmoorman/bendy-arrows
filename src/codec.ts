@@ -107,7 +107,7 @@ export function decodePuzzle(code: string): Puzzle {
 }
 
 export interface PuzzleJson {
-  format: 'hamiltonian-puzzle';
+  format: 'bendy-arrows-puzzle';
   /** Format version, e.g. "0.2". */
   version: string;
   width: number;
@@ -128,7 +128,7 @@ export interface PuzzleJson {
 export function puzzleToJson(p: Puzzle): PuzzleJson {
   const sorted = (s: Set<number>) => [...s].sort((a, b) => a - b);
   return {
-    format: 'hamiltonian-puzzle',
+    format: 'bendy-arrows-puzzle',
     version: FORMAT_VERSION,
     width: p.w,
     height: p.h,
@@ -143,7 +143,8 @@ export function puzzleToJson(p: Puzzle): PuzzleJson {
 export function puzzleFromJson(value: unknown): Puzzle {
   if (!value || typeof value !== 'object') throw new Error('Not a puzzle file.');
   const j = value as Partial<PuzzleJson>;
-  if (j.format !== 'hamiltonian-puzzle') {
+  // Files from before the rename say 'hamiltonian-puzzle'.
+  if (j.format !== 'bendy-arrows-puzzle' && (j.format as unknown) !== 'hamiltonian-puzzle') {
     if (typeof j.code === 'string') return decodePuzzle(j.code);
     throw new Error('Not a puzzle file.');
   }

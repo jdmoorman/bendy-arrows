@@ -27,19 +27,22 @@ export interface Session {
   tab?: 'play' | 'edit' | 'library';
 }
 
-const LIBRARY_KEY = 'hamiltonian.library.v1';
-const SESSION_KEY = 'hamiltonian.session.v1';
-const SETTINGS_KEY = 'hamiltonian.settings.v1';
-const TIMES_KEY = 'hamiltonian.times.v1'; // old solve times: read once to seed SOLVED_KEY
-const SOLVED_KEY = 'hamiltonian.solved.v1';
-const LOGIC_KEY = 'hamiltonian.logic.v1';
-const GENERATOR_KEY = 'hamiltonian.generator.v1';
-const DAILY_KEY = 'hamiltonian.daily.v1';
-const TABLE_KEY = 'hamiltonian.libtable.v1';
-const RATINGS_KEY = 'hamiltonian.ratings.v1';
-const HIDDEN_KEY = 'hamiltonian.hiddensamples.v1';
-const SHOW_SOLUTION_KEY = 'hamiltonian.showsolution.v1';
-const HINTS_INLINE_KEY = 'hamiltonian.hintsinline.v1';
+const LIBRARY_KEY = 'bendyarrows.library.v1';
+const SESSION_KEY = 'bendyarrows.session.v1';
+const SETTINGS_KEY = 'bendyarrows.settings.v1';
+const SOLVED_KEY = 'bendyarrows.solved.v1';
+/** Old solve times (the timer is gone): read once to seed SOLVED_KEY. */
+const TIMES_KEY = 'hamiltonian.times.v1';
+/** Before the rename to BendyArrows, every key started with this instead of `bendyarrows.`. */
+const OLD_PREFIX = 'hamiltonian.';
+const LOGIC_KEY = 'bendyarrows.logic.v1';
+const GENERATOR_KEY = 'bendyarrows.generator.v1';
+const DAILY_KEY = 'bendyarrows.daily.v1';
+const TABLE_KEY = 'bendyarrows.libtable.v1';
+const RATINGS_KEY = 'bendyarrows.ratings.v1';
+const HIDDEN_KEY = 'bendyarrows.hiddensamples.v1';
+const SHOW_SOLUTION_KEY = 'bendyarrows.showsolution.v1';
+const HINTS_INLINE_KEY = 'bendyarrows.hintsinline.v1';
 
 /** Per-device display preferences. */
 export interface Settings {
@@ -69,7 +72,23 @@ function defaultStore(): KeyValueStore | null {
 }
 
 export class Storage {
-  constructor(private store: KeyValueStore | null = defaultStore()) {}
+  constructor(private store: KeyValueStore | null = defaultStore()) {
+    this.migrateOldKeys();
+  }
+
+  /** Copy data saved under the old app name to the new keys (the old keys are left alone). */
+  private migrateOldKeys(): void {
+    const keys = [LIBRARY_KEY, SESSION_KEY, SETTINGS_KEY, SOLVED_KEY, LOGIC_KEY, GENERATOR_KEY, DAILY_KEY, TABLE_KEY, RATINGS_KEY, HIDDEN_KEY, SHOW_SOLUTION_KEY, HINTS_INLINE_KEY];
+    try {
+      for (const key of keys) {
+        if (this.store?.getItem(key) !== null) continue;
+        const old = this.store.getItem(OLD_PREFIX + key.slice(key.indexOf('.') + 1));
+        if (old !== null) this.store.setItem(key, old);
+      }
+    } catch {
+      /* storage unavailable or full: start fresh */
+    }
+  }
 
   private read<T>(key: string, fallback: T): T {
     try {

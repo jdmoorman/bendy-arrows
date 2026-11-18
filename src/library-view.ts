@@ -99,7 +99,7 @@ export class LibraryView {
     exp.addEventListener('click', () => {
       const entries = this.storage.list();
       if (!entries.length) return toast('No saved puzzles to export yet.');
-      downloadText(`hamiltonian-puzzles-${dateKey()}.txt`, exportText(entries, location.href));
+      downloadText(`bendy-arrows-puzzles-${dateKey()}.txt`, exportText(entries, location.href));
       toast(`Exported ${entries.length} puzzle${entries.length === 1 ? '' : 's'}.`);
     });
     const file = el('input') as HTMLInputElement;

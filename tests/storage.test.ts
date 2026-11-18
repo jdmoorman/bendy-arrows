@@ -48,7 +48,7 @@ describe('Storage', () => {
     expect(s.put(entry('a', 1))).toBe(false);
     expect(new Storage(null).loadSession()).toBeNull();
     const m = new MemStore();
-    m.setItem('hamiltonian.library.v1', '{not json');
+    m.setItem('bendyarrows.library.v1', '{not json');
     expect(new Storage(m).list()).toEqual([]);
   });
 
@@ -88,5 +88,17 @@ describe('solved puzzles', () => {
     s.markSolved('B');
     expect(s.isSolved('A')).toBe(true);
     expect(s.isSolved('B')).toBe(true);
+  });
+});
+
+describe('rename from Hamiltonian', () => {
+  test('data under the old keys carries over, without overwriting new data', () => {
+    const m = new MemStore();
+    m.setItem('hamiltonian.library.v1', JSON.stringify([entry('a', 1)]));
+    m.setItem('hamiltonian.settings.v1', JSON.stringify({ darkTheme: true }));
+    m.setItem('bendyarrows.settings.v1', JSON.stringify({ darkTheme: false }));
+    const s = new Storage(m);
+    expect(s.list().map((e) => e.id)).toEqual(['a']);
+    expect(s.loadSettings().darkTheme).toBe(false);
   });
 });

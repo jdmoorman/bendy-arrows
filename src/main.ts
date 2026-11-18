@@ -24,7 +24,7 @@ type Tab = 'play' | 'edit' | 'library';
 const app = document.getElementById('app')!;
 app.innerHTML = `
   <header class="app-header">
-    <h1 class="app-title">Hamiltonian</h1>
+    <h1 class="app-title">BendyArrows</h1>
     <div class="segmented tabs" role="tablist" aria-label="Mode">
       <button class="seg-btn" role="tab" data-tab="play">Play</button>
       <button class="seg-btn" role="tab" data-tab="edit">Create</button>
@@ -108,7 +108,7 @@ function loadPuzzle(p: Puzzle, meta: LoadMeta = {}, startTab: Tab = 'play') {
 }
 
 function updateHeader() {
-  titleEl.textContent = puzzleName ?? 'Hamiltonian';
+  titleEl.textContent = puzzleName ?? 'BendyArrows';
   const code = encodePuzzle(playing);
   const hash = `#p=${code}`;
   if (location.hash !== hash) history.replaceState(null, '', hash);
