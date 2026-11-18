@@ -41,7 +41,7 @@ export interface GenOptions {
   minimal: boolean;
   /** At most this many obstacles (walls plus black tiles); no limit if missing. */
   maxObstacles?: number;
-  /** How many tries before giving up (default MAX_ATTEMPTS). */
+  /** How many tries before settling for the closest (default: no limit, keep trying until one matches or it's cancelled). */
   attempts?: number;
   seed: number;
 }
@@ -63,7 +63,6 @@ export const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'veryhard']
 /** A sensible default size for each difficulty. */
 export const DEFAULT_SIZE: Record<Difficulty, number> = { easy: 5, medium: 6, hard: 7, veryhard: 7 };
 
-const MAX_ATTEMPTS = 400;
 /** Search budget for each uniqueness check. */
 const NODE_LIMIT = 300_000;
 
@@ -119,14 +118,15 @@ export function rateDifficulty(p: Puzzle, opts: LogicOptions = {}): Difficulty {
 
 /**
  * Generate a puzzle with a unique solution, trying until one matches the
- * difficulty (or giving back the closest found).
+ * difficulty. With no `attempts` limit it keeps trying (the app cancels it from
+ * the generator sheet); with a limit it gives back the closest found.
  */
 export function generate(opts: GenOptions, onProgress?: (attempt: number) => void): GenResult {
   const rand = seededRandom(opts.seed);
   const wanted = opts.difficulty;
   const target = wanted === 'any' ? -1 : DIFFICULTIES.indexOf(wanted);
   let best: GenResult | null = null;
-  for (let attempt = 1; attempt <= (opts.attempts ?? MAX_ATTEMPTS); attempt++) {
+  for (let attempt = 1; attempt <= (opts.attempts ?? Infinity); attempt++) {
     onProgress?.(attempt);
     const p = attemptPuzzle(opts, rand);
     if (!p) continue;
