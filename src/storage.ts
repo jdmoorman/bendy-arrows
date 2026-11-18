@@ -26,6 +26,8 @@ export interface Session {
   name?: string;
   /** Unsaved work in the editor, if it differs from the played puzzle. */
   editorCode?: string;
+  /** The unsaved editor puzzle was made with New puzzle or Generate (not edited from the played one). */
+  editorReplaced?: boolean;
   tab?: 'play' | 'edit' | 'library';
 }
 

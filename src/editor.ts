@@ -57,6 +57,12 @@ export class EditorView {
    * since it was loaded: the player's marks on the old one no longer mean anything.
    */
   marksStillFit = true;
+  /**
+   * True once New puzzle or Generate has replaced the loaded puzzle: it is a
+   * different puzzle now, so saving must not offer to update the library entry
+   * the loaded one came from.
+   */
+  replaced = false;
 
   private puzzle: Puzzle = createPuzzle(6, 6);
   private history = new History<Puzzle>();
@@ -168,10 +174,12 @@ export class EditorView {
       h: this.puzzle.h,
       onBlank: (w, h) => {
         this.marksStillFit = false;
+        this.replaced = true;
         this.edit(() => createPuzzle(w, h));
       },
       onGenerated: (p, { options, difficulty }) => {
         this.marksStillFit = false;
+        this.replaced = true;
         this.edit(() => p);
         const kind = { path: 'path', checkpoints: 'numbers' }[options.type];
         const word = (d: string) => (d === 'veryhard' ? 'very hard' : d);
@@ -224,6 +232,7 @@ export class EditorView {
   load(p: Puzzle): void {
     this.puzzle = clonePuzzle(p);
     this.marksStillFit = true;
+    this.replaced = false;
     this.resetLogic();
     this.history.clear();
     this.clearMessage();

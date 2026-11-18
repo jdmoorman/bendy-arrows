@@ -124,6 +124,7 @@ function saveSession() {
     libraryId,
     name: puzzleName,
     editorCode: editorCode !== playingCode ? editorCode : undefined,
+    editorReplaced: editorCode !== playingCode && editor.replaced ? true : undefined,
     tab,
   });
 }
@@ -142,6 +143,7 @@ function setTab(t: Tab) {
     const { segments, xMarks } = play.progress;
     play.load(playing, saved?.progress ?? (editor.marksStillFit ? { segments, xMarks } : undefined));
     editor.marksStillFit = true;
+    editor.replaced = false;
     updateHeader();
   }
   if (t !== 'library') lastBoardTab = t;
@@ -200,7 +202,9 @@ function saveCurrent(fromEditor: boolean) {
     current: editing ? editor.current : playing,
     progress: editing ? undefined : play.progress,
     solved: editing ? undefined : play.isSolved,
-    currentId: editing ? undefined : libraryId,
+    // An edited puzzle still came from this entry, so offer to update it (or save as new),
+    // unless New puzzle or Generate replaced it with a different one.
+    currentId: editing && editor.replaced ? undefined : libraryId,
     onSaved: (entry) => {
       if (editing) {
         // Saving the editor's puzzle makes it the current puzzle.
@@ -283,6 +287,7 @@ function start() {
       editor.load(decodePuzzle(session.editorCode));
       // We can't tell how much it was changed before the reload, so don't carry marks over.
       editor.marksStillFit = false;
+      editor.replaced = !!session.editorReplaced;
     } catch {
       /* ignore stale editor state */
     }
