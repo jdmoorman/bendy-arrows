@@ -41,7 +41,6 @@ const TIMES_KEY = 'hamiltonian.times.v1';
 const OLD_PREFIX = 'hamiltonian.';
 const LOGIC_KEY = 'bendyarrows.logic.v1';
 const GENERATOR_KEY = 'bendyarrows.generator.v1';
-const DAILY_KEY = 'bendyarrows.daily.v1';
 const TABLE_KEY = 'bendyarrows.libtable.v1';
 const RATINGS_KEY = 'bendyarrows.ratings.v1';
 const HIDDEN_KEY = 'bendyarrows.hiddensamples.v1';
@@ -82,7 +81,7 @@ export class Storage {
 
   /** Copy data saved under the old app name to the new keys (the old keys are left alone). */
   private migrateOldKeys(): void {
-    const keys = [LIBRARY_KEY, SESSION_KEY, SETTINGS_KEY, SOLVED_KEY, LOGIC_KEY, GENERATOR_KEY, DAILY_KEY, TABLE_KEY, RATINGS_KEY, HIDDEN_KEY, SHOW_SOLUTION_KEY, HINTS_INLINE_KEY];
+    const keys = [LIBRARY_KEY, SESSION_KEY, SETTINGS_KEY, SOLVED_KEY, LOGIC_KEY, GENERATOR_KEY, TABLE_KEY, RATINGS_KEY, HIDDEN_KEY, SHOW_SOLUTION_KEY, HINTS_INLINE_KEY];
     try {
       for (const key of keys) {
         if (this.store?.getItem(key) !== null) continue;
@@ -253,16 +252,6 @@ export class Storage {
 
   saveRating(code: string, rating: Rating): void {
     this.write(RATINGS_KEY, { ...this.loadRatings(), [code]: rating });
-  }
-
-  /** The daily puzzle, if one was made for `date` (YYYY-MM-DD). */
-  loadDaily(date: string): string | null {
-    const d = this.read<{ date?: unknown; code?: unknown } | null>(DAILY_KEY, null);
-    return d && d.date === date && typeof d.code === 'string' ? d.code : null;
-  }
-
-  saveDaily(date: string, code: string): void {
-    this.write(DAILY_KEY, { date, code });
   }
 
   loadSettings(): Settings {

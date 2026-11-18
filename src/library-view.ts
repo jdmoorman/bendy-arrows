@@ -1,6 +1,4 @@
-import { decodePuzzle, encodePuzzle } from './codec';
-import { dailyName, dailyOptions, dateKey } from './daily';
-import { generateInBackground } from './generator-client';
+import { decodePuzzle } from './codec';
 import { ICONS } from './icons';
 import {
   applyTable,
@@ -32,7 +30,13 @@ export interface OpenRequest {
   name?: string;
 }
 
-/** The Library tab: the daily puzzle, and every puzzle in a table you can sort and filter. */
+/** Today's date (local time) as YYYY-MM-DD, for export file names. */
+function dateKey(d = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** The Library tab: every puzzle in a table you can sort and filter. */
 export class LibraryView {
   readonly el: HTMLElement;
   onOpen?: (req: OpenRequest, tab: 'play' | 'edit') => void;
@@ -52,7 +56,6 @@ export class LibraryView {
   private count: HTMLElement;
   private filterBtn: HTMLButtonElement;
   private search: HTMLInputElement;
-  private dailyBox: HTMLElement;
   private columnsRow: HTMLElement;
   private renderQueued = false;
 
@@ -68,7 +71,10 @@ export class LibraryView {
     this.ratings = storage.loadRatings();
 
     this.el = el('div', 'view library-view hidden');
-    this.dailyBox = el('div', 'lib-top');
+    const top = el('div', 'lib-top');
+    const save = el('button', 'btn', `${ICONS.save}<span>Save current</span>`);
+    save.addEventListener('click', () => this.onSave?.());
+    top.append(save);
     const controls = el('div', 'lib-controls');
     this.search = el('input', 'text-input lib-search') as HTMLInputElement;
     this.search.type = 'search';
@@ -90,7 +96,7 @@ export class LibraryView {
     const wrap = el('div', 'lib-table-wrap');
     this.table = el('table', 'lib-table');
     wrap.append(this.table);
-    this.el.append(this.dailyBox, controls, this.count, this.columnsRow, wrap, this.transferRow());
+    this.el.append(top, controls, this.count, this.columnsRow, wrap, this.transferRow());
   }
 
   // --- Export and import ------------------------------------------------------
@@ -167,44 +173,8 @@ export class LibraryView {
   /** Re-read the library and redraw (call when the tab is shown). */
   refresh(): void {
     this.rows = libraryRows(this.storage, this.ratings);
-    this.renderDaily();
     this.renderTable();
     this.rateMissing();
-  }
-
-  // --- Daily puzzle and save ------------------------------------------------
-
-  private renderDaily() {
-    const date = dateKey();
-    const code = this.storage.loadDaily(date);
-    const solved = !!code && (this.storage.isSolved(code) || !!this.storage.findByCode(code)?.solved);
-    const daily = el('button', `lib-daily${solved ? ' solved' : ''}`);
-    const title = el('span', 'lib-name');
-    title.textContent = dailyName(date);
-    const meta = el('span', 'lib-meta', solved ? `${ICONS.check} Solved` : 'A new puzzle every day');
-    daily.append(title, meta);
-    daily.addEventListener('click', async () => {
-      const open = (code: string) => {
-        const saved = this.storage.findByCode(code);
-        this.onOpen?.({ puzzle: decodePuzzle(code), progress: saved?.progress, id: saved?.id, name: saved?.name ?? dailyName(date) }, 'play');
-      };
-      const cached = this.storage.loadDaily(date);
-      if (cached) return open(cached);
-      daily.disabled = true;
-      meta.innerHTML = '<span class="spinner" aria-hidden="true"></span> Making today’s puzzle…';
-      try {
-        const { puzzle } = await generateInBackground(dailyOptions(date)).result;
-        const made = encodePuzzle(puzzle);
-        this.storage.saveDaily(date, made);
-        open(made);
-      } catch {
-        daily.disabled = false;
-        meta.textContent = 'Couldn’t make today’s puzzle. Tap to try again.';
-      }
-    });
-    const save = el('button', 'btn', `${ICONS.save}<span>Save current</span>`);
-    save.addEventListener('click', () => this.onSave?.());
-    this.dailyBox.replaceChildren(daily, save);
   }
 
   // --- Table ----------------------------------------------------------------
@@ -335,7 +305,7 @@ export class LibraryView {
     }
     if (!shown.length) {
       const tr = el('tr');
-      const td = el('td', 'lib-empty', this.rows.length ? 'No puzzles match.' : 'Nothing here yet. Save a puzzle, or try the daily puzzle above.');
+      const td = el('td', 'lib-empty', this.rows.length ? 'No puzzles match.' : 'Nothing here yet. Save a puzzle, or import some.');
       td.colSpan = cols.length + 2;
       tr.append(td);
       tbody.append(tr);

@@ -279,7 +279,7 @@ function start() {
   } else if (LOCAL_SAMPLES.length) {
     loadPuzzle(decodePuzzle(LOCAL_SAMPLES[0].code));
   } else {
-    // First visit, with no samples to start on: open the library, where the daily puzzle is.
+    // First visit, with no samples to start on: open the library, where the levels are.
     loadPuzzle(createPuzzle(6, 6), {}, 'library');
   }
   if (session?.tab === 'edit' && session.editorCode && sessionPuzzle && puzzlesEqual(playing, sessionPuzzle)) {

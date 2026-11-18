@@ -30,20 +30,6 @@ describe('generate', () => {
   }, 60000);
 });
 
-describe('daily puzzle', async () => {
-  const { dailyOptions, dateKey } = await import('../src/daily');
-  test('the options depend only on the date, and the type changes day to day', () => {
-    expect(dailyOptions('2026-11-16')).toEqual(dailyOptions('2026-11-16'));
-    expect(dailyOptions('2026-11-16').seed).toBe(20261116);
-    const types = new Set(['2026-11-16', '2026-11-17', '2026-11-18'].map((d) => dailyOptions(d).type));
-    expect(types.size).toBe(2);
-    expect(dateKey(new Date(2026, 0, 5))).toBe('2026-01-05');
-  });
-  test("today's puzzle can be made", () => {
-    expect(solve(generate(dailyOptions('2026-11-16')).puzzle).status).toBe('unique');
-  }, 60000);
-});
-
 describe('obstacle limit', async () => {
   const { obstacleCount } = await import('../src/generator');
   test('puzzles stay within the limit and unique', () => {

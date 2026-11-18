@@ -662,51 +662,6 @@ select {
   color: var(--accent);
 }
 
-.lib-daily {
-  flex: 1;
-  min-width: 0;
-  min-height: var(--tap);
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: center;
-  gap: 2px;
-  padding: 6px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface-2);
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.lib-daily.solved {
-  border-color: var(--success);
-}
-.lib-daily.solved .lib-meta {
-  color: var(--success);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.lib-daily svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 3;
-}
-
-.lib-name {
-  font-weight: 600;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.lib-meta {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
 .lib-transfer {
   display: flex;
   gap: var(--gap);
