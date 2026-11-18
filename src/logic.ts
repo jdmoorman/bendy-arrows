@@ -12,18 +12,14 @@ export type RuleId =
   | 'continue'
   | 'noLoops'
   | 'noFinish'
-  | 'order'
   | 'noSeal'
   | 'bottlenecks'
-  | 'balance'
-  | 'spacing';
+  | 'balance';
 
 export interface RuleInfo {
   id: RuleId;
   label: string;
   hint: string;
-  /** Whether the rule can ever apply to this puzzle (default: always). */
-  appliesTo?: (p: Puzzle) => boolean;
 }
 
 export const RULES: RuleInfo[] = [
@@ -41,12 +37,6 @@ export const RULES: RuleInfo[] = [
     hint: 'X out a border that would join both ends of the path before every tile is used.',
   },
   {
-    id: 'order',
-    label: 'Number order',
-    hint: 'X out a border that would join numbers out of order, or skip one.',
-    appliesTo: (p) => p.checkpoints.length >= 3,
-  },
-  {
     id: 'noSeal',
     label: 'No sealed areas',
     hint: 'X out a border whose line would wall off tiles the path could then never reach.',
@@ -61,23 +51,12 @@ export const RULES: RuleInfo[] = [
     label: 'Checkerboard balance',
     hint: 'The path alternates colours, so it crosses into an area on its commoner colour twice as many extra times as that colour has extra tiles — and a balanced area equally often on each.',
   },
-  {
-    id: 'spacing',
-    label: 'Number crossings',
-    hint: 'Going through the numbers in order, the path must cross into and out of an area each time the next number is on the other side.',
-    appliesTo: (p) => p.checkpoints.length >= 3,
-  },
 ];
 
 /** The rules from before the advanced ones were added (for migrating saved choices). */
 export const BASIC_RULES: RuleId[] = ['continue', 'corners', 'passages', 'noLoops'];
 
 export const ALL_RULES: RuleId[] = RULES.map((r) => r.id);
-
-/** The rules that can apply to this puzzle. */
-export function rulesFor(p: Puzzle): RuleInfo[] {
-  return RULES.filter((r) => !r.appliesTo || r.appliesTo(p));
-}
 
 export interface LogicState {
   segments: Set<number>;
@@ -201,22 +180,19 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
       deductions.push({ rule: 'noLoops', cell: edgeCells(p, e)[0], segments: [], xs: [e], size });
     }
   }
-  if (enabled.has('noFinish') || enabled.has('order')) {
-    deductions.push(...joinRules(p, state, need, closed, open.length, enabled));
-  }
+  if (enabled.has('noFinish')) deductions.push(...earlyFinishEdges(p, state, need, closed, open.length));
   if (enabled.has('noSeal')) deductions.push(...sealingEdges(p, state, need, closed));
   const sources = new Set(opts.areaSources ?? AREA_SOURCES);
   const maxArea = opts.balanceMaxArea ?? Infinity;
-  if (enabled.has('bottlenecks') || enabled.has('balance') || enabled.has('spacing')) {
+  if (enabled.has('bottlenecks') || enabled.has('balance')) {
     // Areas cut off by three borders are slow to find, so they wait for the pass below.
     const found = areaRules(p, state, need, closed, enabled, maxArea, new Set([...sources].filter((x) => x !== 'cuts3')));
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
   }
   // Last resort: areas cut off by three borders, only when nothing else applies.
-  if ((enabled.has('balance') || enabled.has('spacing')) && sources.has('cuts3') && !deductions.length) {
-    const areaOnly = new Set([...enabled].filter((r) => r === 'balance' || r === 'spacing'));
-    const found = areaRules(p, state, need, closed, areaOnly, maxArea, new Set<AreaSource>(['cuts3']), opts.threeCuts ?? 'labels');
+  if (enabled.has('balance') && sources.has('cuts3') && !deductions.length) {
+    const found = areaRules(p, state, need, closed, new Set<RuleId>(['balance']), maxArea, new Set<AreaSource>(['cuts3']), opts.threeCuts ?? 'labels');
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
   }
@@ -274,9 +250,9 @@ export function logicStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>,
  * (Hints use HINT_ORDER instead: there the choice of move matters, here only speed.)
  */
 const SPEED_TIERS: RuleId[][] = [
-  ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'order'],
+  ['continue', 'corners', 'passages', 'noLoops', 'noFinish'],
   ['noSeal'],
-  ['bottlenecks', 'balance', 'spacing'],
+  ['bottlenecks', 'balance'],
 ];
 
 /**
@@ -353,7 +329,7 @@ export function hintJourney(p: Puzzle, opts: LogicOptions = {}): { steps: HintSt
     if (h.kind !== 'deduction') return { steps, outcome: 'stuck' };
     const d = h.deduction;
     // Only the area rules report a size.
-    const areaRule = d.rule === 'balance' || d.rule === 'bottlenecks' || d.rule === 'spacing';
+    const areaRule = d.rule === 'balance' || d.rule === 'bottlenecks';
     steps.push(areaRule && d.cells ? { rule: d.rule, area: d.cells.length } : { rule: d.rule });
     state = applyStep(state, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
   }
@@ -361,7 +337,7 @@ export function hintJourney(p: Puzzle, opts: LogicOptions = {}): { steps: HintSt
 }
 
 /** Simplest rules first: the order hints are chosen in. */
-export const HINT_ORDER: RuleId[] = ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'order', 'noSeal', 'bottlenecks', 'balance', 'spacing'];
+export const HINT_ORDER: RuleId[] = ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'noSeal', 'bottlenecks', 'balance'];
 
 const TOO_MANY = 'Something is off: the highlighted tile has more lines than the path can use there.';
 const TOO_FEW = 'Something is off: the highlighted tile has too few ways in or out left — check the X marks around it.';
@@ -524,54 +500,25 @@ function drawnPieces(p: Puzzle, state: LogicState): Pieces {
   return { of, order };
 }
 
-/** Borders that would join two drawn pieces into one that can't be part of the answer. */
-function joinRules(p: Puzzle, state: LogicState, need: Int8Array, closed: Set<number>, openCount: number, enabled: Set<RuleId>): Deduction[] {
+/** No early finish: borders that would join both ends of the path before every tile is used. */
+function earlyFinishEdges(p: Puzzle, state: LogicState, need: Int8Array, closed: Set<number>, openCount: number): Deduction[] {
   const out: Deduction[] = [];
-  const cpIndex = new Map(p.checkpoints.map((c, i) => [c, i]));
-  const useOrder = enabled.has('order') && p.checkpoints.length >= 3;
-  const useFinish = enabled.has('noFinish') && new Set(endpointCells(p)).size === 2;
-  if (!useOrder && !useFinish) return out;
+  if (new Set(endpointCells(p)).size !== 2) return out;
   const { of, order } = drawnPieces(p, state);
-  const numbers = (tiles: number[]) => tiles.filter((c) => cpIndex.has(c)).map((c) => cpIndex.get(c)!);
-  const inOrder = (seq: number[]) => seq.every((x, i) => i === 0 || Math.abs(x - seq[i - 1]) === 1);
   for (let e = 0; e < edgeCount(p); e++) {
     if (!isUsableEdge(p, e) || state.xs.has(e) || state.segments.has(e) || closed.has(e)) continue;
     const [a, b] = edgeCells(p, e);
     const A = order[of[a]];
     const B = order[of[b]];
     if (!A || !B || A === B) continue;
-    if (useFinish) {
-      const ends = [...A, ...B].filter((c) => need[c] === 1).length;
-      if (ends >= 2 && A.length + B.length < openCount) {
-        out.push({
-          rule: 'noFinish',
-          cell: a,
-          segments: [],
-          xs: [e],
-          why: 'Joining the highlighted border would link both ends of the path before every tile is used, so it gets an X.',
-        });
-        continue;
-      }
-    }
-    if (useOrder) {
-      // The numbers along A (ending at a), then along B (starting at b).
-      const seqA = numbers(A[A.length - 1] === a ? A : [...A].reverse());
-      const seqB = numbers(B[0] === b ? B : [...B].reverse());
-      if (!seqA.length || !seqB.length || !inOrder(seqA) || !inOrder(seqB)) continue;
-      const x = seqA[seqA.length - 1];
-      const y = seqB[0];
-      if (inOrder([...seqA, ...seqB])) continue;
-      const lo = Math.min(x, y) + 1;
-      const hi = Math.max(x, y) + 1;
-      const skipped = hi - lo === 2 ? `${lo + 1}` : hi - lo > 2 ? `${lo + 1} to ${hi - 1}` : '';
+    const ends = [...A, ...B].filter((c) => need[c] === 1).length;
+    if (ends >= 2 && A.length + B.length < openCount) {
       out.push({
-        rule: 'order',
+        rule: 'noFinish',
         cell: a,
         segments: [],
         xs: [e],
-        why: skipped
-          ? `Joining the highlighted border would link ${lo} straight to ${hi} without passing ${skipped}, so it gets an X.`
-          : `Joining the highlighted border would put the numbers out of order, so it gets an X.`,
+        why: 'Joining the highlighted border would link both ends of the path before every tile is used, so it gets an X.',
       });
     }
   }
@@ -833,9 +780,7 @@ function areaRules(
       }
     }
     const target = 2 * diff - endS + endW; // shaded crossings minus white crossings
-    const parityMin = needSum % 2 ? 1 : 2;
-    const numbersMin = enabled.has('spacing') ? numberCrossings(inArea, needSum) : 0;
-    const minCrossings = Math.max(parityMin, numbersMin);
+    const minCrossings = needSum % 2 ? 1 : 2;
     const sMinBalance = Math.max(sDrawn, wDrawn + target);
     const sMin = Math.max(sMinBalance, Math.ceil((minCrossings + target) / 2));
     const sMax = Math.min(sDrawn + sOpen.length, wDrawn + wOpen.length + target);
@@ -884,13 +829,7 @@ function areaRules(
         ? 'so it must cross into the area on shaded tiles exactly as often as on white tiles'
         : `so it must cross into the area on ${more} tiles ${2 * n} more time${2 * n === 1 ? '' : 's'} than on ${less} tiles`;
     const entry =
-      sMin <= sMinBalance
-        ? ''
-        : numbersMin > parityMin
-          ? ` Visiting the numbers in order, it has to cross the area's edge at least ${numbersMin} times.`
-          : minCrossings === 1
-            ? ' It has to get into the area at least once.'
-            : ' It has to get into the area and back out.';
+      sMin <= sMinBalance ? '' : minCrossings === 1 ? ' It has to get into the area at least once.' : ' It has to get into the area and back out.';
     out.push({
       rule: 'balance',
       cell: Math.min(...area),
@@ -903,59 +842,8 @@ function areaRules(
     return null;
   };
 
-  /**
-   * Going through the numbers in order, every time the next number is on the
-   * other side of the area's edge the path must cross it: at least this many
-   * crossings (rounded up to the parity the area's ends need).
-   */
-  function numberCrossings(inArea: Set<number>, needSum: number): number {
-    const cps = p.checkpoints;
-    if (cps.length < 3) return 0;
-    let t = 0;
-    for (let i = 1; i < cps.length; i++) if (inArea.has(cps[i]) !== inArea.has(cps[i - 1])) t++;
-    if (t % 2 !== needSum % 2) t++;
-    return t;
-  }
-
-  /** Number crossings: an area the numbers need crossed more often than it has ways across. */
-  const spacing = (area: number[]): Contradiction | null => {
-    if (area.length < 2 || area.length >= cells.length) return null;
-    const inArea = new Set(area);
-    const needSum = area.reduce((s, c) => s + need[c], 0);
-    const min = numberCrossings(inArea, needSum);
-    if (min < 2) return null;
-    let drawn = 0;
-    const open: number[] = [];
-    for (const t of area) {
-      for (const e of adj[t]) {
-        if (inArea.has(other(e, t))) continue;
-        if (state.segments.has(e)) drawn++;
-        else open.push(e);
-      }
-    }
-    if (drawn + open.length < min) {
-      return {
-        cell: Math.min(...area),
-        cells: [...area],
-        reason: 'The numbers need an area crossed more often than it can be.',
-        hint: 'Something is off: going through the numbers in order, the path would have to cross the edge of the highlighted area more often than it has ways across — check the X marks around it.',
-      };
-    }
-    if (!open.length || drawn + open.length > min) return null;
-    out.push({
-      rule: 'spacing',
-      cell: Math.min(...area),
-      cells: [...area],
-      segments: open,
-      xs: [],
-      why: `Going through the numbers in order, the path has to cross the edge of the highlighted area at least ${min} times, and it only has ${min} ways across — so it uses them all.`,
-    });
-    return null;
-  };
-
   /** Try the area rules that look at a whole area. */
-  const checkArea = (area: number[]): Contradiction | null =>
-    (enabled.has('balance') ? balance(area) : null) ?? (enabled.has('spacing') ? spacing(area) : null);
+  const checkArea = (area: number[]): Contradiction | null => (enabled.has('balance') ? balance(area) : null);
 
   // Cuts of one or two borders.
   const bridges0 = bridges(n, cells, adj, other, -1);
@@ -1023,7 +911,7 @@ function areaRules(
   // on a big one, those of up to RECT_AREA tiles plus the strips that run all the way across.
   // (Empty areas, the groups of tiles with no lines yet, were dropped: every sample that
   // needed one was also covered by a cut, rectangle or room.)
-  if (enabled.has('balance') || enabled.has('spacing')) {
+  if (enabled.has('balance')) {
     const small = p.w * p.h <= SMALL_BOARD;
     for (let rh = 1; rh <= (use.has('rects') ? p.h : 0); rh++) {
       for (let rw = 1; rw <= p.w; rw++) {

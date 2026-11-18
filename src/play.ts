@@ -342,7 +342,7 @@ export class PlayView {
   render(): void {
     if (!this.puzzle) return;
     const live = checkSolution(this.puzzle, this.segments);
-    const errorCells = new Set<number>(this.autoCheck ? [...live.branches, ...live.checkpointErrors] : []);
+    const errorCells = new Set<number>(this.autoCheck ? live.branches : []);
     const errorEdges = new Set<number>(this.autoCheck ? [...live.loopEdges, ...live.illegalEdges] : []);
     if (!live.solved && this.shownHint?.kind === 'wrong') for (const e of this.shownHint.edges) errorEdges.add(e);
     // A shown hint is drawn on top of the board in the highlight colour.

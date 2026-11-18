@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import { writeFileSync } from 'node:fs';
-import { generate, type GenType } from '../../src/generator';
+import { generate } from '../../src/generator';
 import { createPuzzle, edgeCount, isUsableEdge, portEnd, portId, type Puzzle } from '../../src/model';
 import { solve } from '../../src/solver';
 import { outPath, record } from '../out';
@@ -15,14 +15,12 @@ test('workload', () => {
   const t0 = Date.now();
   if (process.env.WORKLOAD === 'generate') {
     let found = 0;
-    for (const type of ['path', 'checkpoints'] as GenType[]) {
-      for (let seed = 1; seed <= 6; seed++) {
-        try {
-          const r = generate({ w: 8, h: 8, type, difficulties: ['hard'], clues: 'mixed', minimal: true, attempts: 15, seed, maxObstacles: 12 });
-          if (r.difficulty === 'hard') found++;
-        } catch {
-          /* no puzzle within the limit */
-        }
+    for (let seed = 1; seed <= 6; seed++) {
+      try {
+        const r = generate({ w: 8, h: 8, difficulties: ['hard'], clues: 'mixed', minimal: true, attempts: 15, seed, maxObstacles: 12 });
+        if (r.difficulty === 'hard') found++;
+      } catch {
+        /* no puzzle within the limit */
       }
     }
     record(NAME, `generate: ${found} hard puzzles in ${Date.now() - t0} ms`);

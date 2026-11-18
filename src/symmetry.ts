@@ -12,17 +12,14 @@ const CHECKS: { name: string; steps: Transform[]; square?: boolean }[] = [
 
 const sameSet = (a: Set<number>, b: Set<number>) => a.size === b.size && [...a].every((x) => b.has(x));
 
-/** Whether two puzzles match, with the ends in either order and the numbers in the same or reversed order. */
+/** Whether two puzzles match, with the ends in either order. */
 function matches(a: Puzzle, b: Puzzle): boolean {
   if (a.w !== b.w || a.h !== b.h || !sameSet(a.walls, b.walls) || !sameSet(a.blocked, b.blocked)) return false;
   // Ends match by the tiles they're on: which side of the frame they enter from doesn't matter.
   const tiles = (q: Puzzle) => q.endpoints.map((e) => endTile(q, e)).sort((x, y) => x - y);
   const ta = tiles(a);
   const tb = tiles(b);
-  const endsMatch = ta.length === tb.length && ta.every((t, i) => t === tb[i]);
-  if (!endsMatch) return false;
-  const same = (xs: number[], ys: number[]) => xs.length === ys.length && xs.every((x, i) => x === ys[i]);
-  return same(a.checkpoints, b.checkpoints) || same(a.checkpoints, [...b.checkpoints].reverse());
+  return ta.length === tb.length && ta.every((t, i) => t === tb[i]);
 }
 
 /** How the puzzle is symmetric (e.g. "mirrored left–right"), or null if it isn't. */

@@ -97,9 +97,6 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   if (endpoints.length === 2 && endpoints[0] === endpoints[1] && openCount > 1) {
     return result('none', 'Both path ends are on the same tile.');
   }
-  const cps = p.checkpoints;
-  if (cps.some((c) => p.blocked.has(c))) return result('none', 'A checkpoint is on a black tile.');
-  if (new Set(cps).size !== cps.length) return result('none', 'Two checkpoints are on the same tile.');
   const required = [...(opts.mustUse ?? [])];
   const requiredAt: number[][] = Array.from({ length: n }, () => []);
   for (const e of required) {
@@ -151,10 +148,6 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
   let nodes = 0;
   let aborted = false;
   const found = new Map<string, number[]>();
-  // Checkpoints must be entered in order: cpIndex[cell] is its position (or -1).
-  const cpIndex = new Int32Array(n).fill(-1);
-  cps.forEach((c, i) => (cpIndex[c] = i));
-  let nextCp = 0;
 
   const done = () => aborted || found.size >= maxSolutions;
   // Seeded random numbers (xorshift) for varied tie-breaking.
@@ -254,9 +247,6 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
     for (const next of candidates) {
       if (visited[next]) continue;
       if (endpoints.length === 2 && next === endpoints[1] && visitedCount + 1 < openCount) continue;
-      const k = cpIndex[next];
-      if (k >= 0 && k !== nextCp) continue; // a checkpoint out of turn
-      if (k >= 0) nextCp++;
       visited[next] = 1;
       visitedCount++;
       order.push(next);
@@ -264,13 +254,11 @@ export function solve(p: Puzzle, opts: SolveOptions = {}): SolveResult {
       order.pop();
       visitedCount--;
       visited[next] = 0;
-      if (k >= 0) nextCp--;
       if (done()) return;
     }
   };
 
   const runFrom = (s: number) => {
-    nextCp = cpIndex[s] === 0 ? 1 : 0;
     visited[s] = 1;
     visitedCount = 1;
     order.push(s);

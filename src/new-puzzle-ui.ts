@@ -1,5 +1,5 @@
 import { generateInBackground, type GeneratorRun } from './generator-client';
-import { DIFFICULTIES, randomSeed, type ClueKind, type Difficulty, type GenOptions, type GenType } from './generator';
+import { DIFFICULTIES, randomSeed, type ClueKind, type Difficulty, type GenOptions } from './generator';
 import { ICONS } from './icons';
 import type { Puzzle } from './model';
 import type { Storage } from './storage';
@@ -18,10 +18,6 @@ export interface NewPuzzleContext {
   onGenerated(p: Puzzle, info: { options: GenOptions; difficulty: Difficulty }): void;
 }
 
-const TYPES: [GenType, string][] = [
-  ['path', 'Path'],
-  ['checkpoints', 'Numbers'],
-];
 const DIFFS: [Difficulty, string][] = [
   ['easy', 'Easy'],
   ['medium', 'Medium'],
@@ -44,7 +40,6 @@ function savedOptions(storage: Storage): Saved {
   const o = storage.loadGeneratorOptions() ?? {};
   const oneOf = <T extends string>(v: unknown, list: [T, string][], d: T): T => (list.some(([k]) => k === v) ? (v as T) : d);
   return {
-    type: oneOf(o.type, TYPES, 'path'),
     difficulties: savedDifficulties(o),
     clues: oneOf(o.clues, CLUES, 'mixed'),
     minimal: typeof o.minimal === 'boolean' ? o.minimal : true,
@@ -170,7 +165,7 @@ export function openGeneratorSheet(ctx: NewPuzzleContext): void {
   // Sparsity: at most this many walls and black tiles.
   const maxRow = el('label', 'switch-row');
   const maxText = el('span', 'switch-text');
-  maxText.append(document.createTextNode('Max obstacles'), Object.assign(el('small'), { textContent: 'At most this many walls and black tiles (ends and numbers don’t count)' }));
+  maxText.append(document.createTextNode('Max obstacles'), Object.assign(el('small'), { textContent: 'At most this many walls and black tiles (ends don’t count)' }));
   const maxSelect = el('select', 'max-obstacles') as HTMLSelectElement;
   maxSelect.setAttribute('aria-label', 'Max obstacles');
   maxSelect.innerHTML = `<option value="">Any</option>${Array.from({ length: MAX_OBSTACLE_CHOICES + 1 }, (_, i) => `<option>${i}</option>`).join('')}`;
@@ -234,10 +229,6 @@ export function openGeneratorSheet(ctx: NewPuzzleContext): void {
 
   body.append(
     sizeRow(picker),
-    segmented('Puzzle type', TYPES, o.type, (v) => {
-      o.type = v;
-      save();
-    }),
     el('p', 'field-label', 'Difficulty (any of the chosen)'),
     multiToggle('Difficulty', DIFFS, o.difficulties, (v) => {
       o.difficulties = v;

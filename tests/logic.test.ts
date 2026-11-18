@@ -68,21 +68,9 @@ describe('logic rules', () => {
 
   test('no early finish: joining both path ends too soon gets an X', () => {
     const p = createPuzzle(3, 3);
-    p.checkpoints = [0, 2];
+    p.endpoints = [portEnd(portId(p, 'top', 0)), portEnd(portId(p, 'top', 2))];
     const state: LogicState = { segments: new Set([edgeBetween(p, 0, 1)]), xs: new Set() };
     expect(logicStep(p, state, ['noFinish']).xs).toEqual([edgeBetween(p, 1, 2)]);
-  });
-
-  test('number order: joining 1 straight to 3 gets an X', async () => {
-    const { findHint } = await import('../src/logic');
-    const p = createPuzzle(3, 3);
-    p.checkpoints = [0, 8, 1, 6]; // 1 top-left, 2 bottom-right, 3 top-middle, 4 bottom-left
-    const step = logicStep(p, empty(), ['order']);
-    expect(step.xs).toContain(edgeBetween(p, 0, 1));
-    expect(step.byRule).toEqual({ order: step.xs.length });
-    const state = runToEnd(p, ['corners', 'passages', 'continue', 'noLoops']).state;
-    const h = findHint(p, state);
-    if (h.kind === 'deduction' && h.deduction.rule === 'order') expect(h.text).toMatch(/without passing 2/);
   });
 
   test('bottlenecks: an area with two ways in uses both', () => {
@@ -165,18 +153,9 @@ describe('advanced rules', () => {
       const p = createPuzzle(w, h);
       for (let c = 0; c < w * h; c++) if (rand() < 0.05) p.blocked.add(c);
       for (let e = 0; e < edgeCount(p); e++) if (rand() < 0.1 && isUsableEdge(p, e)) p.walls.add(e);
-      const k = rand();
-      if (k < 0.33) {
-        const a = Math.floor(rand() * 2 * (w + h));
-        const b = Math.floor(rand() * 2 * (w + h));
-        if (a !== b) p.endpoints = [portEnd(a), portEnd(b)];
-      } else if (k < 0.66) {
-        const m = 2 + Math.floor(rand() * 4);
-        for (let i = 0; i < m; i++) {
-          const c = Math.floor(rand() * w * h);
-          if (!p.blocked.has(c) && !p.checkpoints.includes(c)) p.checkpoints.push(c);
-        }
-      }
+      const a = Math.floor(rand() * 2 * (w + h));
+      const b = Math.floor(rand() * 2 * (w + h));
+      if (a !== b) p.endpoints = [portEnd(a), portEnd(b)];
       if (endpointCells(p).length < 2) continue;
       const r = solve(p, { maxSolutions: 300, nodeLimit: 2e5 });
       if (r.status === 'aborted' || !r.solutions.length || r.solutions.length >= 300) continue;
@@ -292,13 +271,12 @@ describe('hint choice', async () => {
       const smallest = Math.min(...all.filter((d) => d.exits === fewest).map((d) => d.cells!.length));
       expect(h.deduction.cells?.length, s.name).toBe(smallest);
     }
-    expect(tried).toBeGreaterThan(5);
+    // Four medium samples need Checkerboard balance (the Numbers samples that also did are gone).
+    expect(tried).toBeGreaterThanOrEqual(4);
   });
 });
 
-describe('more rules', async () => {
-  const { rulesFor } = await import('../src/logic');
-
+describe('more rules', () => {
   test('no sealed areas: a line that would wall tiles off gets an X', () => {
     // 4x4, ends low on the right: the top-left pair 0,1 can only be reached through 0-4 and 1-5. Tiles 4 and 5
     // each already have one line, so joining them would fill both and seal 0,1 off.
@@ -306,22 +284,6 @@ describe('more rules', async () => {
     p.walls.add(edgeBetween(p, 1, 2));
     const state: LogicState = { segments: new Set([edgeBetween(p, 4, 8), edgeBetween(p, 5, 6)]), xs: new Set() };
     expect(logicStep(p, state, ['noSeal']).xs).toContain(edgeBetween(p, 4, 5));
-  });
-
-  test('number crossings: an area the numbers go in and out of uses every way across', () => {
-    // 4x3: numbers alternate between the left column and the rest, so the path crosses
-    // the left column's edge at least 3 times — and it has exactly 3 ways across.
-    const p = createPuzzle(4, 3);
-    p.checkpoints = [0, 3, 8, 11];
-    const step = logicStep(p, empty(), ['spacing']);
-    expect(step.segments).toEqual(expect.arrayContaining([edgeBetween(p, 0, 1), edgeBetween(p, 4, 5), edgeBetween(p, 8, 9)]));
-  });
-
-  test('number crossings only shows for puzzles with three or more numbers', () => {
-    const p = createPuzzle(4, 3);
-    expect(rulesFor(p).some((r) => r.id === 'spacing')).toBe(false);
-    p.checkpoints = [0, 3, 8];
-    expect(rulesFor(p).some((r) => r.id === 'spacing')).toBe(true);
   });
 });
 

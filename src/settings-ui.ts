@@ -14,7 +14,7 @@ const SWITCHES: { key: keyof Settings; label: string; hint: string }[] = [
   { key: 'darkTheme', label: 'Dark theme', hint: 'Light lines on a dark board' },
   { key: 'checkerboard', label: 'Checkerboard shading', hint: 'Faintly shade every other tile' },
   { key: 'coordinates', label: 'Coordinates', hint: 'Letters for the columns (A, B, …) and numbers for the rows (1, 2, …) around the board' },
-  { key: 'autoCheck', label: 'Auto-check', hint: 'Highlight mistakes like branches, early loops and numbers out of order as you play' },
+  { key: 'autoCheck', label: 'Auto-check', hint: 'Highlight mistakes like branches and early loops as you play' },
 ];
 
 /** The settings sheet: one switch per setting, saved as soon as it changes. */

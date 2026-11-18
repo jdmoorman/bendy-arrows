@@ -21,27 +21,21 @@ import {
 } from './model';
 import { padFor, renderBoard } from './render';
 import { missingEnds } from './rules';
-import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, RULES, rulesFor, runLogic, type AreaSource, type LogicOptions, type LogicState, type RuleId } from './logic';
+import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, RULES, runLogic, type AreaSource, type LogicOptions, type LogicState, type RuleId } from './logic';
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
 import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from './new-puzzle-ui';
 
-type Tool = 'tiles' | 'walls' | 'ends' | 'checkpoints';
+type Tool = 'tiles' | 'walls' | 'ends';
 
 /** Rules listed on their own in the Rules sheet; the rest are grouped as the easy rules. */
 
-const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends', checkpoints: 'cells' };
+const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends' };
 const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
   walls: 'Tap or drag along borders to add walls.',
   ends: 'Tap a dot on the frame to add the entrance, then the exit.',
-  checkpoints: 'Tap tiles to number them 1, 2, 3… The path must run through them in order. Tap a number to remove it.',
-};
-
-const EXCLUSIVE_NOTE = {
-  ends: 'Checkpoints removed — a puzzle uses either ends or checkpoints.',
-  checkpoints: 'Ends removed — a puzzle uses either ends or checkpoints.',
 };
 
 export class EditorView {
@@ -83,8 +77,6 @@ export class EditorView {
   // Per-gesture state.
   private changed = false;
   private paintAdd = true;
-  /** Message to show once the current gesture is committed. */
-  private note = '';
 
   // Logic helper state: deductions so far, the latest step's marks, and the chosen rules.
   private storage = new Storage();
@@ -118,7 +110,6 @@ export class EditorView {
             <button class="seg-btn" data-tool="tiles">Tiles</button>
             <button class="seg-btn" data-tool="walls">Walls</button>
             <button class="seg-btn" data-tool="ends">Ends</button>
-            <button class="seg-btn" data-tool="checkpoints">Checkpoints</button>
           </div>
         </div>
         <div class="toolbar-row logic-row">
@@ -150,7 +141,6 @@ export class EditorView {
       tiles: q('[data-tool=tiles]'),
       walls: q('[data-tool=walls]'),
       ends: q('[data-tool=ends]'),
-      checkpoints: q('[data-tool=checkpoints]'),
     };
 
     for (const t of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[t].addEventListener('click', () => this.setTool(t));
@@ -181,13 +171,12 @@ export class EditorView {
         this.marksStillFit = false;
         this.replaced = true;
         this.edit(() => p);
-        const kind = { path: 'path', checkpoints: 'numbers' }[options.type];
         const word = (d: string) => (d === 'veryhard' ? 'very hard' : d);
         const note =
           !options.difficulties.length || options.difficulties.includes(difficulty) ? '' : ' (none of the chosen difficulties turned up, so this is the closest)';
         const obstacles = p.walls.size + p.blocked.size;
         this.setMessage(
-          `Generated ${difficulty === 'easy' ? 'an' : 'a'} ${word(difficulty)} ${kind} puzzle with ${obstacles} obstacle${obstacles === 1 ? '' : 's'}${note} · seed ${options.seed}`,
+          `Generated ${difficulty === 'easy' ? 'an' : 'a'} ${word(difficulty)} puzzle with ${obstacles} obstacle${obstacles === 1 ? '' : 's'}${note} · seed ${options.seed}`,
           'success',
         );
       },
@@ -469,10 +458,8 @@ export class EditorView {
       });
       body.append(document.createElement('hr'));
       body.lastElementChild!.className = 'sheet-sep';
-      // Only the rules that can apply to this puzzle (e.g. Number order needs checkpoints).
-      const rules = rulesFor(this.puzzle);
-      const easy = rules.filter((r) => !ADVANCED_RULES.includes(r.id));
-      const advanced = rules.filter((r) => ADVANCED_RULES.includes(r.id));
+      const easy = RULES.filter((r) => !ADVANCED_RULES.includes(r.id));
+      const advanced = RULES.filter((r) => ADVANCED_RULES.includes(r.id));
 
       const onCount = easy.filter((r) => this.logicRules.has(r.id)).length;
       const hint = document.createElement('span');
@@ -515,25 +502,23 @@ export class EditorView {
           save();
         });
       }
-      // Where Checkerboard balance and Number crossings look for areas.
-      if (rules.some((r) => r.id === 'balance' || r.id === 'spacing')) {
-        body.append(document.createElement('hr'));
-        body.lastElementChild!.className = 'sheet-sep';
-        const heading = document.createElement('p');
-        heading.className = 'field-label';
-        heading.textContent = 'Areas Checkerboard balance and Number crossings look at';
-        body.append(heading);
-        const sources = new Set(this.logicOpts.areaSources ?? AREA_SOURCES);
-        for (const src of AREA_SOURCES) {
-          const [label, hint] = AREA_SOURCE_TEXT[src];
-          switchRow(label, hint, sources.has(src), (on) => {
-            on ? sources.add(src) : sources.delete(src);
-            const list = AREA_SOURCES.filter((x) => sources.has(x));
-            this.logicOpts = { ...this.logicOpts, areaSources: list.length === AREA_SOURCES.length ? undefined : list };
-            save();
-            render();
-          });
-        }
+      // Where Checkerboard balance looks for areas.
+      body.append(document.createElement('hr'));
+      body.lastElementChild!.className = 'sheet-sep';
+      const heading = document.createElement('p');
+      heading.className = 'field-label';
+      heading.textContent = 'Areas Checkerboard balance looks at';
+      body.append(heading);
+      const sources = new Set(this.logicOpts.areaSources ?? AREA_SOURCES);
+      for (const src of AREA_SOURCES) {
+        const [label, hint] = AREA_SOURCE_TEXT[src];
+        switchRow(label, hint, sources.has(src), (on) => {
+          on ? sources.add(src) : sources.delete(src);
+          const list = AREA_SOURCES.filter((x) => sources.has(x));
+          this.logicOpts = { ...this.logicOpts, areaSources: list.length === AREA_SOURCES.length ? undefined : list };
+          save();
+          render();
+        });
       }
     };
     render();
@@ -584,8 +569,8 @@ export class EditorView {
   }
 
   /**
-   * Whether the puzzle can be played or saved: it needs both ends, or at
-   * least two numbers. If not, a message says what's missing.
+   * Whether the puzzle can be played or saved: it needs both ends. If not,
+   * a message says what's missing.
    */
   checkPlayable(): boolean {
     const missing = missingEnds(this.puzzle);
@@ -608,11 +593,7 @@ export class EditorView {
 
   private commitGesture() {
     // Each placement already saved its own undo step; just catch up after the gesture.
-    if (this.changed) {
-      this.afterChange();
-      if (this.note) this.setMessage(this.note);
-    }
-    this.note = '';
+    if (this.changed) this.afterChange();
     this.changed = false;
   }
 
@@ -640,17 +621,12 @@ export class EditorView {
 
   private paintCell(cell: number, first: boolean) {
     const p = this.puzzle;
-    if (this.tool === 'checkpoints') {
-      if (first) this.toggleCheckpoint(cell);
-      return;
-    }
     if (first) this.paintAdd = !p.blocked.has(cell);
     if (this.paintAdd === p.blocked.has(cell)) return;
     this.placing();
     if (this.paintAdd) {
       p.blocked.add(cell);
       p.endpoints = p.endpoints.filter((end) => endTile(p, end) !== cell);
-      p.checkpoints = p.checkpoints.filter((c) => c !== cell);
       for (const e of cellEdges(p, cell)) {
         p.walls.delete(e);
       }
@@ -662,36 +638,15 @@ export class EditorView {
     this.render();
   }
 
-  /** Add an end (tile or frame border), or remove it if already there. Entrance is placed first. */
+  /** Add an end (a frame border), or remove it if already there. Entrance is placed first. */
   private toggleEnd(end: End) {
     const p = this.puzzle;
     if (p.blocked.has(endTile(p, end))) return;
     this.placing();
     const i = p.endpoints.findIndex((e) => endsEqual(e, end));
-    if (i < 0 && p.checkpoints.length) {
-      p.checkpoints = [];
-      this.note = EXCLUSIVE_NOTE.ends;
-    }
     if (i >= 0) p.endpoints.splice(i, 1);
     else if (p.endpoints.length < 2) p.endpoints.push(end);
     else p.endpoints[1] = end; // replace the exit
-    this.render();
-  }
-
-  /** Add the next numbered checkpoint, or remove one (later numbers move down). */
-  private toggleCheckpoint(cell: number) {
-    const p = this.puzzle;
-    if (p.blocked.has(cell)) return;
-    this.placing();
-    const i = p.checkpoints.indexOf(cell);
-    if (i >= 0) p.checkpoints.splice(i, 1);
-    else {
-      if (p.endpoints.length) {
-        p.endpoints = [];
-        this.note = EXCLUSIVE_NOTE.checkpoints;
-      }
-      p.checkpoints.push(cell);
-    }
     this.render();
   }
 
@@ -714,7 +669,7 @@ export class EditorView {
   /**
    * Turn a tile into a black tile if it's closed in on every side: by walls, the frame, or black
    * tiles next to it. Then check its neighbours, which this may close in too. Not a tile with an
-   * end or a number on it, and only one with at least two sides that aren't the frame (on a
+   * end on it, and only one with at least two sides that aren't the frame (on a
    * board one tile wide, one wall would otherwise "close in" the tiles on both sides).
    */
   private blackenIfWalledIn(cell: number) {
@@ -723,7 +678,7 @@ export class EditorView {
     const sides = cellEdges(p, cell);
     const closed = (e: number) => p.walls.has(e) || edgeCells(p, e).some((c) => c !== cell && p.blocked.has(c));
     if (sides.length < 2 || !sides.every(closed)) return;
-    if (p.checkpoints.includes(cell) || p.endpoints.some((end) => endTile(p, end) === cell)) return;
+    if (p.endpoints.some((end) => endTile(p, end) === cell)) return;
     p.blocked.add(cell);
     for (const x of sides) p.walls.delete(x);
     for (const x of sides) for (const c of edgeCells(p, x)) if (c !== cell) this.blackenIfWalledIn(c);
@@ -777,7 +732,7 @@ export class EditorView {
       this.status.textContent = this.message;
     } else {
       const open = openCells(p).length;
-      this.status.textContent = this.logicNote || `${p.checkpoints.length ? 'Numbers' : 'Path'} · ${p.w}×${p.h} · ${open} open tiles. ${TOOL_HINT[this.tool]}`;
+      this.status.textContent = this.logicNote || `${p.w}×${p.h} · ${open} open tiles. ${TOOL_HINT[this.tool]}`;
     }
   }
 }

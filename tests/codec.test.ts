@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { decodePuzzle, encodePuzzle, puzzleFromJson, puzzleToJson } from '../src/codec';
+import { decodePuzzle, encodePuzzle, NumbersNotSupported, puzzleFromJson, puzzleToJson } from '../src/codec';
 import { createPuzzle, edgeBetween, portEnd, portId, puzzlesEqual } from '../src/model';
 
 function sample() {
@@ -18,13 +18,11 @@ describe('codec', () => {
     expect(q.endpoints).toEqual(p.endpoints);
   });
 
-  test('checkpoints round-trip through codes and JSON', () => {
-    const p = createPuzzle(30, 30);
-    p.checkpoints = [899, 0, 450, 31];
-    const q = decodePuzzle(encodePuzzle(p));
-    expect(q.checkpoints).toEqual([899, 0, 450, 31]);
-    expect(q.endpoints.length + q.checkpoints.length).toBeGreaterThan(0);
-    expect(puzzleFromJson(JSON.parse(JSON.stringify(puzzleToJson(p)))).checkpoints).toEqual([899, 0, 450, 31]);
+  test('codes and files with numbers are refused', () => {
+    // A 0.5 numbers puzzle, as the old Numbers samples were.
+    expect(() => decodePuzzle('BQgGBgACAAcAFAAAAAAAIANAKICAAA')).toThrow(NumbersNotSupported);
+    const j = { ...puzzleToJson(createPuzzle(3, 3)), checkpoints: [0, 8] };
+    expect(() => puzzleFromJson(j)).toThrow(NumbersNotSupported);
   });
 
   test('puzzles without ends and large grids round-trip', () => {
@@ -38,14 +36,11 @@ describe('codec', () => {
     expect(encodePuzzle(sample())).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 
-  test('format 0.1 tile ends open as checkpoints', () => {
+  test('format 0.1 tile ends (which opened as numbers) are refused', () => {
     // 3x3 path in format 0.1 with ends at tile 0 and tile 4.
     const bytes = [1, 2 << 1, 3, 3, 0, 0, 0, 4, 0, 0, 0, 0, 0];
     const code = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    const q = decodePuzzle(code);
-    expect(q.endpoints.length + q.checkpoints.length).toBeGreaterThan(0);
-    expect(q.endpoints).toEqual([]);
-    expect(q.checkpoints).toEqual([0, 4]);
+    expect(() => decodePuzzle(code)).toThrow(NumbersNotSupported);
   });
 
   test('a code or file without the loop flag and without ends opens without ends', () => {
@@ -67,14 +62,9 @@ describe('codec', () => {
     expect('givens' in puzzleFromJson(j)).toBe(false);
   });
 
-  test('format 0.3 JSON: tile ends become checkpoints, or are dropped next to frame ends', () => {
+  test('format 0.3 JSON: tile ends (numbers) are refused', () => {
     const base = { ...puzzleToJson(createPuzzle(3, 3)), version: '0.3' };
-    const a = puzzleFromJson({ ...base, endpoints: [{ cell: 0 }, { cell: 8 }] });
-    expect(a.checkpoints).toEqual([0, 8]);
-    expect(a.endpoints).toEqual([]);
-    const b = puzzleFromJson({ ...base, endpoints: [{ port: 2 }, { cell: 8 }] });
-    expect(b.endpoints).toEqual([portEnd(2)]);
-    expect(b.checkpoints).toEqual([]);
+    expect(() => puzzleFromJson({ ...base, endpoints: [{ cell: 0 }, { cell: 8 }] })).toThrow(NumbersNotSupported);
   });
 
   test('JSON carries a 0.x format version', () => {

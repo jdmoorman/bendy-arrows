@@ -34,10 +34,6 @@ describe('model', () => {
     expect([...q.blocked]).toEqual([3]);
     expect([...q.walls]).toEqual([edgeBetween(q, 0, 1)]);
     expect(q.endpoints).toEqual([portEnd(portId(q, 'left', 0))]);
-    p.endpoints = [];
-    p.blocked.clear();
-    p.checkpoints = [8, 3, 1]; // (2,2) dropped; the rest keep their order
-    expect(resizePuzzle(p, 2, 2).checkpoints).toEqual([2, 1]);
   });
 
   test('ports cover the frame clockwise and map to edge tiles', () => {
@@ -94,7 +90,7 @@ describe('transformPuzzle', async () => {
       }
     }
     const c = createPuzzle(4, 4);
-    c.checkpoints = [0, 6, 9, 12];
+    c.endpoints = [portEnd(portId(c, 'top', 0)), portEnd(portId(c, 'bottom', 3))];
     const n = solve(c, { maxSolutions: 1e9 }).solutions.length;
     for (const t of ['rotateLeft', 'rotateRight', 'flipH', 'flipV'] as const) {
       expect(solve(transformPuzzle(c, t), { maxSolutions: 1e9 }).solutions.length).toBe(n);

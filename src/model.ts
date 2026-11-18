@@ -24,23 +24,13 @@ export interface Puzzle {
   /** Black edges the path may not cross. */
   walls: Set<number>;
   /**
-   * Up to two ends, each either a tile where the path must start/stop or a
-   * port (outer border of the frame, see portCell) where it enters or leaves.
-   * The first is the entrance.
+   * Up to two ends, each a port (outer border of the frame, see portCell)
+   * where the path enters or leaves. The first is the entrance.
    */
   endpoints: End[];
-  /**
-   * Numbered checkpoints (tiles), in order: checkpoints[0] is 1. The path
-   * starts at 1, passes through each in order and ends at the last. Puzzles
-   * use either checkpoints or ends, not both.
-   */
-  checkpoints: number[];
 }
 
-/**
- * A fixed end of the path: a border segment (port) on the outer frame.
- * (Ends inside the grid would just be checkpoints, so they are not allowed.)
- */
+/** A fixed end of the path: a border segment (port) on the outer frame. */
 export type End = { kind: 'port'; port: number };
 
 export function portEnd(port: number): End {
@@ -60,7 +50,7 @@ export const MIN_SIZE = 1;
 export const MAX_SIZE = 30;
 
 export function createPuzzle(w: number, h: number): Puzzle {
-  return { w, h, blocked: new Set(), walls: new Set(), endpoints: [], checkpoints: [] };
+  return { w, h, blocked: new Set(), walls: new Set(), endpoints: [] };
 }
 
 export function clonePuzzle(p: Puzzle): Puzzle {
@@ -70,7 +60,6 @@ export function clonePuzzle(p: Puzzle): Puzzle {
     blocked: new Set(p.blocked),
     walls: new Set(p.walls),
     endpoints: p.endpoints.map((e) => ({ ...e })),
-    checkpoints: [...p.checkpoints],
   };
 }
 
@@ -183,13 +172,8 @@ export function endTile(s: Size, end: End): number {
   return portCell(s, end.port);
 }
 
-/**
- * Tiles where the path must end: the ends, or with checkpoints
- * the first and last checkpoint (just the first while only one is placed).
- */
+/** Tiles where the path must end: the tiles inside the ends. */
 export function endpointCells(p: Puzzle): number[] {
-  const cp = p.checkpoints;
-  if (cp.length) return cp.length > 1 ? [cp[0], cp[cp.length - 1]] : [cp[0]];
   return p.endpoints.slice(0, 2).map((e) => endTile(p, e));
 }
 
@@ -240,10 +224,6 @@ export function resizePuzzle(p: Puzzle, w: number, h: number): Puzzle {
     const n = mapEdge(e);
     if (n >= 0) out.walls.add(n);
   }
-  for (const c of p.checkpoints) {
-    const n = mapCell(c);
-    if (n >= 0) out.checkpoints.push(n);
-  }
   // Ports stay on the same side of the frame.
   out.endpoints = [];
   for (const end of p.endpoints) {
@@ -262,9 +242,7 @@ export function puzzlesEqual(a: Puzzle, b: Puzzle): boolean {
     setEq(a.blocked, b.blocked) &&
     setEq(a.walls, b.walls) &&
     a.endpoints.length === b.endpoints.length &&
-    a.endpoints.every((v, i) => endsEqual(v, b.endpoints[i])) &&
-    a.checkpoints.length === b.checkpoints.length &&
-    a.checkpoints.every((v, i) => v === b.checkpoints[i])
+    a.endpoints.every((v, i) => endsEqual(v, b.endpoints[i]))
   );
 }
 
@@ -274,7 +252,7 @@ const SIDE_DIR: Record<Side, [number, number]> = { top: [-1, 0], right: [0, 1], 
 
 /**
  * Rotate a quarter turn or mirror the whole puzzle. Black tiles, walls,
- * frame ends (in order) and checkpoints (in order) all move together.
+ * and frame ends (in order) all move together.
  */
 export function transformPuzzle(p: Puzzle, t: Transform): Puzzle {
   const rotates = t === 'rotateLeft' || t === 'rotateRight';
@@ -312,7 +290,6 @@ export function transformPuzzle(p: Puzzle, t: Transform): Puzzle {
     const [a, b] = edgeCells(p, e);
     out.walls.add(edgeBetween(out, mapCell(a), mapCell(b)));
   }
-  out.checkpoints = p.checkpoints.map(mapCell);
   out.endpoints = p.endpoints.map((end) => {
     const [side] = portSide(p, end.port);
     const [dr, dc] = mapDir(SIDE_DIR[side]);

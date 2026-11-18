@@ -37,6 +37,8 @@ app.innerHTML = `
 `;
 
 const storage = new Storage();
+// Puzzles with numbers are no longer supported: drop any still saved.
+storage.removeNumbersPuzzles();
 let settings = storage.loadSettings();
 applySettings(settings);
 const views = app.querySelector('.views')!;
@@ -59,7 +61,7 @@ let ready = false;
 
 /** Switch to Play at the user's request, unless the puzzle being edited isn't ready. */
 function requestPlay() {
-  // Play takes up the editor's puzzle (or already has it), so it must have its ends or numbers.
+  // Play takes up the editor's puzzle (or already has it), so it must have its ends.
   if (!editor.checkPlayable()) {
     setTab('edit');
     return;
@@ -104,7 +106,7 @@ function loadPuzzle(p: Puzzle, meta: LoadMeta = {}, startTab: Tab = 'play') {
   play.load(playing, meta.progress ?? saved?.progress);
   editor.load(playing);
   updateHeader();
-  // A puzzle without its ends (or numbers), e.g. from an old link or session, opens in Create.
+  // A puzzle without its ends, e.g. from an old link or session, opens in Create.
   setTab(startTab === 'play' && !editor.checkPlayable() ? 'edit' : startTab);
 }
 
@@ -192,7 +194,7 @@ function openLibrary() {
 /** Save the editor's puzzle, or the one being played, to the library. */
 function saveCurrent(fromEditor: boolean) {
   const editing = fromEditor && !puzzlesEqual(playing, editor.current);
-  // A puzzle needs its ends (or numbers) before it can be saved; the editor says what's missing.
+  // A puzzle needs its ends before it can be saved; the editor says what's missing.
   if (editing && !editor.checkPlayable()) {
     setTab('edit');
     return;

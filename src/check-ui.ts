@@ -167,7 +167,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
   };
 
   const start = async () => {
-    // Without ends (or numbers) the path could start and stop anywhere: no solution yet.
+    // Without ends the path could start and stop anywhere: no solution yet.
     const missing = missingEnds(editor.current);
     if (missing) {
       last = { status: 'none', solutions: [], reason: missing, nodes: 0 };
@@ -227,7 +227,7 @@ function describe(r: SolveResult): string {
     case 'unique':
       return 'Unique solution — ready to play and share.';
     case 'multiple':
-      return 'More than one solution. Add walls, black tiles, ends or checkpoints to narrow it down.';
+      return 'More than one solution. Add walls, black tiles or move the ends to narrow it down.';
     case 'none':
       return `No solution. ${r.reason}`;
     case 'aborted':

@@ -27,7 +27,7 @@ describe('library table', () => {
   test('lists saved puzzles and every sample, with their facts', () => {
     expect(rows).toHaveLength(SAMPLES.length + 1);
     const r = rows.find((x) => x.entry)!;
-    expect(r).toMatchObject({ name: 'My little path', collection: 'Yours', type: 'Path', w: 3, h: 3, walls: 1, black: 0, obstacles: 1, status: 'New' });
+    expect(r).toMatchObject({ name: 'My little path', collection: 'Yours', w: 3, h: 3, walls: 1, black: 0, obstacles: 1, status: 'New' });
     // Not rated yet.
     expect(r.difficulty).toBeUndefined();
     expect(rows.find((x) => !x.entry)!.unique).toBe(true);
@@ -49,9 +49,9 @@ describe('library table', () => {
   });
 
   test('filters by choice values, number ranges and name', () => {
-    const numbers = applyTable(rows, state({ filters: { type: { values: ['Numbers'] } } }));
-    expect(numbers.length).toBeGreaterThan(0);
-    expect(numbers.every((r) => r.type === 'Numbers')).toBe(true);
+    const easy = applyTable(rows, state({ filters: { difficulty: { values: ['Easy'] } } }));
+    expect(easy.length).toBeGreaterThan(0);
+    expect(easy.every((r) => r.difficulty === 'easy')).toBe(true);
     const sparse = applyTable(rows, state({ filters: { obstacles: { max: 1 }, w: { min: 8 } } }));
     expect(sparse.length).toBeGreaterThan(0);
     expect(sparse.every((r) => r.obstacles <= 1 && r.w >= 8)).toBe(true);

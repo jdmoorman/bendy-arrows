@@ -1,3 +1,4 @@
+import { decodePuzzle, NumbersNotSupported } from './codec';
 import type { Rating, TableState } from './library-table';
 import type { Progress } from './play';
 
@@ -51,7 +52,7 @@ const HINTS_INLINE_KEY = 'bendyarrows.hintsinline.v1';
 export interface Settings {
   /** Shade alternate tiles faintly. */
   checkerboard: boolean;
-  /** Highlight mistakes (branches, early loops, numbers out of order) as you play. */
+  /** Highlight mistakes (branches, early loops) as you play. */
   autoCheck: boolean;
   /** Use the dark colour theme. */
   darkTheme: boolean;
@@ -144,6 +145,21 @@ export class Storage {
       LIBRARY_KEY,
       this.list().filter((e) => e.id !== id),
     );
+  }
+
+  /** Delete saved puzzles that have numbers, which are no longer supported. Returns how many. */
+  removeNumbersPuzzles(): number {
+    const all = this.list();
+    const keep = all.filter((e) => {
+      try {
+        decodePuzzle(e.code);
+      } catch (err) {
+        return !(err instanceof NumbersNotSupported);
+      }
+      return true;
+    });
+    if (keep.length < all.length) this.write(LIBRARY_KEY, keep);
+    return all.length - keep.length;
   }
 
   /** Record play progress for an entry, if it still holds this puzzle. */

@@ -22,7 +22,7 @@ function draw(p: Puzzle, s: LogicState, mark: number): string {
     let below = '     ';
     for (let c = 0; c < p.w; c++) {
       const i = r * p.w + c;
-      row += p.blocked.has(i) ? '#' : ends.has(i) ? 'E' : p.checkpoints.includes(i) ? String(p.checkpoints.indexOf(i) + 1) : 'o';
+      row += p.blocked.has(i) ? '#' : ends.has(i) ? 'E' : 'o';
       if (c < p.w - 1) {
         const e = edgeBetween(p, i, i + 1);
         row += e === mark ? (s.segments.has(e) ? '=?=' : ' ? ') : p.walls.has(e) ? ' | ' : s.segments.has(e) ? '===' : s.xs.has(e) ? ' x ' : '   ';

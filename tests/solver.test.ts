@@ -28,9 +28,8 @@ function rng(seed: number) {
 describe('parity', () => {
   test('open 3x3 path must end on A tiles', () => {
     const p = createPuzzle(3, 3);
-    p.checkpoints = [0];
+    p.endpoints = [portEnd(0)];
     expect(parityCheck(p).endColor).toBe(0);
-    p.checkpoints = [];
     p.endpoints = [portEnd(portId(p, 'top', 1))];
     expect(parityCheck(p).ok).toBe(false);
   });
@@ -39,7 +38,7 @@ describe('parity', () => {
 describe('solve', () => {
   test('a 1xN strip has a unique path', () => {
     const strip = createPuzzle(5, 1);
-    strip.checkpoints = [0];
+    strip.endpoints = [portEnd(0)];
     const r = solve(strip);
     expect(r.status).toBe('unique');
     expect(r.solutions[0]).toHaveLength(4);
@@ -47,7 +46,7 @@ describe('solve', () => {
 
   test('open 2x3 path has multiple solutions', () => {
     const p = createPuzzle(3, 2);
-    p.checkpoints = [0];
+    p.endpoints = [portEnd(0)];
     expect(solve(p).status).toBe('multiple');
   });
 
@@ -72,7 +71,7 @@ describe('solve', () => {
   test('walls can force uniqueness', () => {
     // 3x3 path; walls create a comb that only allows the snake.
     const p = createPuzzle(3, 3);
-    p.checkpoints = [0];
+    p.endpoints = [portEnd(0)];
     p.walls.add(edgeBetween(p, 3, 4)).add(edgeBetween(p, 4, 7)).add(edgeBetween(p, 1, 4));
     p.walls.add(edgeBetween(p, 0, 3));
     const r = solve(p);
@@ -80,21 +79,9 @@ describe('solve', () => {
     expect(r.solutions.every((s) => checkSolution(p, s).solved)).toBe(true);
   });
 
-  test('checkpoints force the order', () => {
-    // 3x3 with numbers 1 (top-left), 2 (centre), 3 (bottom-right).
-    const p = createPuzzle(3, 3);
-    p.checkpoints = [0, 4, 8];
-    const r = solve(p, { maxSolutions: 1e9 });
-    expect(r.solutions.length).toBeGreaterThan(0);
-    for (const s of r.solutions) expect(checkSolution(p, s).solved).toBe(true);
-    // Parity: on an open 3x3 a path must end on corner/centre tiles, so ending at an edge tile is impossible.
-    p.checkpoints = [0, 4, 1];
-    expect(solve(p).status).toBe('none');
-  });
-
   test('aborts when over the node budget', () => {
     const p = createPuzzle(8, 8);
-    p.checkpoints = [0];
+    p.endpoints = [portEnd(0)];
     const r = solve(p, { nodeLimit: 1000, maxSolutions: 1e9 });
     expect(r.status).toBe('aborted');
   });
@@ -110,24 +97,15 @@ describe('solve', () => {
       for (let e = 0; e < edgeCount(p); e++) {
         if (rand() < 0.12) p.walls.add(e);
       }
-      if (rand() < 0.3) {
-        // Checkpoints instead of ends.
-        const k = 2 + Math.floor(rand() * 3);
-        for (let i = 0; i < k; i++) {
-          const c = Math.floor(rand() * n);
-          if (!p.checkpoints.includes(c)) p.checkpoints.push(c);
-        }
-      } else {
-        // 0, 1 or 2 fixed ends (the rest are free).
-        const k = Math.floor(rand() * 3);
-        for (let i = 0; i < k; i++) {
-          const end = portEnd(Math.floor(rand() * portCount(p)));
-          if (!p.endpoints.some((e) => endsEqual(e, end))) p.endpoints.push(end);
-        }
+      // 0, 1 or 2 fixed ends (the rest are free).
+      const k = Math.floor(rand() * 3);
+      for (let i = 0; i < k; i++) {
+        const end = portEnd(Math.floor(rand() * portCount(p)));
+        if (!p.endpoints.some((e) => endsEqual(e, end))) p.endpoints.push(end);
       }
       const expected = bruteForceCount(p);
       const r = solve(p, { maxSolutions: 1e9 });
-      const ctx = JSON.stringify({ trial, w, h, blocked: [...p.blocked], walls: [...p.walls], endpoints: p.endpoints, checkpoints: p.checkpoints });
+      const ctx = JSON.stringify({ trial, w, h, blocked: [...p.blocked], walls: [...p.walls], endpoints: p.endpoints });
       expect(r.solutions.length, ctx).toBe(expected);
       for (const s of r.solutions) expect(checkSolution(p, s).solved, ctx).toBe(true);
     }
@@ -187,11 +165,6 @@ describe('solutionUnion', async () => {
     ['5×4, ends side by side, with a wall', () => {
       const p = endsBottomRight(5, 4);
       p.walls.add(edgeBetween(p, 6, 7));
-      return p;
-    }],
-    ['4×4 path with checkpoints', () => {
-      const p = createPuzzle(4, 4);
-      p.checkpoints = [0, 5, 15];
       return p;
     }],
   ];

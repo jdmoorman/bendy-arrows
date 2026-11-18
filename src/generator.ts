@@ -25,7 +25,6 @@ import { solve } from './solver';
  * give the same puzzle.
  */
 
-export type GenType = 'path' | 'checkpoints';
 export type Difficulty = 'easy' | 'medium' | 'hard' | 'veryhard';
 /** Which clues may be used: walls and black tiles, only walls, or only black tiles. */
 export type ClueKind = 'mixed' | 'walls' | 'tiles';
@@ -33,7 +32,6 @@ export type ClueKind = 'mixed' | 'walls' | 'tiles';
 export interface GenOptions {
   w: number;
   h: number;
-  type: GenType;
   /** The difficulties wanted: it stops at the first puzzle rated one of these (all of them if empty). */
   difficulties: Difficulty[];
   clues: ClueKind;
@@ -46,7 +44,7 @@ export interface GenOptions {
   seed: number;
 }
 
-/** Walls plus black tiles: what the sparsity limit counts. (Ends and numbers don't count.) */
+/** Walls plus black tiles: what the sparsity limit counts. (Ends don't count.) */
 export function obstacleCount(p: Puzzle): number {
   return p.walls.size + p.blocked.size;
 }
@@ -154,18 +152,18 @@ const pick = <T>(rand: () => number, xs: T[]): T => xs[Math.floor(rand() * xs.le
 
 /** One try at a puzzle; null if this try didn't work out. */
 function attemptPuzzle(opts: GenOptions, rand: () => number): Puzzle | null {
-  const { w, h, type, clues } = opts;
+  const { w, h, clues } = opts;
   const p = createPuzzle(w, h);
   const density = clues === 'walls' ? 0 : clues === 'tiles' ? 0.08 + rand() * 0.12 : rand() * 0.08;
   if (!addBlackTiles(p, rand, density)) return null;
 
   let unique: Puzzle | null;
-  if (clues === 'tiles' && type !== 'checkpoints') {
+  if (clues === 'tiles') {
     unique = uniqueByTiles(p, rand);
   } else {
-    const order = randomHamiltonian(p, rand, type);
+    const order = randomHamiltonian(p, rand);
     if (!order) return null;
-    unique = uniqueFromSolution(p, order, opts, rand);
+    unique = uniqueFromSolution(p, order, rand);
   }
   if (!unique) return null;
   if (opts.minimal || opts.maxObstacles !== undefined) minimise(unique, rand);
@@ -221,10 +219,9 @@ const onFrame = (p: Puzzle, c: number) => {
 
 /**
  * A random Hamiltonian path through the open tiles (as a tile order), made
- * by "backbite" moves from a starting path. For frame ends, both ends are
- * on the frame.
+ * by "backbite" moves from a starting path, with both ends on the frame.
  */
-function randomHamiltonian(p: Puzzle, rand: () => number, type: GenType): number[] | null {
+function randomHamiltonian(p: Puzzle, rand: () => number): number[] | null {
   const start = startingPath(p);
   if (!start) return null;
   let path = start;
@@ -240,12 +237,7 @@ function randomHamiltonian(p: Puzzle, rand: () => number, type: GenType): number
     path = path.slice(0, i + 1).concat(path.slice(i + 1).reverse());
   };
   for (let k = 0; k < 20 * n; k++) backbite();
-  const done = (): boolean => {
-    const a = path[0];
-    const b = path[path.length - 1];
-    if (type === 'path') return onFrame(p, a) && onFrame(p, b);
-    return true;
-  };
+  const done = () => onFrame(p, path[0]) && onFrame(p, path[path.length - 1]);
   for (let k = 0; k < 200 * n && !done(); k++) backbite();
   return done() ? path : null;
 }
@@ -257,12 +249,15 @@ function startingPath(p: Puzzle): number[] | null {
     for (let r = 0; r < p.h; r++) for (let i = 0; i < p.w; i++) out.push(r * p.w + (r % 2 ? p.w - 1 - i : i));
     return out;
   }
-  const open = openCells(p);
-  const start = open.reduce((a, c) => (neighbors(p, c).filter((m) => !p.blocked.has(m)).length < neighbors(p, a).filter((m) => !p.blocked.has(m)).length ? c : a));
-  const q = { ...p, checkpoints: [start], endpoints: [] };
-  const r = solve(q, { maxSolutions: 1, nodeLimit: NODE_LIMIT });
-  if (!r.solutions.length) return null;
-  return walkEdges(p, r.solutions[0], start);
+  // With no ends set, the solver finds a path between any two tiles.
+  const r = solve({ ...p, endpoints: [] }, { maxSolutions: 1, nodeLimit: NODE_LIMIT });
+  const edges = r.solutions[0];
+  if (!edges) return null;
+  // Start the walk at one end of the path: a tile with a single line.
+  const lines = new Map<number, number>();
+  for (const e of edges) for (const c of edgeCells(p, e)) lines.set(c, (lines.get(c) ?? 0) + 1);
+  const start = edges.length ? [...lines].find(([, k]) => k === 1)![0] : openCells(p)[0];
+  return walkEdges(p, edges, start);
 }
 
 /** Tile order of a path given by its edges, starting from `start`. */
@@ -299,23 +294,13 @@ function portFor(p: Puzzle, c: number, rand: () => number) {
 }
 
 /**
- * Turn a chosen solution into a unique puzzle: set its ends or numbers, then
- * add walls (or numbers) that rule out each other solution found.
+ * Turn a chosen solution into a unique puzzle: set its ends, then add walls
+ * that rule out each other solution found.
  */
-function uniqueFromSolution(p: Puzzle, order: number[], opts: GenOptions, rand: () => number): Puzzle | null {
-  const pos = new Map(order.map((c, i) => [c, i]));
+function uniqueFromSolution(p: Puzzle, order: number[], rand: () => number): Puzzle | null {
   const solution = new Set<number>();
   for (let i = 1; i < order.length; i++) solution.add(edgeBetween(p, order[i - 1], order[i]));
-  if (opts.type === 'path') p.endpoints = [portFor(p, order[0], rand), portFor(p, order[order.length - 1], rand)];
-  if (opts.type === 'checkpoints') p.checkpoints = [order[0], order[order.length - 1]];
-
-  const addNumber = (cells: number[]) => {
-    const free = cells.filter((c) => !p.checkpoints.includes(c));
-    if (!free.length) return false;
-    p.checkpoints = [...p.checkpoints, pick(rand, free)].sort((a, b) => pos.get(a)! - pos.get(b)!);
-    return true;
-  };
-  const wallsAllowed = opts.clues !== 'tiles';
+  p.endpoints = [portFor(p, order[0], rand), portFor(p, order[order.length - 1], rand)];
 
   for (let round = 0; round < 4 * order.length; round++) {
     const r = solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT });
@@ -330,15 +315,7 @@ function uniqueFromSolution(p: Puzzle, order: number[], opts: GenOptions, rand: 
       candidates = candidates.filter((e) => !p.walls.has(e));
     }
     if (!candidates.length) return null;
-    // With an obstacle limit, numbers puzzles get their uniqueness from numbers where they can.
-    const useNumber = opts.type === 'checkpoints' && (!wallsAllowed || opts.maxObstacles !== undefined || rand() < 0.5);
-    if (useNumber) {
-      if (!addNumber(candidates.flatMap((e) => edgeCells(p, e)))) return null;
-    } else if (wallsAllowed) {
-      p.walls.add(pick(rand, candidates));
-    } else {
-      return null;
-    }
+    p.walls.add(pick(rand, candidates));
   }
   return null;
 }
@@ -357,7 +334,7 @@ function solutionCount(p: Puzzle, cap: number): number {
 function uniqueByTiles(p: Puzzle, rand: () => number): Puzzle | null {
   const CAP = 40;
   // Take the ends from a random path, so there is at least one solution.
-  const order = randomHamiltonian(p, rand, 'path');
+  const order = randomHamiltonian(p, rand);
   if (!order) return null;
   p.endpoints = [portFor(p, order[0], rand), portFor(p, order[order.length - 1], rand)];
   let count = solutionCount(p, CAP);
@@ -382,22 +359,12 @@ function uniqueByTiles(p: Puzzle, rand: () => number): Puzzle | null {
 
 /** Remove each clue that isn't needed for the solution to stay unique. */
 function minimise(p: Puzzle, rand: () => number): void {
-  type Clue = { kind: 'wall' | 'tile' | 'number'; id: number };
-  const clues: Clue[] = [
-    ...[...p.walls].map((id) => ({ kind: 'wall' as const, id })),
-    ...[...p.blocked].map((id) => ({ kind: 'tile' as const, id })),
-    ...p.checkpoints.slice(1, -1).map((id) => ({ kind: 'number' as const, id })),
-  ];
+  const clues = [...[...p.walls].map((id) => ({ wall: true, id })), ...[...p.blocked].map((id) => ({ wall: false, id }))];
   for (const clue of shuffle(rand, clues)) {
-    const saved = [...p.checkpoints];
-    if (clue.kind === 'wall') p.walls.delete(clue.id);
-    else if (clue.kind === 'tile') p.blocked.delete(clue.id);
-    else p.checkpoints = p.checkpoints.filter((c) => c !== clue.id);
-    const stillUnique = (clue.kind !== 'tile' || openTilesOk(p)) && solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT }).status === 'unique';
-    if (stillUnique) continue;
-    if (clue.kind === 'wall') p.walls.add(clue.id);
-    else if (clue.kind === 'tile') p.blocked.add(clue.id);
-    else p.checkpoints = saved;
+    const set = clue.wall ? p.walls : p.blocked;
+    set.delete(clue.id);
+    const stillUnique = (clue.wall || openTilesOk(p)) && solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT }).status === 'unique';
+    if (!stillUnique) set.add(clue.id);
   }
 }
 
@@ -431,7 +398,7 @@ function sparsify(p: Puzzle, opts: GenOptions, rand: () => number): boolean {
     if (on) set.add(o.id);
     else set.delete(o.id);
   };
-  const keep = new Set([...p.checkpoints, ...p.endpoints.map((e) => portCell(p, e.port))]);
+  const keep = new Set(p.endpoints.map((e) => portCell(p, e.port)));
   for (let tries = 0; tries < SPARSIFY_TRIES && obstacleCount(p) > max; tries++) {
     const obstacles = shuffle(rand, list());
     if (obstacles.length < 2) return false;

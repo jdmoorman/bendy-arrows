@@ -15,7 +15,7 @@ test('look', () => {
   const sol = solve(p, { maxSolutions: 2 });
   writeFileSync(
     outPath('look/puzzle.txt'),
-    `${p.checkpoints.length ? 'Numbers' : 'Path'} ${p.w}×${p.h}, ${p.walls.size} walls, ${p.blocked.size} black tiles, ${p.checkpoints.length} numbers\n` +
+    `Path ${p.w}×${p.h}, ${p.walls.size} walls, ${p.blocked.size} black tiles\n` +
       `${draw(p)}\nsolutions: ${sol.status}; rating: ${sol.status === 'unique' ? rateDifficulty(p) : '-'}; symmetric: ${symmetryOf(p) ?? 'no'}\n` +
       `rating rules run: ${run.solved ? 'solved' : run.contradiction ? 'contradiction' : 'stuck'} after ${run.rounds} rounds, ${run.state.segments.size} lines, ${run.state.xs.size} X\n`,
   );

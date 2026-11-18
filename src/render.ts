@@ -64,8 +64,6 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
   svg.dataset.pad = String(pad);
   svg.classList.toggle('solved', !!o.solved);
-  // With checkpoints, drawn lines are wider than the checkpoint discs.
-  svg.classList.toggle('has-checkpoints', p.checkpoints.length > 0);
 
   const center = (cell: number): [number, number] => {
     const [r, c] = cellRC(p, cell);
@@ -212,22 +210,6 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   parts.push(strokes(ok, 'seg-edge'), strokes(bad, 'seg-edge error'), strokes(hi, 'seg-edge hint'));
   parts.push(strokes(ok, 'seg'), strokes(bad, 'seg error'), strokes(hi, 'seg hint'));
   parts.push('</g>');
-
-  // Numbered checkpoints sit on top of the path.
-  if (p.checkpoints.length) {
-    parts.push('<g class="checkpoints">');
-    p.checkpoints.forEach((cell, i) => {
-      const [x, y] = center(cell);
-      const label = String(i + 1);
-      const cls = o.errorCells?.has(cell) ? 'cp-dot error' : 'cp-dot';
-      const size = label.length > 2 ? 26 : label.length > 1 ? 32 : 38;
-      parts.push(
-        `<circle class="${cls}" cx="${x}" cy="${y}" r="31"/>` +
-          `<text class="cp-num" x="${x}" y="${y}" font-size="${size}" text-anchor="middle" dominant-baseline="central">${label}</text>`,
-      );
-    });
-    parts.push('</g>');
-  }
 
   // X marks.
   if (o.xMarks?.size) {
