@@ -188,6 +188,15 @@ export class Storage {
     );
   }
 
+  /** Delete several entries in one write. Returns false if it could not be stored. */
+  removeMany(ids: Iterable<string>): boolean {
+    const gone = new Set(ids);
+    return this.write(
+      LIBRARY_KEY,
+      this.list().filter((e) => !gone.has(e.id)),
+    );
+  }
+
   /** Delete saved puzzles that have numbers, which are no longer supported. Returns how many. */
   removeNumbersPuzzles(): number {
     const all = this.list();

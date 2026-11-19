@@ -18,7 +18,7 @@ import {
 import type { Puzzle } from './model';
 import type { Progress } from './play';
 import type { RatingMessage } from './rating.worker';
-import { newId, type Storage } from './storage';
+import { newId, type LibraryEntry, type Storage } from './storage';
 import { exportText, parseImport } from './library-io';
 import { defaultName } from './save-ui';
 import { el, openSheet, toast } from './ui';
@@ -130,23 +130,26 @@ export class LibraryView {
 
   private importText(text: string, collection: string) {
     const { puzzles, bad } = parseImport(text);
-    const have = new Map(this.storage.list().map((e) => [e.code, e]));
+    const have = new Map<string, LibraryEntry[]>();
+    for (const e of this.storage.list()) have.set(e.code, [...(have.get(e.code) ?? []), e]);
     let added = 0;
     let tagged = 0;
     let failed = false;
     const now = Date.now();
     for (const { code, name } of puzzles) {
-      const existing = have.get(code);
-      if (existing) {
-        // Already saved: it joins the set too, unless it came in with another one.
-        if (!existing.collection && this.storage.put({ ...existing, collection })) {
-          have.set(code, { ...existing, collection });
+      const copies = have.get(code);
+      if (copies) {
+        // Already saved: it joins the set too, unless it came in with another one, or the set
+        // already has it (a copy saved as new from the set's puzzle stays out).
+        const loose = copies.find((e) => !e.collection);
+        if (loose && !copies.some((e) => e.collection === collection) && this.storage.put({ ...loose, collection })) {
+          have.set(code, [...copies.filter((e) => e !== loose), { ...loose, collection }]);
           tagged++;
         }
         continue;
       }
-      const entry = { id: newId(), name: name ?? defaultName(decodePuzzle(code)), code, created: now + added, updated: now + added, collection };
-      have.set(code, entry);
+      const entry: LibraryEntry = { id: newId(), name: name ?? defaultName(decodePuzzle(code)), code, created: now + added, updated: now + added, collection };
+      have.set(code, [entry]);
       if (!this.storage.put(entry)) {
         failed = true;
         break;
@@ -222,6 +225,22 @@ export class LibraryView {
         this.changed();
       });
       this.count.append(' · ', clear);
+      // Delete everything the search and filters leave, e.g. one imported Collection.
+      const entries = shown.flatMap((r) => (r.entry ? [r.entry] : []));
+      if (entries.length) {
+        const n = entries.length;
+        const delAll = el('button', 'link-btn', `Delete ${n} shown`);
+        delAll.addEventListener('click', () => {
+          const sets = [...new Set(entries.map((e) => e.collection).filter(Boolean))];
+          const from = sets.length === 1 ? ` from “${sets[0]}”` : '';
+          if (!confirm(`Delete the ${n} saved puzzle${n === 1 ? '' : 's'}${from} shown? This can't be undone.`)) return;
+          this.storage.removeMany(entries.map((e) => e.id));
+          for (const e of entries) this.onDeleted?.(e.id);
+          toast(`Deleted ${n} puzzle${n === 1 ? '' : 's'}.`);
+          this.refresh();
+        });
+        this.count.append(' · ', delAll);
+      }
     }
 
     this.renderColumnToggles();

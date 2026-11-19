@@ -44,6 +44,13 @@ describe('Storage', () => {
     expect(s.findByCode('CODEa')?.id).toBe('a');
   });
 
+  test('removeMany deletes several entries at once', () => {
+    const s = new Storage(new MemStore());
+    for (const [i, id] of ['a', 'b', 'c', 'd'].entries()) s.put(entry(id, i));
+    s.removeMany(['a', 'c', 'zz']);
+    expect(s.list().map((e) => e.id)).toEqual(['d', 'b']);
+  });
+
   test('progress only updates the matching puzzle', () => {
     const s = new Storage(new MemStore());
     s.put(entry('a', 1));
