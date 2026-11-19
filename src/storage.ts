@@ -46,7 +46,6 @@ const TABLE_KEY = 'bendyarrows.libtable.v1';
 const RATINGS_KEY = 'bendyarrows.ratings.v1';
 const HIDDEN_KEY = 'bendyarrows.hiddensamples.v1';
 const SHOW_SOLUTION_KEY = 'bendyarrows.showsolution.v1';
-const HINTS_INLINE_KEY = 'bendyarrows.hintsinline.v1';
 /** The share-code format the stored codes were last rewritten to. */
 const CODE_FORMAT_KEY = 'bendyarrows.codeformat.v1';
 
@@ -123,7 +122,7 @@ export class Storage {
 
   /** Copy data saved under the old app name to the new keys (the old keys are left alone). */
   private migrateOldKeys(): void {
-    const keys = [LIBRARY_KEY, SESSION_KEY, SETTINGS_KEY, SOLVED_KEY, LOGIC_KEY, GENERATOR_KEY, TABLE_KEY, RATINGS_KEY, HIDDEN_KEY, SHOW_SOLUTION_KEY, HINTS_INLINE_KEY];
+    const keys = [LIBRARY_KEY, SESSION_KEY, SETTINGS_KEY, SOLVED_KEY, LOGIC_KEY, GENERATOR_KEY, TABLE_KEY, RATINGS_KEY, HIDDEN_KEY, SHOW_SOLUTION_KEY];
     try {
       for (const key of keys) {
         if (this.store?.getItem(key) !== null) continue;
@@ -292,14 +291,6 @@ export class Storage {
   }
 
   /** Whether the editor's hint list sits on one line beside the difficulty (else a list under it). */
-  loadHintsInline(): boolean {
-    return this.read<unknown>(HINTS_INLINE_KEY, false) === true;
-  }
-
-  saveHintsInline(on: boolean): void {
-    this.write(HINTS_INLINE_KEY, on);
-  }
-
   /** Codes of built-in samples deleted from this device's library. */
   loadHiddenSamples(): string[] {
     const h = this.read<unknown>(HIDDEN_KEY, []);

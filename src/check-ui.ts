@@ -1,7 +1,6 @@
 import { encodePuzzle } from './codec';
 import type { EditorView } from './editor';
 import type { Difficulty } from './generator';
-import { RULES } from './logic';
 import { missingEnds } from './rules';
 import { defaultName } from './save-ui';
 import type { RatingMessage, RatingRequest } from './rating.worker';
@@ -31,28 +30,15 @@ export function attachUniquenessCheck(editor: EditorView): void {
   let showing = storage.loadShowSolution();
 
   // The difficulty of a unique puzzle, rated in the background, in a chip under the board, with
-  // the hints a player alternating easy rules and hints would need: each rule, and area sizes.
+  // how many hints a player alternating easy rules and hints would need beside it.
   const info = document.createElement('div');
   info.className = 'difficulty hidden';
   info.setAttribute('role', 'status');
-  // The chip switches the hints between a list under it and one line beside it (cut short).
-  const level = document.createElement('button');
-  level.type = 'button';
+  const level = document.createElement('span');
   level.className = 'difficulty-chip';
-  let inline = storage.loadHintsInline();
-  const applyInline = () => {
-    info.classList.toggle('inline', inline);
-    level.setAttribute('aria-pressed', String(inline));
-    level.title = inline ? 'Show the hints as a list' : 'Show the hints on one line';
-  };
-  level.addEventListener('click', () => {
-    inline = !inline;
-    storage.saveHintsInline(inline);
-    applyInline();
-  });
-  const journey = document.createElement('ul');
-  journey.className = 'journey';
-  info.append(level, journey);
+  const hints = document.createElement('span');
+  hints.className = 'hint-count';
+  info.append(level, hints);
   // Running locally: copy the puzzle as a line for src/levels.ts, once it's unique and rated.
   const copyBtn = document.createElement('button');
   copyBtn.type = 'button';
@@ -70,7 +56,6 @@ export function attachUniquenessCheck(editor: EditorView): void {
   });
   if (import.meta.env.DEV) info.append(copyBtn);
   editor.el.querySelector('.board-info')!.append(info);
-  applyInline();
   let rater: Worker | null = null;
   const NAMES: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', veryhard: 'Very hard' };
   const stopRating = () => {
@@ -84,7 +69,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
     copyBtn.classList.add('hidden');
     level.textContent = 'Rating…';
     level.dataset.level = '';
-    journey.replaceChildren();
+    hints.textContent = '';
     info.setAttribute('aria-label', 'Rating the difficulty');
     info.classList.remove('hidden');
     const worker = new Worker(new URL('./rating.worker.ts', import.meta.url), { type: 'module' });
@@ -97,28 +82,15 @@ export function attachUniquenessCheck(editor: EditorView): void {
       if (!d) return info.classList.add('hidden');
       level.textContent = NAMES[d];
       level.dataset.level = d;
-      const j = ev.data.journey;
-      const stuck = j?.outcome === 'stuck';
-      const steps = (j?.steps ?? []).map((s) => {
-        const label = RULES.find((r) => r.id === s.rule)?.label ?? s.rule;
-        return s.area ? `${label} (${s.area} tiles)` : label;
-      });
-      // One bullet per hint, in order; a lone line when no hints are needed.
-      const items = !j ? [] : steps.length ? [...steps, ...(stuck ? ['Stuck'] : [])] : [stuck ? 'Stuck' : 'Easy rules alone'];
-      journey.replaceChildren(
-        ...items.map((text) => {
-          const li = document.createElement('li');
-          li.textContent = text;
-          return li;
-        }),
-      );
-      journey.classList.toggle('plain', !!j && !steps.length);
-      info.setAttribute('aria-label', `Difficulty: ${NAMES[d]}. ${items.join(', ')}`);
+      const n = ev.data.rating.hints ?? 0;
+      const count = n ? `${n} hint${n === 1 ? '' : 's'}` : 'No hints';
+      hints.textContent = ev.data.rating.hintsStuck ? `${count}, then stuck` : count;
+      info.setAttribute('aria-label', `Difficulty: ${NAMES[d]}. ${hints.textContent}`);
       const p = editor.current;
       entry = `  { name: '${defaultName(p)}', code: '${ev.data.code}', level: '${d}' },`;
       copyBtn.classList.remove('hidden');
     };
-    worker.postMessage({ codes: [encodePuzzle(editor.current)], journey: true } satisfies RatingRequest);
+    worker.postMessage([encodePuzzle(editor.current)] satisfies RatingRequest);
   };
 
   const setChip = (state: 'checking' | 'unique' | 'none' | 'multiple' | 'aborted', label: string) => {
