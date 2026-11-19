@@ -311,8 +311,15 @@ export class PlayView {
   /**
    * Hint: first point out any lines or X marks that don't fit the solution;
    * otherwise show the simplest logical next step (without drawing it).
+   * Pressing it again while a hint is showing (or still thinking) hides it.
    */
   private async showHint() {
+    if (this.shownHint) {
+      this.shownHint = null;
+      this.changeCount++; // drops a hint that is still being worked out
+      this.render();
+      return;
+    }
     const changes = this.changeCount;
     if (this.segments.size || this.xMarks.size) {
       this.shownHint = { kind: 'none', text: 'Thinking…' };
