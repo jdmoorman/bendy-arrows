@@ -379,17 +379,24 @@ export class LibraryView {
         } else {
           const f = (this.state.filters[c.key] ?? {}) as { min?: number; max?: number };
           const values = this.rows.map((r) => c.value(r)).filter((v): v is number => typeof v === 'number');
-          const lo = values.length ? Math.min(...values) : 0;
           const hi = values.length ? Math.max(...values) : 0;
           const range = el('div', 'range-row');
           const input = (which: 'min' | 'max') => {
             const i = el('input', 'text-input') as HTMLInputElement;
             i.type = 'number';
             i.inputMode = 'numeric';
-            i.placeholder = String(which === 'min' ? lo : hi);
+            // The lower bound starts its hint at 0; the upper one at the largest value there is.
+            i.placeholder = String(which === 'min' ? 0 : hi);
             i.setAttribute('aria-label', `${c.label} ${which === 'min' ? 'at least' : 'at most'}`);
             if (f[which] !== undefined) i.value = String(f[which]);
-            i.addEventListener('input', () => {
+            let wasEmpty = i.value === '';
+            i.addEventListener('input', (ev) => {
+              // The arrows step an empty field from 0; step from the faint number shown instead.
+              // (Typing reports an inputType; a step doesn't.)
+              if (wasEmpty && i.value !== '' && !(ev as InputEvent).inputType) {
+                i.value = String(Number(i.placeholder) + Math.sign(Number(i.value)));
+              }
+              wasEmpty = i.value === '';
               const n = i.value.trim() === '' ? undefined : Number(i.value);
               const cur = (this.state.filters[c.key] ?? {}) as { min?: number; max?: number };
               this.setFilter(c.key, { ...cur, [which]: Number.isFinite(n) ? n : undefined });
