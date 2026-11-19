@@ -10,20 +10,20 @@ export function applySettings(s: Settings): void {
   setShowCoordinates(s.coordinates);
 }
 
-const SWITCHES: { key: keyof Settings; label: string; hint: string }[] = [
-  { key: 'darkTheme', label: 'Dark theme', hint: 'Light lines on a dark board' },
-  { key: 'checkerboard', label: 'Checkerboard shading', hint: 'Faintly shade every other tile' },
-  { key: 'coordinates', label: 'Coordinates', hint: 'Letters for the columns (A, B, …) and numbers for the rows (1, 2, …) around the board' },
-  { key: 'autoCheck', label: 'Auto-check', hint: 'Highlight lines and X marks that don’t match the solution as you play' },
+const SWITCHES: { key: keyof Settings; label: string }[] = [
+  { key: 'darkTheme', label: 'Dark theme' },
+  { key: 'checkerboard', label: 'Checkerboard shading' },
+  { key: 'coordinates', label: 'Grid coordinates' },
+  { key: 'autoCheck', label: 'Auto-check' },
 ];
 
 /** The settings sheet: one switch per setting, saved as soon as it changes. */
 export function openSettingsSheet(current: Settings, onChange: (s: Settings) => void): void {
   const body = el('div', 'sheet-stack');
-  for (const { key, label, hint } of SWITCHES) {
+  for (const { key, label } of SWITCHES) {
     const row = el('label', 'switch-row');
     const text = el('span', 'switch-text');
-    text.append(document.createTextNode(label), Object.assign(el('small'), { textContent: hint }));
+    text.append(document.createTextNode(label));
     const input = el('input', 'switch') as HTMLInputElement;
     input.type = 'checkbox';
     input.setAttribute('role', 'switch');
