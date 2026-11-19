@@ -20,7 +20,7 @@ import type { Puzzle } from './model';
 import type { Progress } from './play';
 import type { RatingMessage } from './rating.worker';
 import { newId, type LibraryEntry, type Storage } from './storage';
-import { exportText, parseImport } from './library-io';
+import { exportText, packText, parseImport } from './library-io';
 import { defaultName } from './save-ui';
 import { el, openSheet, toast } from './ui';
 
@@ -226,6 +226,17 @@ export class LibraryView {
         this.changed();
       });
       this.count.append(' · ', clear);
+      // Export everything the search and filters leave, in the table's order, as a level pack.
+      if (shown.length) {
+        const exp = el('button', 'link-btn', `Export ${shown.length} shown`);
+        exp.addEventListener('click', () => {
+          const sets = [...new Set(shown.map((r) => r.collection))];
+          const base = sets.length === 1 ? sets[0].replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase() : 'bendy-arrows-pack';
+          downloadText(`${base || 'bendy-arrows-pack'}-${dateKey()}.txt`, packText(shown, location.href));
+          toast(`Exported ${shown.length} puzzle${shown.length === 1 ? '' : 's'}.`);
+        });
+        this.count.append(' · ', exp);
+      }
       // Delete everything the search and filters leave, e.g. one imported Collection.
       const entries = shown.flatMap((r) => (r.entry ? [r.entry] : []));
       if (entries.length) {

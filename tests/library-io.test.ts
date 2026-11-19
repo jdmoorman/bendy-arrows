@@ -23,3 +23,12 @@ describe('library export and import', () => {
     });
   });
 });
+
+describe('packText', () => {
+  test('keeps the order given, one importable line per puzzle', async () => {
+    const { packText, parseImport } = await import('../src/library-io');
+    const text = packText([{ name: 'B', code: 'BhjgNrc' }, { name: 'A', code: 'BjChNSo' }], 'https://example.com/app/');
+    expect(text).toBe('B — https://example.com/app/#p=BhjgNrc\nA — https://example.com/app/#p=BjChNSo\n');
+    expect(parseImport(text).puzzles.map((x) => x.name)).toEqual(['B', 'A']);
+  });
+});

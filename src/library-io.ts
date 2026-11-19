@@ -18,8 +18,12 @@ export function linkFor(code: string, base: string): string {
 
 /** The export file: one "Name — link" line per entry, oldest first. */
 export function exportText(entries: LibraryEntry[], base: string): string {
-  const lines = [...entries].sort((a, b) => a.created - b.created).map((e) => `${e.name.trim()}${SEPARATOR}${linkFor(e.code, base)}`);
-  return lines.join('\n') + '\n';
+  return packText([...entries].sort((a, b) => a.created - b.created), base);
+}
+
+/** One "Name — link" line per puzzle, in the order given (a level pack keeps its order). */
+export function packText(puzzles: { name: string; code: string }[], base: string): string {
+  return puzzles.map((e) => `${e.name.trim()}${SEPARATOR}${linkFor(e.code, base)}`).join('\n') + '\n';
 }
 
 export interface ImportedPuzzle {
