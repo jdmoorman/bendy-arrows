@@ -39,6 +39,11 @@ export interface GenOptions {
   minimal: boolean;
   /** At most this many obstacles (walls plus black tiles); no limit if missing. */
   maxObstacles?: number;
+  /**
+   * Lay out the starting walls and black tiles instead of scattering black tiles (the path is
+   * then chosen around them, and minimal clues may remove them). False to give up this try.
+   */
+  prepare?: (p: Puzzle, rand: () => number) => boolean;
   /** Share of tiles to start black, as [min, max] (default depends on `clues`); minimal clues removes unneeded ones. */
   blackDensity?: [number, number];
   /** How many tries before settling for the closest (default: no limit, keep trying until one matches or it's cancelled). */
@@ -156,9 +161,13 @@ const pick = <T>(rand: () => number, xs: T[]): T => xs[Math.floor(rand() * xs.le
 function attemptPuzzle(opts: GenOptions, rand: () => number): Puzzle | null {
   const { w, h, clues } = opts;
   const p = createPuzzle(w, h);
-  const [lo, hi] = opts.blackDensity ?? (clues === 'tiles' ? [0.08, 0.2] : [0, 0.08]);
-  const density = clues === 'walls' ? 0 : lo + rand() * (hi - lo);
-  if (!addBlackTiles(p, rand, density)) return null;
+  if (opts.prepare) {
+    if (!opts.prepare(p, rand) || !openTilesOk(p)) return null;
+  } else {
+    const [lo, hi] = opts.blackDensity ?? (clues === 'tiles' ? [0.08, 0.2] : [0, 0.08]);
+    const density = clues === 'walls' ? 0 : lo + rand() * (hi - lo);
+    if (!addBlackTiles(p, rand, density)) return null;
+  }
 
   let unique: Puzzle | null;
   if (clues === 'tiles') {
@@ -196,8 +205,8 @@ function addBlackTiles(p: Puzzle, rand: () => number, density: number): boolean 
   return true;
 }
 
-/** Open tiles are connected and none is a dead end. */
-function openTilesOk(p: Puzzle): boolean {
+/** Open tiles are connected and none is a dead end (black tiles only; walls aren't checked). */
+export function openTilesOk(p: Puzzle): boolean {
   const open = openCells(p);
   if (open.length < 4) return false;
   for (const c of open) if (neighbors(p, c).filter((m) => !p.blocked.has(m)).length < 2) return false;
@@ -233,7 +242,7 @@ function randomHamiltonian(p: Puzzle, rand: () => number): number[] | null {
   const backbite = () => {
     if (rand() < 0.5) path.reverse();
     const end = path[path.length - 1];
-    const options = neighbors(p, end).filter((m) => open(m) && m !== path[path.length - 2]);
+    const options = neighbors(p, end).filter((m) => open(m) && m !== path[path.length - 2] && !p.walls.has(edgeBetween(p, end, m)));
     if (!options.length) return;
     const i = path.indexOf(pick(rand, options));
     // Join the end to tile i and reverse the part after it.
@@ -247,7 +256,7 @@ function randomHamiltonian(p: Puzzle, rand: () => number): number[] | null {
 
 /** Any Hamiltonian path: a snake on an open grid, otherwise the solver's first find. */
 function startingPath(p: Puzzle): number[] | null {
-  if (!p.blocked.size) {
+  if (!p.blocked.size && !p.walls.size) {
     const out: number[] = [];
     for (let r = 0; r < p.h; r++) for (let i = 0; i < p.w; i++) out.push(r * p.w + (r % 2 ? p.w - 1 - i : i));
     return out;
