@@ -39,6 +39,8 @@ export interface GenOptions {
   minimal: boolean;
   /** At most this many obstacles (walls plus black tiles); no limit if missing. */
   maxObstacles?: number;
+  /** Share of tiles to start black, as [min, max] (default depends on `clues`); minimal clues removes unneeded ones. */
+  blackDensity?: [number, number];
   /** How many tries before settling for the closest (default: no limit, keep trying until one matches or it's cancelled). */
   attempts?: number;
   seed: number;
@@ -154,7 +156,8 @@ const pick = <T>(rand: () => number, xs: T[]): T => xs[Math.floor(rand() * xs.le
 function attemptPuzzle(opts: GenOptions, rand: () => number): Puzzle | null {
   const { w, h, clues } = opts;
   const p = createPuzzle(w, h);
-  const density = clues === 'walls' ? 0 : clues === 'tiles' ? 0.08 + rand() * 0.12 : rand() * 0.08;
+  const [lo, hi] = opts.blackDensity ?? (clues === 'tiles' ? [0.08, 0.2] : [0, 0.08]);
+  const density = clues === 'walls' ? 0 : lo + rand() * (hi - lo);
   if (!addBlackTiles(p, rand, density)) return null;
 
   let unique: Puzzle | null;
