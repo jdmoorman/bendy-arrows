@@ -206,8 +206,12 @@ export function deductions(p: Puzzle, state: LogicState, rules: Iterable<RuleId>
 }
 
 export function logicStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>, opts: LogicOptions = {}): StepResult {
+  return stepFrom(p, state, analyse(p, state, new Set(rules), opts));
+}
+
+/** The marks an analysis adds, checked for rules that disagree. */
+function stepFrom(p: Puzzle, state: LogicState, an: Analysis): StepResult {
   const result: StepResult = { segments: [], xs: [], byRule: {}, solved: false };
-  const an = analyse(p, state, new Set(rules), opts);
   if (an.kind === 'contradiction') {
     const { kind: _, ...c } = an;
     result.contradiction = c;
@@ -336,6 +340,86 @@ export function hintJourney(p: Puzzle, opts: LogicOptions = {}): { steps: HintSt
   return { steps, outcome: 'stuck' };
 }
 
+/** How hidden the moves are, round by round (see `searchMetrics`). */
+export interface SearchMetrics {
+  /** The most undecided borders per available move at any round: high when one move hides on an open board. */
+  tightest: number;
+  /** Undecided borders per available move, added up over every round: the whole search. */
+  effort: number;
+  /** Rounds where the easy rules had nothing and all the rules were needed. */
+  hardRounds: number;
+  /** The rules ran out (or contradicted) before the end. */
+  stuck: boolean;
+}
+
+/**
+ * How hard the moves are to find. In each round, count the places a move can be made (the
+ * easy rules' moves, or when there are none, every rule's), then make them (only the hint's
+ * move, when the easy rules had none, as in `hintJourney`). A place is a
+ * group of deductions sharing a mark, so a corner's two lines, or a line both of its tiles
+ * force, are one place. Each round scores undecided borders per place: one move on a mostly
+ * open board scores high, the last move on a nearly full one scores low.
+ */
+export function searchMetrics(p: Puzzle, opts: LogicOptions = {}): SearchMetrics {
+  const easy = new Set(ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r)));
+  const all = new Set(ALL_RULES);
+  const need = needs(p);
+  const out: SearchMetrics = { tightest: 0, effort: 0, hardRounds: 0, stuck: false };
+  let state: LogicState = { segments: new Set(), xs: new Set() };
+  for (let i = 0; i <= edgeCount(p); i++) {
+    let an = analyse(p, state, easy, opts);
+    let hard = false;
+    if (an.kind === 'open' && !an.deductions.length) {
+      an = analyse(p, state, all, opts);
+      hard = true;
+    }
+    if (an.kind === 'solved') return out;
+    if (an.kind === 'contradiction' || !an.deductions.length) {
+      out.stuck = true;
+      return out;
+    }
+    if (hard) out.hardRounds++;
+    const places = movePlaces(an.deductions, state);
+    const closed = fullTileBorders(p, state, need);
+    let undecided = 0;
+    for (let e = 0; e < edgeCount(p); e++) {
+      if (isUsableEdge(p, e) && !state.segments.has(e) && !state.xs.has(e) && !closed.has(e)) undecided++;
+    }
+    const score = undecided / Math.max(1, places);
+    out.tightest = Math.max(out.tightest, score);
+    out.effort += score;
+    // Easy moves are all made at once; a hard round makes just the move a hint would show, as in
+    // the hint journey, and the easy rules carry on from there.
+    const pick = hard ? simplest(an.deductions) : undefined;
+    const step = stepFrom(p, state, pick ? { kind: 'open', deductions: [pick] } : an);
+    if (step.contradiction || (!step.segments.length && !step.xs.length)) {
+      out.stuck = true;
+      return out;
+    }
+    state = applyStep(state, step);
+  }
+  out.stuck = true;
+  return out;
+}
+
+/** Groups of deductions that share a new mark: each group is one place to make a move. */
+function movePlaces(ds: Deduction[], state: LogicState): number {
+  const parent = ds.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const byEdge = new Map<number, number>();
+  const fresh = new Set<number>();
+  ds.forEach((d, i) => {
+    for (const e of [...d.segments, ...d.xs]) {
+      if (state.segments.has(e) || state.xs.has(e)) continue;
+      fresh.add(i);
+      const j = byEdge.get(e);
+      if (j === undefined) byEdge.set(e, i);
+      else parent[find(i)] = find(j);
+    }
+  });
+  return new Set([...fresh].map(find)).size;
+}
+
 /** Simplest rules first: the order hints are chosen in. */
 export const HINT_ORDER: RuleId[] = ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'noSeal', 'bottlenecks', 'balance'];
 
@@ -358,18 +442,25 @@ export function findHint(p: Puzzle, state: LogicState, rules: Iterable<RuleId> =
   const an = analyse(p, state, new Set(order), opts);
   if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
   if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
+  const d = simplest(an.deductions, order);
+  if (d) return { kind: 'deduction', deduction: d, text: explain(p, state, d) };
+  return { kind: 'none', text: 'No hint available.' };
+}
+
+/** The deduction a hint would show: simplest rule first, then the simplest use of it. */
+function simplest(ds: Deduction[], order: RuleId[] = HINT_ORDER): Deduction | undefined {
   for (const rule of order) {
     // Within a rule, the simplest: the fewest exits (Checkerboard balance), then the smallest
     // area (or shortest piece), then the fewest marks, then top-left first.
     const exits = (x: Deduction) => x.exits ?? 0;
     const size = (x: Deduction) => x.cells?.length ?? x.size ?? 1;
     const marks = (x: Deduction) => x.segments.length + x.xs.length;
-    const d = an.deductions
+    const d = ds
       .filter((x) => x.rule === rule)
       .sort((a, b) => exits(a) - exits(b) || size(a) - size(b) || marks(a) - marks(b) || a.cell - b.cell)[0];
-    if (d) return { kind: 'deduction', deduction: d, text: explain(p, state, d) };
+    if (d) return d;
   }
-  return { kind: 'none', text: 'No hint available.' };
+  return undefined;
 }
 
 const DIR_NAMES = (p: Puzzle, cell: number, e: number): string => {

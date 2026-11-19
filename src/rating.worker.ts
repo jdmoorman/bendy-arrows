@@ -2,7 +2,7 @@
 import { decodePuzzle } from './codec';
 import { rateDifficulty } from './generator';
 import type { Rating } from './library-table';
-import { hintJourney } from './logic';
+import { hintJourney, searchMetrics } from './logic';
 import { solve } from './solver';
 
 export type RatingMessage = { code: string; rating: Rating };
@@ -18,14 +18,17 @@ ctx.onmessage = (ev: MessageEvent<RatingRequest>) => {
     try {
       const p = decodePuzzle(code);
       const unique = solve(p, { maxSolutions: 2 }).status === 'unique';
-      rating = { unique, difficulty: unique ? rateDifficulty(p) : null, hints: null };
+      rating = { unique, difficulty: unique ? rateDifficulty(p) : null, hints: null, tightest: null, effort: null };
       if (unique) {
         const j = hintJourney(p);
         rating.hints = j.steps.length;
         if (j.outcome === 'stuck') rating.hintsStuck = true;
+        const m = searchMetrics(p);
+        rating.tightest = Math.round(m.tightest);
+        rating.effort = Math.round(m.effort);
       }
     } catch {
-      rating = { unique: false, difficulty: null, hints: null };
+      rating = { unique: false, difficulty: null, hints: null, tightest: null, effort: null };
     }
     ctx.postMessage({ code, rating } satisfies RatingMessage);
   }

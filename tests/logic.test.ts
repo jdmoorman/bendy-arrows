@@ -413,3 +413,19 @@ describe('hintJourney', async () => {
     }
   });
 });
+
+describe('searchMetrics', async () => {
+  const { hintJourney, searchMetrics } = await import('../src/logic');
+  const { decodePuzzle } = await import('../src/codec');
+  const { SAMPLES } = await import('../src/samples');
+  test('the samples get scores, with hard rounds only where the easy rules need help', () => {
+    for (const s of SAMPLES.filter((x) => !x.group && x.level !== 'veryhard')) {
+      const p = decodePuzzle(s.code);
+      const m = searchMetrics(p);
+      expect(m.stuck, s.name).toBe(false);
+      expect(m.tightest, s.name).toBeGreaterThan(0);
+      expect(m.effort, s.name).toBeGreaterThanOrEqual(m.tightest);
+      expect(m.hardRounds > 0, s.name).toBe(hintJourney(p).steps.length > 0);
+    }
+  });
+});

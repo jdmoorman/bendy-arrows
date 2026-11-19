@@ -26,6 +26,10 @@ export interface LibRow {
   hints?: number | null;
   /** The easy rules and hints got stuck before the end, so it takes more than `hints`. */
   hintsStuck?: boolean;
+  /** Undecided borders per available move at the hardest-to-find moment (undefined while not worked out). */
+  tightest?: number | null;
+  /** Undecided borders per available move, summed over the solve. */
+  effort?: number | null;
   w: number;
   h: number;
   tiles: number;
@@ -45,6 +49,9 @@ export interface Rating {
   hints?: number | null;
   /** The hints ran out before the puzzle was solved. */
   hintsStuck?: boolean;
+  /** How hidden the moves are (see searchMetrics in logic.ts); missing in old ratings. */
+  tightest?: number | null;
+  effort?: number | null;
 }
 
 export const COLLECTIONS: Record<SampleGroup | 'samples' | 'yours' | 'levels', string> = {
@@ -83,7 +90,7 @@ function facts(code: string) {
   return f;
 }
 
-const hintsOf = (r: Rating | undefined) => ({ hints: r?.hints, hintsStuck: r?.hintsStuck });
+const hintsOf = (r: Rating | undefined) => ({ hints: r?.hints, hintsStuck: r?.hintsStuck, tightest: r?.tightest, effort: r?.effort });
 
 /** Every saved puzzle and every sample not deleted on this device, as table rows. */
 export function libraryRows(storage: Storage, ratings: Record<string, Rating>): LibRow[] {
@@ -162,6 +169,20 @@ export const COLUMNS: Column[] = [
     kind: 'number',
     value: (r) => r.hints ?? null,
     show: (r) => (r.hints === undefined ? '…' : r.hints === null ? '—' : `${r.hints}${r.hintsStuck ? '+' : ''}`),
+  },
+  {
+    key: 'tightest',
+    label: 'Crux',
+    kind: 'number',
+    value: (r) => r.tightest ?? null,
+    show: (r) => (r.tightest === undefined ? '…' : r.tightest === null ? '—' : String(r.tightest)),
+  },
+  {
+    key: 'effort',
+    label: 'Effort',
+    kind: 'number',
+    value: (r) => r.effort ?? null,
+    show: (r) => (r.effort === undefined ? '…' : r.effort === null ? '—' : String(r.effort)),
   },
   { key: 'w', label: 'Width', short: 'W', kind: 'number', value: (r) => r.w },
   { key: 'h', label: 'Height', short: 'H', kind: 'number', value: (r) => r.h },

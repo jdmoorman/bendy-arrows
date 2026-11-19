@@ -446,9 +446,9 @@ export class LibraryView {
 
   // --- Background ratings ---------------------------------------------------
 
-  /** Work out the difficulty, uniqueness and hint steps of puzzles that haven't been rated. */
+  /** Work out the difficulty, uniqueness, hint steps and search metrics of puzzles that haven't been rated. */
   private rateMissing() {
-    const codes = [...new Set(this.rows.filter((r) => (r.entry && r.difficulty === undefined) || r.hints === undefined).map((r) => r.code))].filter((c) => !this.requested.has(c));
+    const codes = [...new Set(this.rows.filter((r) => (r.entry && r.difficulty === undefined) || r.hints === undefined || r.tightest === undefined).map((r) => r.code))].filter((c) => !this.requested.has(c));
     if (!codes.length) return;
     for (const c of codes) this.requested.add(c);
     if (!this.worker) {
@@ -461,6 +461,8 @@ export class LibraryView {
           if (r.code !== code) continue;
           r.hints = rating.hints;
           r.hintsStuck = rating.hintsStuck;
+          r.tightest = rating.tightest;
+          r.effort = rating.effort;
           // Levels and samples keep the difficulty they were published with.
           if (r.entry) {
             r.difficulty = rating.difficulty;
