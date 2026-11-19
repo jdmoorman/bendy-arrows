@@ -65,8 +65,8 @@ export const THEMES = {
     end: '#e6e9f0',
     error: '#ff5c7a',
     'error-fill': 'rgba(255, 92, 122, 0.18)',
-    success: '#5ee0a0',
-    ghost: 'rgba(94, 224, 160, 0.45)',
+    success: '#b5e8a0',
+    ghost: 'rgba(181, 232, 160, 0.45)',
     hover: 'rgba(94, 184, 255, 0.18)',
   },
   light: {
@@ -95,8 +95,8 @@ export const THEMES = {
     end: '#000000',
     error: '#d92d4b',
     'error-fill': 'rgba(217, 45, 75, 0.14)',
-    success: '#139a5b',
-    ghost: 'rgba(19, 154, 91, 0.38)',
+    success: '#4e8f36',
+    ghost: 'rgba(106, 168, 82, 0.38)',
     hover: 'rgba(37, 99, 235, 0.1)',
   },
 } satisfies Record<string, ThemeTokens>;
