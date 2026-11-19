@@ -119,17 +119,22 @@ type Analysis =
   | { kind: 'solved' }
   | { kind: 'open'; deductions: Deduction[] };
 
+/** Loops this small (a 2×2 or 2×3 ring of tiles) are obvious: no X is needed to rule them out. */
+const OBVIOUS_LOOP = 6;
+
 /**
- * Borders that are closed because a tile next to them already has all its
- * lines. This is taken as understood: no rule step or hint is spent on it.
+ * Borders that are closed because a tile next to them already has all its lines, or
+ * because a line there would close an obvious little loop (OBVIOUS_LOOP tiles or fewer).
+ * These are taken as understood: no rule step or hint is spent on them.
  */
-function fullTileBorders(p: Puzzle, state: LogicState, need: Int8Array): Set<number> {
+function closedBorders(p: Puzzle, state: LogicState, need: Int8Array): Set<number> {
   const closed = new Set<number>();
   for (const c of openCells(p)) {
     const edges = cellEdges(p, c);
     if (edges.filter((e) => state.segments.has(e)).length !== need[c]) continue;
     for (const e of edges) if (!state.segments.has(e)) closed.add(e);
   }
+  for (const { edge, size } of earlyLoopEdges(p, state, need)) if (size <= OBVIOUS_LOOP) closed.add(edge);
   return closed;
 }
 
@@ -153,7 +158,7 @@ export interface LogicOptions {
 function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: LogicOptions = {}): Analysis {
   const need = needs(p);
   const open = openCells(p);
-  const closed = fullTileBorders(p, state, need);
+  const closed = closedBorders(p, state, need);
   const deductions: Deduction[] = [];
   let allDone = true;
   for (const c of open) {
@@ -177,6 +182,7 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
   if (allDone) return { kind: 'solved' };
   if (enabled.has('noLoops')) {
     for (const { edge: e, size } of earlyLoopEdges(p, state, need)) {
+      if (size <= OBVIOUS_LOOP) continue; // already closed: obvious
       deductions.push({ rule: 'noLoops', cell: edgeCells(p, e)[0], segments: [], xs: [e], size });
     }
   }
@@ -380,7 +386,7 @@ export function searchMetrics(p: Puzzle, opts: LogicOptions = {}): SearchMetrics
     }
     if (hard) out.hardRounds++;
     const places = movePlaces(an.deductions, state);
-    const closed = fullTileBorders(p, state, need);
+    const closed = closedBorders(p, state, need);
     let undecided = 0;
     for (let e = 0; e < edgeCount(p); e++) {
       if (isUsableEdge(p, e) && !state.segments.has(e) && !state.xs.has(e) && !closed.has(e)) undecided++;

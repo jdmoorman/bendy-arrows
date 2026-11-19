@@ -58,12 +58,21 @@ describe('logic rules', () => {
     expect(step.segments).toEqual(expect.arrayContaining([edgeBetween(p, 0, 1), edgeBetween(p, 1, 2)]));
   });
 
-  test('no early loops: the border that would close a small loop gets an X', () => {
-    // (On a 3x3 the full tiles would wall the top-right corner off, a contradiction.)
+  test('no early loops: the border that would close a loop gets an X', () => {
     const p = board(4, 4);
-    const state: LogicState = { segments: pathEdges(p, [[0, 0], [0, 1], [1, 1], [1, 0]]), xs: new Set() };
-    const step = logicStep(p, state, ['noLoops']);
+    const ring = [[0, 0], [0, 1], [0, 2], [0, 3], [1, 3], [1, 2], [1, 1], [1, 0]] as [number, number][];
+    const step = logicStep(p, { segments: pathEdges(p, ring), xs: new Set() }, ['noLoops']);
     expect(step.xs).toEqual([edgeBetween(p, 0, 4)]);
+  });
+
+  test('no early loops: a loop of 4 or 6 tiles is obvious, so its border needs no X but counts as closed', () => {
+    const p = board(4, 4);
+    // A U of four tiles in the middle, open at the bottom left (the border 5-9 would close it).
+    const state: LogicState = { segments: pathEdges(p, [[2, 1], [1, 1], [1, 2], [2, 2]]), xs: new Set() };
+    expect(logicStep(p, state, ['noLoops']).xs).toEqual([]);
+    // In a corner, that closed border leaves tile 0 one way out for its two lines: a contradiction.
+    const corner: LogicState = { segments: pathEdges(p, [[1, 0], [1, 1], [0, 1], [0, 0]]), xs: new Set() };
+    expect(logicStep(p, corner, ['continue']).contradiction).toBeDefined();
   });
 
   test('no early finish: joining both path ends too soon gets an X', () => {
@@ -191,13 +200,14 @@ describe('findHint', async () => {
     const { deductions } = await import('../src/logic');
     const p = board(6, 6);
     const piece = (cells: number[]) => cells.slice(1).map((c, i) => edgeBetween(p, cells[i], c));
-    // A 6-tile U at the top left and a 4-tile U in the middle, each one border from closing.
-    const state: LogicState = { segments: new Set([...piece([0, 1, 2, 8, 7, 6]), ...piece([16, 17, 23, 22])]), xs: new Set() };
+    // A 6-tile U at the top and a 4-tile U at the right are obvious (no X); an 8-tile U along the
+    // bottom left is not.
+    const state: LogicState = {
+      segments: new Set([...piece([1, 2, 3, 9, 8, 7]), ...piece([16, 17, 23, 22]), ...piece([24, 25, 26, 27, 33, 32, 31, 30])]),
+      xs: new Set(),
+    };
     const loops = deductions(p, state, ['noLoops']);
-    expect(loops.map((d) => [d.xs[0], d.size])).toEqual([
-      [edgeBetween(p, 0, 6), 6],
-      [edgeBetween(p, 16, 22), 4],
-    ]);
+    expect(loops.map((d) => [d.xs[0], d.size])).toEqual([[edgeBetween(p, 24, 30), 8]]);
   });
 
   test('only uses the rules it is given', () => {
