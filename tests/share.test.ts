@@ -23,3 +23,13 @@ describe('share parsing', () => {
     expect(() => puzzleFromText('  ')).toThrow();
   });
 });
+
+describe('hashWantsEditor', () => {
+  test('only "&edit" after the puzzle asks for the editor', async () => {
+    const { hashWantsEditor, puzzleFromHash } = await import('../src/share');
+    expect(hashWantsEditor('#p=BhjgNrc&edit')).toBe(true);
+    expect(hashWantsEditor('#p=BhjgNrc')).toBe(false);
+    expect(hashWantsEditor('#p=BhjgNrc&editor')).toBe(false);
+    expect(puzzleFromHash('#p=BhjgNrc&edit')).not.toBeNull();
+  });
+});

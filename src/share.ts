@@ -17,6 +17,11 @@ export function puzzleFromHash(hash: string): Puzzle | null {
   return m ? decodePuzzle(m[1]) : null;
 }
 
+/** The link asks for the editor ("#p=CODE&edit") rather than Play. */
+export function hashWantsEditor(hash: string): boolean {
+  return /(?:^#|&)edit(?:&|$)/.test(hash);
+}
+
 /** Accept a full link, a "#p=…" fragment, a bare code, or JSON text. */
 export function puzzleFromText(text: string): Puzzle {
   const t = text.trim();

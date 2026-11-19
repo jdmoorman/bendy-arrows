@@ -293,13 +293,16 @@ export class LibraryView {
       if (r.status === 'Solved') tr.classList.add('solved');
       const name = el('th', 'lib-name-cell');
       name.scope = 'row';
-      const open = el('button', 'lib-open');
+      // Real links, so the browser offers Open in new tab (right-click, long press, Cmd-click);
+      // a plain click opens here, as before.
+      const open = el('a', 'lib-open') as HTMLAnchorElement;
+      open.href = `#p=${r.code}`;
       const title = el('span');
       title.textContent = r.name;
       open.append(title);
       if (r.status === 'Solved') open.append(el('span', 'lib-check', ICONS.check));
       open.setAttribute('aria-label', `Play ${r.name}`);
-      open.addEventListener('click', () => this.open(r, 'play'));
+      open.addEventListener('click', (ev) => this.followHere(ev, () => this.open(r, 'play')));
       name.append(open);
       tr.append(name);
       for (const c of cols) {
@@ -310,9 +313,10 @@ export class LibraryView {
         tr.append(td);
       }
       const actions = el('td', 'lib-actions');
-      const edit = el('button', 'btn icon', ICONS.edit);
+      const edit = el('a', 'btn icon', ICONS.edit) as HTMLAnchorElement;
+      edit.href = `#p=${r.code}&edit`;
       edit.setAttribute('aria-label', `Edit ${r.name}`);
-      edit.addEventListener('click', () => this.open(r, 'edit'));
+      edit.addEventListener('click', (ev) => this.followHere(ev, () => this.open(r, 'edit')));
       actions.append(edit);
       const del = el('button', 'btn icon', ICONS.clear);
       del.setAttribute('aria-label', `Delete ${r.name}`);
@@ -342,6 +346,13 @@ export class LibraryView {
       tbody.append(tr);
     }
     this.table.replaceChildren(thead, tbody);
+  }
+
+  /** A plain click on a puzzle link opens it here; with Cmd, Ctrl, Shift or Alt the browser handles it (a new tab or window). */
+  private followHere(ev: MouseEvent, openHere: () => void) {
+    if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+    ev.preventDefault();
+    openHere();
   }
 
   private open(r: LibRow, tab: 'play' | 'edit') {

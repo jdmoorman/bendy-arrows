@@ -10,7 +10,7 @@ import { PlayView, type Progress } from './play';
 import { LEVELS } from './levels';
 import { LOCAL_SAMPLES } from './samples';
 import { openSaveSheet } from './save-ui';
-import { openShareSheet, puzzleFromHash } from './share';
+import { hashWantsEditor, openShareSheet, puzzleFromHash } from './share';
 import { openSettingsSheet, applySettings } from './settings-ui';
 import { Storage } from './storage';
 import { openSolvedSheet } from './solved-ui';
@@ -253,8 +253,12 @@ function puzzleFromLocation(): Puzzle | null {
 }
 
 window.addEventListener('hashchange', () => {
+  // Read before loading: loading writes the plain "#p=CODE" back to the address.
+  const edit = hashWantsEditor(location.hash);
   const p = puzzleFromLocation();
-  if (p && !puzzlesEqual(p, playing)) loadPuzzle(p);
+  if (p && !puzzlesEqual(p, playing)) loadPuzzle(p, {}, edit ? 'edit' : 'play');
+  else if (p && edit) setTab('edit');
+  if (edit) updateHeader(); // drop "&edit" from the address once it's done its job
 });
 
 // Save progress when the page is hidden (phones often discard background tabs).
@@ -264,6 +268,8 @@ document.addEventListener('visibilitychange', () => {
 
 function start() {
   const fromLink = puzzleFromLocation();
+  // Read before loading: loading writes the plain "#p=CODE" back to the address.
+  const wantsEditor = hashWantsEditor(location.hash);
   const session = storage.loadSession();
   let sessionPuzzle: Puzzle | null = null;
   try {
@@ -282,7 +288,12 @@ function start() {
     // First visit, with no samples to start on: open the library, where the levels are.
     loadPuzzle(createPuzzle(6, 6), {}, 'library');
   }
-  if (session?.tab === 'edit' && session.editorCode && sessionPuzzle && puzzlesEqual(playing, sessionPuzzle)) {
+  // The address always holds the current puzzle, so a reload looks like a link: only a reload
+  // goes back to the tab you were on (and its unsaved editor work). A link opened anew (e.g.
+  // from the Library into a new tab) opens in Play, or in the editor when it ends in "&edit".
+  const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
+  const reload = nav?.type === 'reload' || !fromLink;
+  if (reload && session?.tab === 'edit' && session.editorCode && sessionPuzzle && puzzlesEqual(playing, sessionPuzzle)) {
     try {
       editor.load(decodePuzzle(session.editorCode));
       // We can't tell how much it was changed before the reload, so don't carry marks over.
@@ -292,7 +303,11 @@ function start() {
       /* ignore stale editor state */
     }
   }
-  if (session?.tab && sessionPuzzle && puzzlesEqual(playing, sessionPuzzle)) setTab(session.tab === 'play' && !editor.checkPlayable() ? 'edit' : session.tab);
+  if (reload && session?.tab && sessionPuzzle && puzzlesEqual(playing, sessionPuzzle)) {
+    setTab(session.tab === 'play' && !editor.checkPlayable() ? 'edit' : session.tab);
+  }
+  if (fromLink && wantsEditor) setTab('edit');
+  updateHeader();
   ready = true;
   saveSession();
 }
