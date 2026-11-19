@@ -2,6 +2,7 @@ import { ALL_RULES, applyStep, fastStep, type LogicOptions, type LogicState, typ
 import {
   cellCount,
   cellRC,
+  clonePuzzle,
   createPuzzle,
   edgeBetween,
   edgeCells,
@@ -367,6 +368,17 @@ function uniqueByTiles(p: Puzzle, rand: () => number): Puzzle | null {
     count = next;
   }
   return count === 1 ? p : null;
+}
+
+/**
+ * The editor's Simplify: take away, in random order, every obstacle the unique solution
+ * doesn't need. Null if the puzzle doesn't have exactly one solution to begin with.
+ */
+export function simplifyPuzzle(p: Puzzle, seed: number): Puzzle | null {
+  if (solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT }).status !== 'unique') return null;
+  const q = clonePuzzle(p);
+  minimise(q, seededRandom(seed));
+  return q;
 }
 
 /** Remove each clue that isn't needed for the solution to stay unique. */

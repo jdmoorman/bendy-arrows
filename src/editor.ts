@@ -25,6 +25,7 @@ import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHi
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
+import { simplifyInBackground } from './generator-client';
 import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from './new-puzzle-ui';
 
 type Tool = 'tiles' | 'walls' | 'ends';
@@ -126,7 +127,7 @@ export class EditorView {
           <button class="btn" data-act="new" aria-label="New blank puzzle" title="New blank puzzle">${ICONS.plus}</button>
           <button class="btn" data-act="generate" aria-label="Generate a puzzle" title="Generate a puzzle">${ICONS.dice}</button>
           <button class="btn" data-act="save" aria-label="Save to the library" title="Save">${ICONS.save}</button>
-          <button class="btn" data-act="transform" aria-label="Size, rotate and flip" title="Size, rotate and flip">${ICONS.transform}</button>
+          <button class="btn" data-act="transform" aria-label="Size, rotate, flip and simplify" title="Size, rotate, flip and simplify">${ICONS.transform}</button>
           <button class="btn primary" data-act="play">${ICONS.play}<span>Play</span></button>
         </div>
       </div>
@@ -360,7 +361,7 @@ export class EditorView {
     this.render();
   }
 
-  /** Grid size, rotate and flip, in one sheet that stays open while you try things. */
+  /** Grid size, rotate, flip and simplify, in one sheet that stays open while you try things. */
   private openTransformSheet() {
     const body = document.createElement('div');
     body.className = 'sheet-stack transform-sheet';
@@ -405,7 +406,46 @@ export class EditorView {
       grid.append(b);
     }
     body.append(grid);
-    openSheet('Size, rotate and flip', body);
+
+    // Simplify: take away the obstacles the unique solution doesn't need, in random order.
+    const simplify = document.createElement('button');
+    simplify.className = 'btn';
+    simplify.innerHTML = '<span>Simplify</span>';
+    simplify.title = 'Remove obstacles the unique solution doesn’t need, in random order';
+    simplify.addEventListener('click', async () => {
+      const before = this.puzzle;
+      const code = encodePuzzle(before);
+      const count = before.walls.size + before.blocked.size;
+      simplify.disabled = true;
+      simplify.querySelector('span')!.textContent = 'Simplifying…';
+      try {
+        const q = await simplifyInBackground(before).result;
+        // Edited in the meantime: the result is for a puzzle that's gone.
+        if (encodePuzzle(this.puzzle) !== code) return;
+        if (!q) {
+          this.setMessage('Simplify needs a puzzle with exactly one solution.', 'error');
+          return;
+        }
+        const removed = count - (q.walls.size + q.blocked.size);
+        if (!removed) {
+          this.setMessage('Every obstacle is needed: nothing to remove.');
+          return;
+        }
+        this.marksStillFit = false;
+        this.edit(() => q);
+        this.setMessage(`Simplified: removed ${removed} of ${count} obstacles.`, 'success');
+      } catch (err) {
+        this.setMessage(err instanceof Error ? err.message : String(err), 'error');
+      } finally {
+        simplify.disabled = false;
+        simplify.querySelector('span')!.textContent = 'Simplify';
+      }
+    });
+    const simplifyLabel = document.createElement('p');
+    simplifyLabel.className = 'field-label';
+    simplifyLabel.textContent = 'Remove obstacles the solution doesn’t need';
+    body.append(simplifyLabel, simplify);
+    openSheet('Size, rotate, flip and simplify', body);
   }
 
   /** Whether the easy rules are listed one by one in the Rules sheet. */

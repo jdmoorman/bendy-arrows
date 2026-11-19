@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { generate, isSymmetric, rateDifficulty, type ClueKind } from '../src/generator';
+import { generate, isSymmetric, rateDifficulty, simplifyPuzzle, type ClueKind } from '../src/generator';
 import { encodePuzzle } from '../src/codec';
 import { solve } from '../src/solver';
 
@@ -40,4 +40,21 @@ describe('several difficulties', () => {
     const r = generate({ w: 5, h: 5, difficulties: ['medium', 'hard'], clues: 'mixed', minimal: true, seed: 7 });
     expect(['medium', 'hard']).toContain(r.difficulty);
   }, 60000);
+});
+
+describe('simplifyPuzzle', async () => {
+  const { createPuzzle } = await import('../src/model');
+  test('leaves the solution unique with no spare obstacle, and refuses puzzles without one solution', () => {
+    // Not minimal: the generator leaves spare obstacles in.
+    const { puzzle } = generate({ w: 6, h: 6, difficulties: [], clues: 'walls', minimal: false, seed: 11 });
+    const q = simplifyPuzzle(puzzle, 3)!;
+    expect(q).not.toBeNull();
+    expect(solve(q, { maxSolutions: 2 }).status).toBe('unique');
+    expect(q.walls.size + q.blocked.size).toBeLessThanOrEqual(puzzle.walls.size + puzzle.blocked.size);
+    for (const e of q.walls) {
+      const r = { ...q, walls: new Set([...q.walls].filter((x) => x !== e)) };
+      expect(solve(r, { maxSolutions: 2 }).status, `wall ${e} is spare`).not.toBe('unique');
+    }
+    expect(simplifyPuzzle(createPuzzle(4, 4), 1)).toBeNull();
+  });
 });
