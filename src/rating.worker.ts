@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { decodePuzzle } from './codec';
 import { rateDifficulty } from './generator';
-import type { Rating } from './library-table';
+import { RATING_VERSION, type Rating } from './library-table';
 import { hintJourney, searchMetrics } from './logic';
 import { solve } from './solver';
 
@@ -18,7 +18,7 @@ ctx.onmessage = (ev: MessageEvent<RatingRequest>) => {
     try {
       const p = decodePuzzle(code);
       const unique = solve(p, { maxSolutions: 2 }).status === 'unique';
-      rating = { unique, difficulty: unique ? rateDifficulty(p) : null, hints: null, tightest: null, effort: null };
+      rating = { v: RATING_VERSION, unique, difficulty: unique ? rateDifficulty(p) : null, hints: null, tightest: null, effort: null };
       if (unique) {
         const j = hintJourney(p);
         rating.hints = j.steps.length;
@@ -28,7 +28,7 @@ ctx.onmessage = (ev: MessageEvent<RatingRequest>) => {
         rating.effort = Math.round(m.effort);
       }
     } catch {
-      rating = { unique: false, difficulty: null, hints: null, tightest: null, effort: null };
+      rating = { v: RATING_VERSION, unique: false, difficulty: null, hints: null, tightest: null, effort: null };
     }
     ctx.postMessage({ code, rating } satisfies RatingMessage);
   }

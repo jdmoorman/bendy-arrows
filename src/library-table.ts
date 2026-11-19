@@ -41,8 +41,16 @@ export interface LibRow {
   added?: number;
 }
 
+/**
+ * Bump when the logic changes in a way that changes ratings: older ratings are shown until
+ * the background worker has redone them.
+ */
+export const RATING_VERSION = 2;
+
 /** A puzzle's difficulty and uniqueness, worked out in the background for saved puzzles. */
 export interface Rating {
+  /** RATING_VERSION when it was worked out (missing before versions). */
+  v?: number;
   difficulty: Difficulty | null;
   unique: boolean;
   /** Steps beyond the easy rules: the lines under the editor's difficulty chip (missing in old ratings). */
