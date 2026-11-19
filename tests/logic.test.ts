@@ -320,7 +320,7 @@ describe('orientation', async () => {
   test('rooms for Checkerboard balance do not depend on which way the board faces', () => {
     // This 7×7 once rated very hard one way and hard mirrored: a tie in growing a
     // room was always broken towards the top left.
-    const p = decodePuzzle('BQQHBwANABgBAEACAAAACAAACAAAAAABEA');
+    const p = decodePuzzle('BjGm4YgNS8d_SYA');
     expect(rateDifficulty(p)).toBe(rateDifficulty(transformPuzzle(p, 'flipH')));
   }, 30000);
 });
@@ -330,7 +330,7 @@ describe('deduction areas', async () => {
   const { decodePuzzle } = await import('../src/codec');
   const { edgeCells: cellsOf } = await import('../src/model');
   test('a balance deduction keeps the area it used, not the room it grew into', () => {
-    const p = decodePuzzle('BQQHBwACAAsAAAAAAAAAhBQAEAAALAAABA');
+    const p = decodePuzzle('BjGhLYr-SEN9QHQ');
     for (const d of deductions(p, empty(), ['balance'])) {
       const area = new Set(d.cells);
       // Every mark it draws crosses the area's edge.
@@ -348,7 +348,7 @@ describe('area sources', async () => {
   const { edgeBetween: between } = await import('../src/model');
   const { SAMPLES } = await import('../src/samples');
   // Path 7×7 · walls: the bottom-row edge between columns 3 and 4 comes from an L-shaped room.
-  const p = decodePuzzle('BQQHBwACAAsAAAAAAAAAhBQAEAAALAAABA');
+  const p = decodePuzzle('BjGhLYr-SEN9QHQ');
   const target = between(p, 6 * 7 + 2, 6 * 7 + 3);
   const draws = (opts: object) => deductions(p, empty(), ['balance'], opts).some((d) => d.segments.includes(target));
   test('switching off rooms loses an area only rooms find', () => {

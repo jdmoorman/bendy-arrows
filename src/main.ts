@@ -37,8 +37,6 @@ app.innerHTML = `
 `;
 
 const storage = new Storage();
-// Puzzles with numbers are no longer supported: drop any still saved.
-storage.removeNumbersPuzzles();
 let settings = storage.loadSettings();
 applySettings(settings);
 const views = app.querySelector('.views')!;

@@ -1,4 +1,3 @@
-import { decodePuzzle, encodePuzzle, FORMAT_VERSION, NumbersNotSupported } from './codec';
 import type { Rating, TableState } from './library-table';
 import type { Progress } from './play';
 
@@ -47,7 +46,6 @@ const RATINGS_KEY = 'bendyarrows.ratings.v1';
 const HIDDEN_KEY = 'bendyarrows.hiddensamples.v1';
 const SHOW_SOLUTION_KEY = 'bendyarrows.showsolution.v1';
 /** The share-code format the stored codes were last rewritten to. */
-const CODE_FORMAT_KEY = 'bendyarrows.codeformat.v1';
 
 /** Per-device display preferences. */
 export interface Settings {
@@ -79,45 +77,6 @@ function defaultStore(): KeyValueStore | null {
 export class Storage {
   constructor(private store: KeyValueStore | null = defaultStore()) {
     this.migrateOldKeys();
-    this.migrateCodes();
-  }
-
-  /**
-   * Rewrite every stored share code in the current format, once per format change, so codes
-   * still match the ones the app makes now (solved puzzles, ratings and hidden samples are
-   * looked up by code). Codes that don't decode are left as they are.
-   */
-  private migrateCodes(): void {
-    if (!this.store || this.read<string | null>(CODE_FORMAT_KEY, null) === FORMAT_VERSION) return;
-    const canon = (code: string): string => {
-      try {
-        return encodePuzzle(decodePuzzle(code));
-      } catch {
-        return code;
-      }
-    };
-    const library = this.read<unknown>(LIBRARY_KEY, null);
-    if (Array.isArray(library)) {
-      this.write(LIBRARY_KEY, library.map((e) => (e && typeof e.code === 'string' ? { ...e, code: canon(e.code) } : e)));
-    }
-    const codeList = (key: string) => {
-      const xs = this.read<unknown>(key, null);
-      if (Array.isArray(xs)) this.write(key, xs.map((x) => (typeof x === 'string' ? canon(x) : x)));
-    };
-    codeList(SOLVED_KEY);
-    codeList(HIDDEN_KEY);
-    const ratings = this.read<unknown>(RATINGS_KEY, null);
-    if (ratings && typeof ratings === 'object') {
-      this.write(RATINGS_KEY, Object.fromEntries(Object.entries(ratings).map(([code, r]) => [canon(code), r])));
-    }
-    const session = this.read<Session | null>(SESSION_KEY, null);
-    if (session && typeof session === 'object') {
-      const s: Session = { ...session };
-      if (typeof s.code === 'string') s.code = canon(s.code);
-      if (typeof s.editorCode === 'string') s.editorCode = canon(s.editorCode);
-      this.write(SESSION_KEY, s);
-    }
-    this.write(CODE_FORMAT_KEY, FORMAT_VERSION);
   }
 
   /** Copy data saved under the old app name to the new keys (the old keys are left alone). */
@@ -194,21 +153,6 @@ export class Storage {
       LIBRARY_KEY,
       this.list().filter((e) => !gone.has(e.id)),
     );
-  }
-
-  /** Delete saved puzzles that have numbers, which are no longer supported. Returns how many. */
-  removeNumbersPuzzles(): number {
-    const all = this.list();
-    const keep = all.filter((e) => {
-      try {
-        decodePuzzle(e.code);
-      } catch (err) {
-        return !(err instanceof NumbersNotSupported);
-      }
-      return true;
-    });
-    if (keep.length < all.length) this.write(LIBRARY_KEY, keep);
-    return all.length - keep.length;
   }
 
   /** Record play progress for an entry, if it still holds this puzzle. */

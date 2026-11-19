@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'vitest';
-import { decodePuzzle, encodePuzzle } from '../src/codec';
 import { Storage, type KeyValueStore } from '../src/storage';
 
 class MemStore implements KeyValueStore {
@@ -15,25 +14,6 @@ class MemStore implements KeyValueStore {
 const entry = (id: string, updated: number) => ({ id, name: id, code: 'CODE' + id, created: 0, updated });
 
 describe('Storage', () => {
-  test('stored 0.5 codes are rewritten in the current format, once', () => {
-    const old = 'BQQKCgAEAAwAAAAAkAiAAAAgCAAAIAABCEAAAAAAAIAAAAJAAAABAkAAEA';
-    const now = encodePuzzle(decodePuzzle(old));
-    const store = new MemStore();
-    store.setItem('bendyarrows.library.v1', JSON.stringify([{ id: 'a', name: 'a', code: old, created: 0, updated: 0 }, entry('b', 1)]));
-    store.setItem('bendyarrows.solved.v1', JSON.stringify([old]));
-    store.setItem('bendyarrows.ratings.v1', JSON.stringify({ [old]: { difficulty: 'hard', unique: true } }));
-    store.setItem('bendyarrows.session.v1', JSON.stringify({ code: old, editorCode: old, progress: { segments: [], xMarks: [] } }));
-    const s = new Storage(store);
-    expect(s.findByCode(now)?.id).toBe('a');
-    expect(s.findByCode('CODEb')?.id).toBe('b'); // not a real code: left alone
-    expect(s.isSolved(now)).toBe(true);
-    expect(s.loadRatings()[now]).toEqual({ difficulty: 'hard', unique: true });
-    expect(s.loadSession()).toMatchObject({ code: now, editorCode: now });
-    // Done once: an old code saved afterwards stays as it is.
-    store.setItem('bendyarrows.solved.v1', JSON.stringify([old]));
-    expect(new Storage(store).isSolved(old)).toBe(true);
-  });
-
   test('put, list (newest first), remove', () => {
     const s = new Storage(new MemStore());
     s.put(entry('a', 1));

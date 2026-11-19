@@ -1,18 +1,10 @@
-import { cellCount, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, portCount, portEnd, type End, type Puzzle } from './model';
+import { cellCount, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, portCount, portEnd, type Puzzle } from './model';
 
 /**
  * Compact share code for a puzzle.
  *
- * Pre-release format versions are 0.x; the first byte holds the minor number.
- *   0.1  ends stored as tiles
- *   0.2  ends stored as frame ports
- *   0.3  each end is a tile or a frame port
- *   0.4  numbered checkpoints
- *   0.5  given segments removed (older codes' givens are ignored)
- *   0.6  bit-packed header and gap-coded obstacles (current)
- *
- * Numbered checkpoints (and tile ends, which opened as checkpoints) are no
- * longer supported: codes with them are refused with NumbersNotSupported.
+ * Pre-release format versions are 0.x; the first byte holds the minor number. Only the
+ * current one, 0.6, is read: older codes (0.1–0.5) were converted and are no longer opened.
  *
  * Layout (0.6): byte 0 is the version (6), then a bit stream, most significant bit first:
  *   5 bits each   width - 1, height - 1
@@ -21,34 +13,14 @@ import { cellCount, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, portCount, port
  *   3 bits        Rice parameter k
  *   Elias gamma   number of obstacles + 1
  *   per obstacle  gap since the previous one, Rice-coded with k (a run of 1s for
- *                 gap >> k, a 0, then the low k bits), over the same index space as
- *                 0.5: black tiles first, then walls
- *   padded with 0s to a byte. Sparse puzzles are far shorter than with a bitset.
- *
- * Layout (0.5):
- *   byte 0      format minor version (5)
- *   byte 1      bit 0 unused, bits 1-2 = number of ends,
- *               bit 3 = checkpoints follow the ends (refused)
- *   byte 2, 3   width, height
- *   2 bytes per end, big-endian, entrance first: frame port index
- *               (0.3–0.4 codes could set the top bit for a tile end: refused)
- *   bitset: blocked cells, then walls (LSB first), padded to a byte
- *               (0.4 and earlier also had a givens bitset after the walls)
- * The bytes are base64url-encoded without padding.
+ *                 gap >> k, a 0, then the low k bits), over one index space: black
+ *                 tiles first, then walls
+ *   padded with 0s to a byte. The bytes are base64url-encoded without padding.
  */
 
 /** Current puzzle format version (pre-release). */
 export const FORMAT_VERSION = '0.6';
 const VERSION_BYTE = 6;
-const CELL_FLAG = 0x8000;
-
-/** A code or file from when puzzles could have numbered checkpoints, which are gone. */
-export class NumbersNotSupported extends Error {
-  constructor() {
-    super('Puzzles with numbers are no longer supported.');
-    this.name = 'NumbersNotSupported';
-  }
-}
 
 export function encodePuzzle(p: Puzzle): string {
   const n = cellCount(p);
@@ -81,35 +53,8 @@ export function encodePuzzle(p: Puzzle): string {
 export function decodePuzzle(code: string): Puzzle {
   const bytes = fromBase64Url(code.trim());
   if (!bytes.length) throw new Error('Puzzle code is too short.');
-  const version = bytes[0];
-  if (version < 1 || version > VERSION_BYTE) throw new Error(`Unsupported puzzle format 0.${version}.`);
-  if (version === VERSION_BYTE) return decodePacked(bytes);
-  if (bytes.length < 4) throw new Error('Puzzle code is too short.');
-  const flags = bytes[1];
-  const w = bytes[2];
-  const h = bytes[3];
-  checkSize(w, h);
-  const p = createPuzzle(w, h);
-  const n = cellCount(p);
-  const e = edgeCount(p);
-  const nEnd = (flags >> 1) & 3;
-  if (version >= 4 && flags & 8) throw new NumbersNotSupported();
-  let off = 4;
-  for (let i = 0; i < nEnd; i++) {
-    const v = (bytes[off] << 8) | bytes[off + 1];
-    off += 2;
-    // 0.1 stored ends as tiles, and 0.3–0.4 could flag a tile end: both opened as numbers.
-    if (version === 1 || (version >= 3 && (v & CELL_FLAG) !== 0)) throw new NumbersNotSupported();
-    if (!(v < portCount(p))) throw new Error('Puzzle code has an end outside the frame.');
-    p.endpoints.push(portEnd(v));
-  }
-  // Formats before 0.5 also stored a givens bitset after the walls; it is ignored.
-  const bitCount = n + (version < 5 ? 2 : 1) * e;
-  if (bytes.length < off + Math.ceil(bitCount / 8)) throw new Error('Puzzle code is truncated.');
-  const get = (i: number) => (bytes[off + (i >> 3)] >> (i & 7)) & 1;
-  for (let i = 0; i < n; i++) if (get(i)) p.blocked.add(i);
-  for (let i = 0; i < e; i++) if (get(n + i)) p.walls.add(i);
-  return p;
+  if (bytes[0] !== VERSION_BYTE) throw new Error(`Unsupported puzzle format 0.${bytes[0]}.`);
+  return decodePacked(bytes);
 }
 
 /** Decode a 0.6 code (the version byte has been checked). */
@@ -193,17 +138,13 @@ class BitReader {
 
 export interface PuzzleJson {
   format: 'bendy-arrows-puzzle';
-  /** Format version, e.g. "0.2". */
+  /** Format version, e.g. "0.6". */
   version: string;
   width: number;
   height: number;
   blocked: number[];
   walls: number[];
-  /**
-   * Frame ends, entrance first: {"port": i}. (0.2 files list port indices as
-   * plain numbers. Tile ends, from 0.1 and 0.3 files, and the "checkpoints" of
-   * 0.4 files are numbers, which are refused.)
-   */
+  /** Frame ends, entrance first. */
   endpoints: { port: number }[];
   code: string;
 }
@@ -225,8 +166,7 @@ export function puzzleToJson(p: Puzzle): PuzzleJson {
 export function puzzleFromJson(value: unknown): Puzzle {
   if (!value || typeof value !== 'object') throw new Error('Not a puzzle file.');
   const j = value as Partial<PuzzleJson>;
-  // Files from before the rename say 'hamiltonian-puzzle'.
-  if (j.format !== 'bendy-arrows-puzzle' && (j.format as unknown) !== 'hamiltonian-puzzle') {
+  if (j.format !== 'bendy-arrows-puzzle') {
     if (typeof j.code === 'string') return decodePuzzle(j.code);
     throw new Error('Not a puzzle file.');
   }
@@ -234,8 +174,6 @@ export function puzzleFromJson(value: unknown): Puzzle {
   const h = Number(j.height);
   checkSize(w, h);
   const p = createPuzzle(w, h);
-  const n = cellCount(p);
-  const e = edgeCount(p);
   const ints = (xs: unknown, max: number, what: string): number[] => {
     if (xs === undefined) return [];
     if (!Array.isArray(xs)) throw new Error(`"${what}" must be a list.`);
@@ -244,28 +182,12 @@ export function puzzleFromJson(value: unknown): Puzzle {
       return x as number;
     });
   };
-  ints(j.blocked, n, 'blocked').forEach((c) => p.blocked.add(c));
-  ints(j.walls, e, 'walls').forEach((x) => p.walls.add(x));
-  const old = j as { checkpoints?: unknown };
-  if (Array.isArray(old.checkpoints) && old.checkpoints.length) throw new NumbersNotSupported();
-  p.endpoints = parseEnds(j.endpoints, j.version, portCount(p)).slice(0, 2);
+  ints(j.blocked, cellCount(p), 'blocked').forEach((c) => p.blocked.add(c));
+  ints(j.walls, edgeCount(p), 'walls').forEach((x) => p.walls.add(x));
+  if (j.endpoints !== undefined && !Array.isArray(j.endpoints)) throw new Error('"endpoints" must be a list.');
+  const ports = (j.endpoints ?? []).map((x) => (x && typeof x === 'object' ? (x as { port?: unknown }).port : undefined));
+  p.endpoints = ints(ports, portCount(p), 'endpoints').slice(0, 2).map(portEnd);
   return p;
-}
-
-function parseEnds(xs: unknown, version: unknown, ports: number): End[] {
-  if (xs === undefined) return [];
-  if (!Array.isArray(xs)) throw new Error('"endpoints" must be a list.');
-  const port = (i: unknown): End => {
-    if (!Number.isInteger(i) || (i as number) < 0 || (i as number) >= ports) throw new Error('"endpoints" contains an invalid index.');
-    return portEnd(i as number);
-  };
-  return xs.map((x) => {
-    // 0.1 files listed tiles as plain numbers, and 0.3 files could have {"cell": i}: numbers now.
-    if ((typeof x === 'number' && (version === '0.1' || version === 1)) || (x && typeof x === 'object' && 'cell' in x)) throw new NumbersNotSupported();
-    if (typeof x === 'number') return port(x);
-    if (x && typeof x === 'object' && 'port' in x) return port((x as { port: unknown }).port);
-    throw new Error('"endpoints" contains an invalid end.');
-  });
 }
 
 function checkSize(w: number, h: number) {

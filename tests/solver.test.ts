@@ -223,7 +223,7 @@ describe('suggested wall', async () => {
 
 describe('logic first', () => {
   // A mostly open 8×14 board: the search alone takes very long, the logic rules solve it at once.
-  const open = decodePuzzle('BQQIDgATABSDAQAAAAAAAAAAAAAAiAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+  const open = decodePuzzle('Bjtk1GcAUP_yMA');
   test('a puzzle the rules solve is unique without searching', () => {
     const r = solve(open);
     expect(r.status).toBe('unique');
