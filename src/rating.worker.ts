@@ -21,10 +21,15 @@ ctx.onmessage = (ev: MessageEvent<RatingRequest>) => {
     try {
       const p = decodePuzzle(code);
       const unique = solve(p, { maxSolutions: 2 }).status === 'unique';
-      rating = { unique, difficulty: unique ? rateDifficulty(p) : null };
-      if (unique && journey) steps = hintJourney(p);
+      rating = { unique, difficulty: unique ? rateDifficulty(p) : null, hints: null };
+      if (unique) {
+        const j = hintJourney(p);
+        rating.hints = j.steps.length;
+        if (j.outcome === 'stuck') rating.hintsStuck = true;
+        if (journey) steps = j;
+      }
     } catch {
-      rating = { unique: false, difficulty: null };
+      rating = { unique: false, difficulty: null, hints: null };
     }
     ctx.postMessage({ code, rating, journey: steps } satisfies RatingMessage);
   }

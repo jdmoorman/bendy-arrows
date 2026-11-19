@@ -22,6 +22,10 @@ export interface LibRow {
   difficulty?: Difficulty | null;
   /** Undefined while not checked yet. */
   unique?: boolean;
+  /** Hints a player alternating easy rules and hints needs (undefined while not worked out, null if not unique). */
+  hints?: number | null;
+  /** The easy rules and hints got stuck before the end, so it takes more than `hints`. */
+  hintsStuck?: boolean;
   w: number;
   h: number;
   tiles: number;
@@ -37,6 +41,10 @@ export interface LibRow {
 export interface Rating {
   difficulty: Difficulty | null;
   unique: boolean;
+  /** Steps beyond the easy rules: the lines under the editor's difficulty chip (missing in old ratings). */
+  hints?: number | null;
+  /** The hints ran out before the puzzle was solved. */
+  hintsStuck?: boolean;
 }
 
 export const COLLECTIONS: Record<SampleGroup | 'samples' | 'yours' | 'levels', string> = {
@@ -75,6 +83,8 @@ function facts(code: string) {
   return f;
 }
 
+const hintsOf = (r: Rating | undefined) => ({ hints: r?.hints, hintsStuck: r?.hintsStuck });
+
 /** Every saved puzzle and every sample not deleted on this device, as table rows. */
 export function libraryRows(storage: Storage, ratings: Record<string, Rating>): LibRow[] {
   const rows: LibRow[] = [];
@@ -92,7 +102,7 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
       continue;
     }
     const r = ratings[e.code];
-    rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: e.collection ?? COLLECTIONS.yours, sample: false, ...f, difficulty: r?.difficulty, unique: r?.unique, ...play(e.code, e), added: e.created });
+    rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: e.collection ?? COLLECTIONS.yours, sample: false, ...f, difficulty: r?.difficulty, unique: r?.unique, ...hintsOf(r), ...play(e.code, e), added: e.created });
   }
   // Official levels, shipped to everyone.
   LEVELS.forEach((l, i) => {
@@ -103,14 +113,14 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
       return;
     }
     const saved = storage.findByCode(l.code);
-    rows.push({ key: `level:${i}`, name: l.name, code: l.code, collection: COLLECTIONS.levels, sample: false, ...f, difficulty: l.level, unique: true, ...play(l.code, saved) });
+    rows.push({ key: `level:${i}`, name: l.name, code: l.code, collection: COLLECTIONS.levels, sample: false, ...f, difficulty: l.level, unique: true, ...hintsOf(ratings[l.code]), ...play(l.code, saved) });
   });
   const hidden = new Set(storage.loadHiddenSamples());
   LOCAL_SAMPLES.forEach((s, i) => {
     if (hidden.has(s.code)) return;
     const f = facts(s.code);
     const saved = storage.findByCode(s.code);
-    rows.push({ key: `sample:${i}`, name: s.name, code: s.code, collection: COLLECTIONS[s.group ?? 'samples'], sample: true, ...f, difficulty: s.level, unique: true, ...play(s.code, saved) });
+    rows.push({ key: `sample:${i}`, name: s.name, code: s.code, collection: COLLECTIONS[s.group ?? 'samples'], sample: true, ...f, difficulty: s.level, unique: true, ...hintsOf(ratings[s.code]), ...play(s.code, saved) });
   });
   return rows;
 }
@@ -145,6 +155,14 @@ export const COLUMNS: Column[] = [
     show: (r) => (r.difficulty ? DIFFICULTY_NAMES[r.difficulty] : r.difficulty === null ? '—' : '…'),
     choices: DIFFICULTY_ORDER.map((d) => DIFFICULTY_NAMES[d]),
   },
+  {
+    key: 'hints',
+    label: 'Hint steps',
+    short: 'Hints',
+    kind: 'number',
+    value: (r) => r.hints ?? null,
+    show: (r) => (r.hints === undefined ? '…' : r.hints === null ? '—' : `${r.hints}${r.hintsStuck ? '+' : ''}`),
+  },
   { key: 'w', label: 'Width', short: 'W', kind: 'number', value: (r) => r.w },
   { key: 'h', label: 'Height', short: 'H', kind: 'number', value: (r) => r.h },
   { key: 'tiles', label: 'Tiles to visit', short: 'Tiles', kind: 'number', value: (r) => r.tiles },
@@ -171,7 +189,7 @@ export const COLUMNS: Column[] = [
 ];
 
 /** Columns shown until the player picks their own. */
-export const DEFAULT_COLUMNS = ['difficulty', 'w', 'h', 'obstacles', 'symmetric', 'status'];
+export const DEFAULT_COLUMNS = ['difficulty', 'hints', 'w', 'h', 'obstacles', 'symmetric', 'status'];
 
 /** A filter on one column: allowed values for a choice column, a range for a number column. */
 export type Filter = { values: string[] } | { min?: number; max?: number };
