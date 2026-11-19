@@ -33,6 +33,8 @@ export class PlayView {
   /** Solutions of the puzzle, found once in the background when Hint first needs them. */
   private solutions: Promise<number[][]> | null = null;
   private solutionsRun: SolverRun | null = null;
+  /** The solutions once found, for auto-check (null until then). */
+  private knownSolutions: number[][] | null = null;
   /** Bumped on every change, so a slow hint can tell the board moved on. */
   private changeCount = 0;
   private solved = false;
@@ -122,6 +124,7 @@ export class PlayView {
     this.solutionsRun?.cancel();
     this.solutionsRun = null;
     this.solutions = null;
+    this.knownSolutions = null;
     this.changeCount++;
     const ok = (e: number) => isUsableEdge(p, e);
     this.segments = new Set((progress?.segments ?? []).filter(ok));
@@ -300,12 +303,30 @@ export class PlayView {
     if (!this.solutions) {
       const run = solveInBackground(this.puzzle, undefined, { maxSolutions: 50, nodeLimit: 5_000_000 });
       this.solutionsRun = run;
+      const puzzle = this.puzzle;
       this.solutions = run.result.then(
         (r) => r.solutions,
         () => [],
-      );
+      ).then((sols) => {
+        if (this.puzzle === puzzle) this.knownSolutions = sols;
+        return sols;
+      });
     }
     return this.solutions;
+  }
+
+  /**
+   * Auto-check: the lines and X marks that don't fit the solution (the closest one,
+   * if there are several). Nothing until the solutions are found in the background,
+   * and nothing if the puzzle is too big to solve.
+   */
+  private autoCheckEdges(): number[] {
+    if (!this.knownSolutions) {
+      if (!this.solutions) void this.findSolutions().then(() => this.autoCheck && this.render());
+      return [];
+    }
+    const best = closestWrong(this.knownSolutions, this.segments, this.xMarks);
+    return best ? [...best.lines, ...best.xs] : [];
   }
 
   /**
@@ -326,20 +347,11 @@ export class PlayView {
       this.render();
       const solutions = await this.findSolutions();
       if (changes !== this.changeCount) return; // the board changed meanwhile
-      if (solutions.length) {
-        // Compare with the solution closest to the board (puzzles from the editor may have several).
-        let best: { lines: number[]; xs: number[] } | null = null;
-        for (const sol of solutions) {
-          const used = new Set(sol);
-          const lines = [...this.segments].filter((e) => !used.has(e));
-          const xs = [...this.xMarks].filter((e) => used.has(e));
-          if (!best || lines.length + xs.length < best.lines.length + best.xs.length) best = { lines, xs };
-        }
-        if (best && best.lines.length + best.xs.length) {
-          this.shownHint = { kind: 'wrong', edges: [...best.lines, ...best.xs], text: wrongText(best.lines.length, best.xs.length) };
-          this.render();
-          return;
-        }
+      const best = closestWrong(solutions, this.segments, this.xMarks);
+      if (best && best.lines.length + best.xs.length) {
+        this.shownHint = { kind: 'wrong', edges: [...best.lines, ...best.xs], text: wrongText(best.lines.length, best.xs.length) };
+        this.render();
+        return;
       }
     }
     this.shownHint = findHint(this.puzzle, { segments: this.segments, xs: this.xMarks });
@@ -349,8 +361,8 @@ export class PlayView {
   render(): void {
     if (!this.puzzle) return;
     const live = checkSolution(this.puzzle, this.segments);
-    const errorCells = new Set<number>(this.autoCheck ? live.branches : []);
-    const errorEdges = new Set<number>(this.autoCheck ? [...live.loopEdges, ...live.illegalEdges] : []);
+    const errorCells = new Set<number>();
+    const errorEdges = new Set<number>(this.autoCheck && !live.solved ? this.autoCheckEdges() : []);
     if (!live.solved && this.shownHint?.kind === 'wrong') for (const e of this.shownHint.edges) errorEdges.add(e);
     // A shown hint is drawn on top of the board in the highlight colour.
     const hint = live.solved ? null : this.shownHint;
@@ -378,6 +390,18 @@ export class PlayView {
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;
   }
+}
+
+/** The marks that don't fit the solution closest to the board (puzzles from the editor may have several). */
+function closestWrong(solutions: number[][], segments: Set<number>, xMarks: Set<number>): { lines: number[]; xs: number[] } | null {
+  let best: { lines: number[]; xs: number[] } | null = null;
+  for (const sol of solutions) {
+    const used = new Set(sol);
+    const lines = [...segments].filter((e) => !used.has(e));
+    const xs = [...xMarks].filter((e) => used.has(e));
+    if (!best || lines.length + xs.length < best.lines.length + best.xs.length) best = { lines, xs };
+  }
+  return best;
 }
 
 /** What a Hint says about marks that don't fit the solution. */
