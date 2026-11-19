@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { decodePuzzle, encodePuzzle, NumbersNotSupported, puzzleFromJson, puzzleToJson } from '../src/codec';
-import { createPuzzle, edgeBetween, portEnd, portId, puzzlesEqual } from '../src/model';
+import { createPuzzle, edgeBetween, edgeCount, portCount, portEnd, portId, puzzlesEqual } from '../src/model';
 
 function sample() {
   const p = createPuzzle(7, 5);
@@ -30,6 +30,33 @@ describe('codec', () => {
     p.blocked.add(899);
     p.walls.add(0);
     expect(puzzlesEqual(p, decodePuzzle(encodePuzzle(p)))).toBe(true);
+  });
+
+  test('0.5 codes still open, and re-encode to the shorter 0.6 form', () => {
+    // Hard 10×10 with 17 obstacles, as a 0.5 code (a bitset of every tile and border).
+    const old = 'BQQKCgAEAAwAAAAAkAiAAAAgCAAAIAABCEAAAAAAAIAAAAJAAAABAkAAEA';
+    const p = decodePuzzle(old);
+    expect(p.walls.size + p.blocked.size).toBe(17);
+    const code = encodePuzzle(p);
+    expect(code.length).toBeLessThan(old.length / 2);
+    expect(puzzlesEqual(p, decodePuzzle(code))).toBe(true);
+    expect(decodePuzzle(code).endpoints).toEqual(p.endpoints);
+  });
+
+  test('random puzzles of every shape round-trip', () => {
+    let seed = 7;
+    const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    for (let trial = 0; trial < 300; trial++) {
+      const p = createPuzzle(1 + Math.floor(rand() * 30), 1 + Math.floor(rand() * 30));
+      const density = rand() * rand();
+      for (let c = 0; c < p.w * p.h; c++) if (rand() < density) p.blocked.add(c);
+      for (let e = 0; e < edgeCount(p); e++) if (rand() < density) p.walls.add(e);
+      const ends = Math.floor(rand() * 3);
+      for (let i = 0; i < ends; i++) p.endpoints.push(portEnd(Math.floor(rand() * portCount(p))));
+      const q = decodePuzzle(encodePuzzle(p));
+      expect(puzzlesEqual(p, q), `trial ${trial}`).toBe(true);
+      expect(q.endpoints, `trial ${trial}`).toEqual(p.endpoints);
+    }
   });
 
   test('share code is URL safe', () => {
@@ -68,7 +95,7 @@ describe('codec', () => {
   });
 
   test('JSON carries a 0.x format version', () => {
-    expect(puzzleToJson(sample()).version).toBe('0.5');
+    expect(puzzleToJson(sample()).version).toBe('0.6');
   });
 
   test('format 0.2 codes and JSON open with frame ends', () => {

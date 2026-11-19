@@ -8,10 +8,22 @@ import { cellCount, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, portCount, port
  *   0.2  ends stored as frame ports
  *   0.3  each end is a tile or a frame port
  *   0.4  numbered checkpoints
- *   0.5  given segments removed (current; older codes' givens are ignored)
+ *   0.5  given segments removed (older codes' givens are ignored)
+ *   0.6  bit-packed header and gap-coded obstacles (current)
  *
  * Numbered checkpoints (and tile ends, which opened as checkpoints) are no
  * longer supported: codes with them are refused with NumbersNotSupported.
+ *
+ * Layout (0.6): byte 0 is the version (6), then a bit stream, most significant bit first:
+ *   5 bits each   width - 1, height - 1
+ *   2 bits        number of ends
+ *   per end       frame port index, in just enough bits for the board's port count
+ *   3 bits        Rice parameter k
+ *   Elias gamma   number of obstacles + 1
+ *   per obstacle  gap since the previous one, Rice-coded with k (a run of 1s for
+ *                 gap >> k, a 0, then the low k bits), over the same index space as
+ *                 0.5: black tiles first, then walls
+ *   padded with 0s to a byte. Sparse puzzles are far shorter than with a bitset.
  *
  * Layout (0.5):
  *   byte 0      format minor version (5)
@@ -26,8 +38,8 @@ import { cellCount, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, portCount, port
  */
 
 /** Current puzzle format version (pre-release). */
-export const FORMAT_VERSION = '0.5';
-const VERSION_BYTE = 5;
+export const FORMAT_VERSION = '0.6';
+const VERSION_BYTE = 6;
 const CELL_FLAG = 0x8000;
 
 /** A code or file from when puzzles could have numbered checkpoints, which are gone. */
@@ -40,28 +52,39 @@ export class NumbersNotSupported extends Error {
 
 export function encodePuzzle(p: Puzzle): string {
   const n = cellCount(p);
-  const e = edgeCount(p);
+  const positions = [...[...p.blocked].sort((x, y) => x - y), ...[...p.walls].sort((x, y) => x - y).map((w) => n + w)];
+  const gaps = positions.map((pos, i) => pos - (i ? positions[i - 1] : -1) - 1);
+  // The Rice parameter that gives the fewest bits.
+  let k = 0;
+  let bestBits = Infinity;
+  for (let t = 0; t < 8; t++) {
+    const bits = gaps.reduce((sum, g) => sum + (g >> t) + 1 + t, 0);
+    if (bits < bestBits) [k, bestBits] = [t, bits];
+  }
+  const out = new BitWriter();
+  out.write(p.w - 1, 5);
+  out.write(p.h - 1, 5);
   const endpoints = p.endpoints.slice(0, 2);
-  const header = [VERSION_BYTE, endpoints.length << 1, p.w, p.h];
-  for (const end of endpoints) header.push(end.port >> 8, end.port & 0xff);
-
-  const bitCount = n + e;
-  const bits = new Uint8Array(Math.ceil(bitCount / 8));
-  const set = (i: number) => (bits[i >> 3] |= 1 << (i & 7));
-  for (const c of p.blocked) set(c);
-  for (const w of p.walls) set(n + w);
-
-  const bytes = new Uint8Array(header.length + bits.length);
-  bytes.set(header, 0);
-  bytes.set(bits, header.length);
-  return toBase64Url(bytes);
+  out.write(endpoints.length, 2);
+  const portBits = bitsFor(portCount(p));
+  for (const end of endpoints) out.write(end.port, portBits);
+  out.write(k, 3);
+  out.gamma(positions.length + 1);
+  for (const g of gaps) {
+    for (let q = g >> k; q > 0; q--) out.write(1, 1);
+    out.write(0, 1);
+    out.write(g & ((1 << k) - 1), k);
+  }
+  return toBase64Url(new Uint8Array([VERSION_BYTE, ...out.bytes()]));
 }
 
 export function decodePuzzle(code: string): Puzzle {
   const bytes = fromBase64Url(code.trim());
-  if (bytes.length < 4) throw new Error('Puzzle code is too short.');
+  if (!bytes.length) throw new Error('Puzzle code is too short.');
   const version = bytes[0];
   if (version < 1 || version > VERSION_BYTE) throw new Error(`Unsupported puzzle format 0.${version}.`);
+  if (version === VERSION_BYTE) return decodePacked(bytes);
+  if (bytes.length < 4) throw new Error('Puzzle code is too short.');
   const flags = bytes[1];
   const w = bytes[2];
   const h = bytes[3];
@@ -87,6 +110,85 @@ export function decodePuzzle(code: string): Puzzle {
   for (let i = 0; i < n; i++) if (get(i)) p.blocked.add(i);
   for (let i = 0; i < e; i++) if (get(n + i)) p.walls.add(i);
   return p;
+}
+
+/** Decode a 0.6 code (the version byte has been checked). */
+function decodePacked(bytes: Uint8Array): Puzzle {
+  const r = new BitReader(bytes, 1);
+  const w = r.read(5) + 1;
+  const h = r.read(5) + 1;
+  checkSize(w, h);
+  const p = createPuzzle(w, h);
+  const n = cellCount(p);
+  const total = n + edgeCount(p);
+  const nEnd = r.read(2);
+  if (nEnd > 2) throw new Error('Puzzle code has too many ends.');
+  const portBits = bitsFor(portCount(p));
+  for (let i = 0; i < nEnd; i++) {
+    const v = r.read(portBits);
+    if (!(v < portCount(p))) throw new Error('Puzzle code has an end outside the frame.');
+    p.endpoints.push(portEnd(v));
+  }
+  const k = r.read(3);
+  const count = r.gamma() - 1;
+  if (count > total) throw new Error('Puzzle code has too many obstacles.');
+  let pos = -1;
+  for (let i = 0; i < count; i++) {
+    let q = 0;
+    while (r.read(1)) if (++q > total) throw new Error('Puzzle code is corrupt.');
+    pos += ((q << k) | r.read(k)) + 1;
+    if (pos >= total) throw new Error('Puzzle code has an obstacle outside the board.');
+    if (pos < n) p.blocked.add(pos);
+    else p.walls.add(pos - n);
+  }
+  return p;
+}
+
+/** Bits needed to store any number below `count`. */
+function bitsFor(count: number): number {
+  return Math.max(1, Math.ceil(Math.log2(count)));
+}
+
+class BitWriter {
+  private bits: number[] = [];
+  write(value: number, width: number): void {
+    for (let i = width - 1; i >= 0; i--) this.bits.push((value >> i) & 1);
+  }
+  /** Elias gamma code of a positive number: its bit length - 1 as 0s, then the number. */
+  gamma(value: number): void {
+    const width = Math.floor(Math.log2(value)) + 1;
+    this.write(0, width - 1);
+    this.write(value, width);
+  }
+  bytes(): number[] {
+    const out: number[] = [];
+    for (let i = 0; i < this.bits.length; i += 8) {
+      let b = 0;
+      for (let j = 0; j < 8; j++) b = (b << 1) | (this.bits[i + j] ?? 0);
+      out.push(b);
+    }
+    return out;
+  }
+}
+
+class BitReader {
+  private pos: number;
+  constructor(private data: Uint8Array, startByte: number) {
+    this.pos = startByte * 8;
+  }
+  read(width: number): number {
+    let v = 0;
+    for (let i = 0; i < width; i++, this.pos++) {
+      if (this.pos >= this.data.length * 8) throw new Error('Puzzle code is truncated.');
+      v = (v << 1) | ((this.data[this.pos >> 3] >> (7 - (this.pos & 7))) & 1);
+    }
+    return v;
+  }
+  gamma(): number {
+    let zeros = 0;
+    while (!this.read(1)) if (++zeros > 30) throw new Error('Puzzle code is corrupt.');
+    return ((1 << zeros) | this.read(zeros)) >>> 0;
+  }
 }
 
 export interface PuzzleJson {

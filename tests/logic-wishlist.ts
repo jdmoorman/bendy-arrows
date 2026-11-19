@@ -24,7 +24,7 @@ export interface Wish {
 export const WISHES: Wish[] = [
   {
     name: 'Path 8×8 · walls: a notched L of 16 tiles in the bottom right',
-    code: 'BQQICAAOAA8AAAAAAAAAAIiAQiRAAQRAAEQAGAAA',
+    code: 'BjnnPYQ_zNxQygMZzOgA',
     edge: ['8,5', '8,4'],
     area: ['4,7', '4,8', '5,7', '5,8', '6,5', '6,6', '6,7', '6,8', '7,5', '7,6', '7,7', '7,8', '8,5', '8,6', '8,7', '8,8'],
     note:
