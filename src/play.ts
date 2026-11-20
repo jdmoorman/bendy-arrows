@@ -22,12 +22,11 @@ export class PlayView {
   /** Called whenever the board becomes solved. */
   onSolved?: () => void;
   /**
-   * The second button beside Play again (e.g. Next level), worked out when the view is built
+   * The second button beside Reset (e.g. Next level), worked out when the view is built
    * and on each load; none if this returns null.
    */
   solvedAction: () => { label: string; run: () => void } | null = () => null;
   private nextBtn!: HTMLButtonElement;
-  private againBtn!: HTMLButtonElement;
 
   private autoCheck = false;
 
@@ -71,13 +70,12 @@ export class PlayView {
       <div class="toolbar">
         <div class="toolbar-row">
           <button class="btn" data-act="undo" aria-label="Undo">${ICONS.undo}<span>Undo</span></button>
-          <button class="btn" data-act="redo" aria-label="Redo">${ICONS.redo}</button>
-          <button class="btn" data-act="reset" aria-label="Clear the board" title="Clear the board">${ICONS.rotateLeft}</button>
-          <button class="btn primary" data-act="hint" aria-label="Hint">${ICONS.bulb}<span>Hint</span></button>
+          <button class="btn" data-act="redo" aria-label="Redo">${ICONS.redo}<span>Redo</span></button>
+          <button class="btn" data-act="hint" aria-label="Hint">${ICONS.bulb}<span>Hint</span></button>
         </div>
       </div>
       <div class="solved-row">
-        <button class="btn" data-act="again">${ICONS.rotateLeft}<span>Play again</span></button>
+        <button class="btn" data-act="reset">${ICONS.rotateLeft}<span>Reset</span></button>
         <button class="btn primary" data-act="next"><span>Next level</span></button>
       </div>
       <p class="status" role="status" aria-live="polite"></p>`;
@@ -91,17 +89,16 @@ export class PlayView {
     this.status = this.el.querySelector('.status')!;
     this.undoBtn = this.el.querySelector('[data-act=undo]')!;
     this.redoBtn = this.el.querySelector('[data-act=redo]')!;
-    this.el.querySelector('[data-act=reset]')!.addEventListener('click', () => this.clearBoard());
 
     this.undoBtn.addEventListener('click', () => this.undo());
     this.redoBtn.addEventListener('click', () => this.redo());
     this.el.querySelector('[data-act=hint]')!.addEventListener('click', () => this.showHint());
     this.nextBtn = this.el.querySelector('[data-act=next]')!;
-    this.againBtn = this.el.querySelector('[data-act=again]')!;
-    // Both always show and work once the board is solved, greyed out until then. They must not
-    // appear on solving: in Safari on iPhone, content that becomes visible right after a tap is
-    // taken as a hover menu, and the next tap is spent closing it (every button took two taps).
-    this.againBtn.addEventListener('click', () => this.playAgain());
+    // Reset always works; Next level always shows and works once the board is solved, greyed out
+    // until then. It must not appear on solving: in Safari on iPhone, content that becomes visible
+    // right after a tap is taken as a hover menu, and the next tap is spent closing it (every
+    // button took two taps).
+    this.el.querySelector('[data-act=reset]')!.addEventListener('click', () => this.reset());
     this.nextBtn.addEventListener('click', () => this.solvedAction()?.run());
 
     attachBoardInput(this.svg, () => this.puzzle, {
@@ -162,14 +159,13 @@ export class PlayView {
     this.render();
   }
 
-  /** Start a new attempt: empty board, no undo history (Play again). */
-  playAgain(): void {
+  /** Reset: empty the board, as one undoable step. */
+  private reset() {
+    if (!this.segments.size && !this.xMarks.size) return;
+    this.history.push(this.snapshot());
     this.segments.clear();
     this.xMarks.clear();
-    this.history.clear();
-    this.solved = false;
-    this.render();
-    this.onProgress?.(this.progress, false);
+    this.afterChange();
   }
 
   /** Replace the board with these marks as one undoable step (e.g. the editor's logic steps). */
@@ -290,15 +286,6 @@ export class PlayView {
     this.changed = false;
   }
 
-  /** Reset: empty the board as one undoable step. */
-  private clearBoard() {
-    if (!this.segments.size && !this.xMarks.size) return;
-    this.history.push(this.snapshot());
-    this.segments.clear();
-    this.xMarks.clear();
-    this.afterChange();
-  }
-
   private afterChange() {
     this.changeCount++;
     this.shownHint = null;
@@ -306,7 +293,7 @@ export class PlayView {
     this.solved = checkSolution(this.puzzle, this.segments).solved;
     this.render();
     this.onProgress?.(this.progress, this.solved);
-    // Every time the board becomes solved (e.g. again after Clear or Undo), not just the first.
+    // Every time the board becomes solved (e.g. again after Reset or Undo), not just the first.
     if (this.solved && !wasSolved) this.onSolved?.();
   }
 
@@ -411,7 +398,6 @@ export class PlayView {
 
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;
-    this.againBtn.disabled = !this.solved;
     this.nextBtn.disabled = !this.solved;
   }
 

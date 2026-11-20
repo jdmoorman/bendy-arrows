@@ -78,7 +78,7 @@ editor.onPlay = requestPlay;
 attachUniquenessCheck(editor);
 
 play.onSolved = () => storage.markSolved(playingCode);
-// Solved: Another puzzle (the Library) beside Play again.
+// Solved: Another puzzle (the Library) beside Reset.
 play.solvedAction = () => ({ label: 'Another puzzle', run: () => setTab('library') });
 
 play.onProgress = (progress, solved) => {
