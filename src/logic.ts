@@ -453,6 +453,21 @@ export function findHint(p: Puzzle, state: LogicState, rules: Iterable<RuleId> =
   return { kind: 'none', text: 'No hint available.' };
 }
 
+/**
+ * One-stroke mode's hint: the simplest deduction that forces the stroke's next line out of
+ * `head`, from the stroke alone (its lines, no X marks).
+ */
+export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opts: LogicOptions = {}): Hint {
+  const state: LogicState = { segments: stroke, xs: new Set() };
+  const an = analyse(p, state, new Set(HINT_ORDER), opts);
+  if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
+  if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
+  const atHead = an.deductions.filter((d) => d.segments.some((e) => !stroke.has(e) && edgeCells(p, e).includes(head)));
+  const d = simplest(atHead);
+  if (d) return { kind: 'deduction', deduction: d, text: explain(p, state, d) };
+  return { kind: 'none', text: 'The rules can’t tell where the stroke goes next from here.' };
+}
+
 /** The deduction a hint would show: simplest rule first, then the simplest use of it. */
 function simplest(ds: Deduction[], order: RuleId[] = HINT_ORDER): Deduction | undefined {
   for (const rule of order) {

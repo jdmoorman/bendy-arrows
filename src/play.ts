@@ -1,9 +1,9 @@
 import { History } from './history';
 import { solveInBackground, type SolverRun } from './solver-client';
-import { findHint, type Hint } from './logic';
+import { findHint, findStrokeHint, type Hint } from './logic';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
-import { cellEdges, edgeBetween, isUsableEdge, type Puzzle } from './model';
+import { cellEdges, edgeBetween, edgeCells, isUsableEdge, portCell, type Puzzle } from './model';
 import { padFor, renderBoard } from './render';
 import { canPlace, checkSolution } from './rules';
 
@@ -29,6 +29,8 @@ export class PlayView {
   private nextBtn!: HTMLButtonElement;
 
   private autoCheck = false;
+  /** One-stroke mode: the path is drawn as one stroke from the entrance (see `strokeCells`). */
+  private oneStroke = false;
 
   private puzzle!: Puzzle;
   private segments = new Set<number>();
@@ -61,6 +63,8 @@ export class PlayView {
   private dragMode: 'draw' | 'erase' | 'undecided' = 'draw';
   /** The gesture began on a drawn segment's border (so a tap there is not an X). */
   private startedOnSegment = false;
+  /** One-stroke mode: the drag has started from a tile of the stroke (and cut it back to there). */
+  private strokeDrag: 'none' | 'pending' | 'drawing' = 'none';
 
   constructor() {
     this.el = document.createElement('section');
@@ -107,9 +111,15 @@ export class PlayView {
         this.changed = false;
         this.dragMode = 'draw';
         this.startedOnSegment = false;
+        this.strokeDrag = 'none';
       },
       onGestureEnd: () => this.commit(),
       onPathStart: (cell, edge) => {
+        if (this.strokeMode) {
+          this.startedOnSegment = edge >= 0 && this.segments.has(edge);
+          this.strokeDrag = this.strokeCells().includes(cell) ? 'pending' : 'none';
+          return;
+        }
         if (edge >= 0 && this.segments.has(edge)) {
           // Pressing on a drawn segment erases it, and dragging keeps erasing.
           this.dragMode = 'erase';
@@ -121,19 +131,31 @@ export class PlayView {
         this.dragMode = drawn === 0 ? 'draw' : drawn === 1 ? 'undecided' : 'erase';
       },
       onHoverEdge: (e) => {
+        if (this.strokeMode) return;
         if (this.dragMode === 'erase') this.erase(e);
       },
       onStep: (from, to) => {
+        if (this.strokeMode) return this.strokeStep(from, to);
         const e = edgeBetween(this.puzzle, from, to);
         if (this.dragMode === 'undecided') this.dragMode = this.segments.has(e) ? 'erase' : 'draw';
         return this.dragMode === 'erase' ? this.erase(e) : this.step(from, to);
       },
       // Tapping an empty border (or right-clicking any border) toggles an X there.
       onTapEdge: (e) => {
-        if (!this.startedOnSegment) this.toggleX(e);
+        if (!this.startedOnSegment) return this.toggleX(e);
+        // One-stroke mode: tapping one of the stroke's lines takes the stroke back to before it.
+        const s = this.strokeMode ? this.strokeCells() : [];
+        const i = s.findIndex((c, k) => k > 0 && edgeBetween(this.puzzle, s[k - 1], c) === e);
+        if (i > 0) this.cutStroke(s, i - 1);
       },
-      // Tapping a tile removes every segment touching it.
+      // Tapping a tile removes every segment touching it (in one-stroke mode, a tile of the
+      // stroke takes the stroke back to it).
       onTapCell: (cell) => {
+        if (this.strokeMode) {
+          const s = this.strokeCells();
+          const i = s.indexOf(cell);
+          if (i >= 0) return this.cutStroke(s, i);
+        }
         for (const e of cellEdges(this.puzzle, cell)) this.erase(e);
       },
       onSecondaryEdge: (e) => this.toggleX(e),
@@ -180,6 +202,69 @@ export class PlayView {
     this.segments = segments;
     this.xMarks = xMarks;
     this.afterChange();
+  }
+
+  /** One-stroke mode: draw one stroke from the entrance, and get hints for that stroke. */
+  setOneStroke(on: boolean): void {
+    this.oneStroke = on;
+    this.shownHint = null;
+    this.render();
+  }
+
+  /** One-stroke mode is on and the puzzle has an entrance to start from. */
+  private get strokeMode(): boolean {
+    return this.oneStroke && this.puzzle.endpoints.length > 0;
+  }
+
+  /**
+   * The stroke's tiles in order: from the entrance tile, along the drawn lines, as far as they
+   * go. (Lines not joined to it are left alone.)
+   */
+  private strokeCells(): number[] {
+    const p = this.puzzle;
+    let cur = portCell(p, p.endpoints[0].port);
+    const cells = [cur];
+    const seen = new Set(cells);
+    for (;;) {
+      const next = cellEdges(p, cur)
+        .filter((e) => this.segments.has(e))
+        .map((e) => edgeCells(p, e).find((c) => c !== cur)!)
+        .find((c) => !seen.has(c));
+      if (next === undefined) return cells;
+      cells.push(next);
+      seen.add(next);
+      cur = next;
+    }
+  }
+
+  /** Take the stroke back to its `i`th tile, removing the lines after it. */
+  private cutStroke(s: number[], i: number) {
+    for (let k = s.length - 1; k > i; k--) this.setSegment(edgeBetween(this.puzzle, s[k - 1], s[k]), false);
+    this.render();
+  }
+
+  /**
+   * One-stroke mode: a drag that starts on the stroke cuts it back to there, then draws on from
+   * its end. Going back onto the tile before takes the last line back; the stroke never runs
+   * into itself.
+   */
+  private strokeStep(from: number, to: number): boolean {
+    if (this.strokeDrag === 'none') return false;
+    const s = this.strokeCells();
+    if (this.strokeDrag === 'pending') {
+      const i = s.indexOf(from);
+      if (i < 0) return false;
+      this.cutStroke(s, i);
+      s.length = i + 1;
+      this.strokeDrag = 'drawing';
+    }
+    if (s[s.length - 1] !== from) return false;
+    if (s.length > 1 && to === s[s.length - 2]) {
+      this.cutStroke(s, s.length - 2);
+      return true;
+    }
+    if (s.includes(to)) return false;
+    return this.step(from, to);
   }
 
   /** Whether mistakes are highlighted as the player draws. */
@@ -367,7 +452,14 @@ export class PlayView {
         return;
       }
     }
-    this.shownHint = findHint(this.puzzle, { segments: this.segments, xs: this.xMarks });
+    if (this.strokeMode) {
+      // The next line of the stroke, from the stroke alone.
+      const s = this.strokeCells();
+      const lines = new Set(s.slice(1).map((c, k) => edgeBetween(this.puzzle, s[k], c)));
+      this.shownHint = findStrokeHint(this.puzzle, lines, s[s.length - 1]);
+    } else {
+      this.shownHint = findHint(this.puzzle, { segments: this.segments, xs: this.xMarks });
+    }
     this.render();
   }
 

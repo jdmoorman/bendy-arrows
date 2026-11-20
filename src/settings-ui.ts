@@ -15,6 +15,7 @@ const SWITCHES: { key: keyof Settings; label: string }[] = [
   { key: 'checkerboard', label: 'Checkerboard shading' },
   { key: 'coordinates', label: 'Grid coordinates' },
   { key: 'autoCheck', label: 'Auto-check' },
+  { key: 'oneStroke', label: 'One-stroke mode' },
 ];
 
 /** The settings sheet: one switch per setting, saved as soon as it changes. */
