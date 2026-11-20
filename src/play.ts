@@ -22,7 +22,7 @@ export class PlayView {
   /** Called whenever the board becomes solved. */
   onSolved?: () => void;
 
-  private autoCheck = true;
+  private autoCheck = false;
 
   private puzzle!: Puzzle;
   private segments = new Set<number>();

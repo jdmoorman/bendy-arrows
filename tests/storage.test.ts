@@ -67,12 +67,12 @@ describe('Storage', () => {
 });
 
 describe('settings', () => {
-  test('default to checkerboard on and round-trip', () => {
+  test('default to checkerboard on, auto-check off, and round-trip', () => {
     const s = new Storage(new MemStore());
-    expect(s.loadSettings()).toEqual({ checkerboard: true, autoCheck: true, darkTheme: false, coordinates: false });
+    expect(s.loadSettings()).toEqual({ checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false });
     s.saveSettings({ checkerboard: false, autoCheck: false, darkTheme: true, coordinates: true });
     expect(s.loadSettings()).toEqual({ checkerboard: false, autoCheck: false, darkTheme: true, coordinates: true });
-    expect(new Storage(null).loadSettings()).toEqual({ checkerboard: true, autoCheck: true, darkTheme: false, coordinates: false });
+    expect(new Storage(null).loadSettings()).toEqual({ checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false });
   });
 
 });

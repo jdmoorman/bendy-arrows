@@ -59,7 +59,7 @@ export interface Settings {
   coordinates: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { checkerboard: true, autoCheck: true, darkTheme: false, coordinates: false };
+export const DEFAULT_SETTINGS: Settings = { checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false };
 
 export interface KeyValueStore {
   getItem(key: string): string | null;
