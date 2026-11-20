@@ -1470,3 +1470,44 @@ a.btn {
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
   opacity: 0.95;
 }
+.pack-name-input,
+.pack-desc-input {
+  font-family: inherit;
+  line-height: 1.4;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+}
+.pack-name-input {
+  flex: 1;
+  min-height: var(--tap);
+  padding: 0 6px;
+  margin-left: -7px;
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+.pack-desc-input {
+  display: block;
+  margin: 0 0 8px -7px;
+  padding: 4px 6px;
+  font-size: 16px; /* 16px or more, so iPhones don't zoom in on focus */
+  color: var(--text-muted);
+  resize: vertical;
+}
+.pack-name-input:hover,
+.pack-desc-input:hover {
+  border-color: var(--border);
+}
+.pack-name-input:focus,
+.pack-desc-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--surface);
+  color: var(--text);
+}
+.packs-status.error {
+  color: var(--error);
+}

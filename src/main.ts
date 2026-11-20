@@ -29,7 +29,7 @@ app.innerHTML = `
       <button class="seg-btn" role="tab" data-tab="play">Play</button>
       <button class="seg-btn" role="tab" data-tab="edit">Create</button>
       <button class="seg-btn" role="tab" data-tab="library">Library</button>
-      <button class="seg-btn" role="tab" data-tab="packs">Packs</button>
+      ${import.meta.env.DEV ? '<button class="seg-btn" role="tab" data-tab="packs">Packs</button>' : ''}
     </div>
     <button class="btn icon" data-act="share" aria-label="Share or open a puzzle">${ICONS.share}</button>
     <button class="btn icon" data-act="settings" aria-label="Settings">${ICONS.settings}</button>
@@ -45,9 +45,14 @@ const titleEl = app.querySelector<HTMLElement>('.app-title')!;
 const play = new PlayView();
 const editor = new EditorView();
 const library = new LibraryView(storage);
-const packs = new PacksView();
-views.append(play.el, editor.el, library.el, packs.el);
-packs.onOpen = (code) => loadPuzzle(decodePuzzle(code));
+// The pack organiser saves through the local dev server, so only it has one (and the
+// published site's bundle leaves it out).
+const packs = import.meta.env.DEV ? new PacksView() : null;
+views.append(play.el, editor.el, library.el);
+if (packs) {
+  views.append(packs.el);
+  packs.onOpen = (code) => loadPuzzle(decodePuzzle(code));
+}
 play.setAutoCheck(settings.autoCheck);
 
 /** The puzzle currently loaded in the play view, and where it came from. */
@@ -137,6 +142,8 @@ function saveSession() {
 }
 
 function setTab(t: Tab) {
+  // E.g. a session saved on the dev server, opened where there's no pack organiser.
+  if (t === 'packs' && !packs) t = 'library';
   tab = t;
   if (t === 'play' && !puzzlesEqual(playing, editor.current)) {
     // Keep whatever progress still fits the edited puzzle; it is a new puzzle now.
@@ -162,8 +169,8 @@ function setTab(t: Tab) {
   play.el.classList.toggle('hidden', t !== 'play');
   editor.el.classList.toggle('hidden', t !== 'edit');
   library.el.classList.toggle('hidden', t !== 'library');
-  packs.el.classList.toggle('hidden', t !== 'packs');
-  if (t === 'packs') packs.show();
+  packs?.el.classList.toggle('hidden', t !== 'packs');
+  if (t === 'packs') packs?.show();
   if (t === 'library') {
     library.currentCode = playingCode;
     library.refresh();

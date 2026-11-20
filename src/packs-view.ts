@@ -14,7 +14,8 @@ const EDGE = 60;
 /**
  * The creator's pack organiser: every pack's levels as their solved boards, in play order.
  * Drag a level (on a touch screen, hold it first) to move it within its pack or into another;
- * tap one to play it. Running locally, Save writes the new order to src/levels.ts.
+ * tap one to play it. Each pack's name and description can be edited too. Save writes it all
+ * to src/levels.ts (through the local dev server, the only place the organiser appears).
  */
 export class PacksView {
   readonly el: HTMLElement;
@@ -27,6 +28,9 @@ export class PacksView {
   private revertBtn: HTMLButtonElement;
   /** Each pack's levels, in the order shown. */
   private order: string[][] = PACKS.map((p) => [...p.levels]);
+  /** Each pack's name and description, as edited. */
+  private names: string[] = PACKS.map((p) => p.name);
+  private descriptions: string[] = PACKS.map((p) => p.description);
   private solutions = new Map<string, Set<number> | null>();
   private worker: Worker | null = null;
   private drag: {
@@ -59,6 +63,8 @@ export class PacksView {
     this.saveBtn.addEventListener('click', () => void this.save());
     this.revertBtn.addEventListener('click', () => {
       this.order = PACKS.map((p) => [...p.levels]);
+      this.names = PACKS.map((p) => p.name);
+      this.descriptions = PACKS.map((p) => p.description);
       this.draw();
     });
     // Once a level is picked up on a touch screen, a finger moving it mustn't scroll the page.
@@ -88,21 +94,44 @@ export class PacksView {
   }
 
   private get changed(): boolean {
-    return this.order.some((levels, i) => levels.join() !== PACKS[i].levels.join());
+    return PACKS.some((p, i) => this.order[i].join() !== p.levels.join() || this.names[i] !== p.name || this.descriptions[i] !== p.description);
+  }
+
+  /** What's wrong with the edited names and descriptions, if anything. */
+  private get problem(): string {
+    const names = this.names.map((n) => n.trim());
+    if (names.some((n) => !n)) return 'Every pack needs a name.';
+    if (new Set(names).size !== names.length) return 'Two packs have the same name.';
+    if (this.descriptions.some((d) => !d.trim())) return 'Every pack needs a description.';
+    return '';
   }
 
   private draw() {
     this.body.replaceChildren(
       ...PACKS.map((pack, pi) => {
         const section = el('section', 'pack-section');
-        const head = el('h2', 'pack-name');
-        head.textContent = pack.name;
+        const name = el('input', 'pack-name-input');
+        name.value = this.names[pi];
+        name.setAttribute('aria-label', 'Pack name');
+        name.addEventListener('input', () => {
+          this.names[pi] = name.value;
+          this.update();
+        });
+        const desc = el('textarea', 'pack-desc-input');
+        desc.value = this.descriptions[pi];
+        desc.rows = 2;
+        desc.setAttribute('aria-label', `${pack.name}: description`);
+        desc.addEventListener('input', () => {
+          this.descriptions[pi] = desc.value;
+          this.update();
+        });
         const count = el('span', 'pack-count');
+        const head = el('div', 'pack-head');
+        head.append(name, count);
         const grid = el('div', 'pack-tiles');
         grid.dataset.pack = String(pi);
         for (const code of this.order[pi]) grid.append(this.tile(code));
-        section.append(el('div', 'pack-head'), grid);
-        section.firstElementChild!.append(head, count);
+        section.append(head, desc, grid);
         return section;
       }),
     );
@@ -144,7 +173,7 @@ export class PacksView {
         const p = decodePuzzle(t.dataset.code!);
         const label = t.querySelector('.pack-tile-label')!;
         label.textContent = `${i + 1} · ${p.w}×${p.h}`;
-        t.setAttribute('aria-label', `${PACKS[pi].name} ${i + 1}, ${p.w} by ${p.h}`);
+        t.setAttribute('aria-label', `${this.names[pi]} ${i + 1}, ${p.w} by ${p.h}`);
         t.classList.toggle('moved', PACKS[pi].levels[i] !== t.dataset.code);
       });
       const count = grid.parentElement!.querySelector('.pack-count')!;
@@ -153,13 +182,15 @@ export class PacksView {
       count.classList.toggle('short', n < MIN_PACK_LEVELS);
     }
     const changed = this.changed;
-    this.saveBtn.disabled = !changed || !import.meta.env.DEV;
+    const problem = this.problem;
+    this.saveBtn.disabled = !changed || !!problem;
     this.revertBtn.disabled = !changed;
-    this.status.textContent = changed
-      ? import.meta.env.DEV
-        ? 'Unsaved order. Save writes it to src/levels.ts.'
-        : 'Unsaved order. Saving needs the local dev server.'
-      : 'Drag a level to move it (hold it first on a touch screen). Tap to play it.';
+    this.status.classList.toggle('error', !!problem);
+    this.status.textContent = problem
+      ? problem
+: changed
+        ? 'Unsaved changes. Save writes them to src/levels.ts.'
+        : 'Drag a level to move it (hold it first on a touch screen). Tap to play it. Edit names and descriptions in place.';
   }
 
   // --- Dragging ------------------------------------------------------------
@@ -300,14 +331,20 @@ export class PacksView {
     try {
       const res = await fetch('/__packs', {
         method: 'POST',
-        body: JSON.stringify({ packs: PACKS.map((p, i) => ({ name: p.name, levels: this.order[i] })) }),
+        body: JSON.stringify({
+          packs: PACKS.map((p, i) => ({ name: p.name, newName: this.names[i].trim(), description: this.descriptions[i].trim(), levels: this.order[i] })),
+        }),
       });
       const reply = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(reply.error ?? 'Saving failed.');
       // The packs in memory follow the file until Vite reloads the page with it.
-      PACKS.forEach((p, i) => (p.levels = [...this.order[i]]));
+      PACKS.forEach((p, i) => {
+        p.levels = [...this.order[i]];
+        p.name = this.names[i] = this.names[i].trim();
+        p.description = this.descriptions[i] = this.descriptions[i].trim();
+      });
       this.update();
-      toast('Saved the new order to src/levels.ts.');
+      toast('Saved the packs to src/levels.ts.');
     } catch (err) {
       toast(err instanceof Error ? err.message : String(err), 'error');
       this.update();
