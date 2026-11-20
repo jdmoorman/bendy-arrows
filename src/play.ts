@@ -29,7 +29,7 @@ export class PlayView {
   private nextBtn!: HTMLButtonElement;
 
   private autoCheck = false;
-  /** One-stroke mode: the path is drawn as one stroke from the entrance (see `strokeCells`). */
+  /** One-shot mode: the path is drawn as one stroke from the entrance (see `strokeCells`). */
   private oneStroke = false;
 
   private puzzle!: Puzzle;
@@ -63,7 +63,7 @@ export class PlayView {
   private dragMode: 'draw' | 'erase' | 'undecided' = 'draw';
   /** The gesture began on a drawn segment's border (so a tap there is not an X). */
   private startedOnSegment = false;
-  /** One-stroke mode: the drag has started from a tile of the stroke (and cut it back to there). */
+  /** One-shot mode: the drag has started from a tile of the stroke (and cut it back to there). */
   private strokeDrag: 'none' | 'pending' | 'drawing' = 'none';
 
   constructor() {
@@ -143,12 +143,12 @@ export class PlayView {
       // Tapping an empty border (or right-clicking any border) toggles an X there.
       onTapEdge: (e) => {
         if (!this.startedOnSegment) return this.toggleX(e);
-        // One-stroke mode: tapping one of the stroke's lines takes the stroke back to before it.
+        // One-shot mode: tapping one of the stroke's lines takes the stroke back to before it.
         const s = this.strokeMode ? this.strokeCells() : [];
         const i = s.findIndex((c, k) => k > 0 && edgeBetween(this.puzzle, s[k - 1], c) === e);
         if (i > 0) this.cutStroke(s, i - 1);
       },
-      // Tapping a tile removes every segment touching it (in one-stroke mode, a tile of the
+      // Tapping a tile removes every segment touching it (in one-shot mode, a tile of the
       // stroke takes the stroke back to it).
       onTapCell: (cell) => {
         if (this.strokeMode) {
@@ -204,14 +204,14 @@ export class PlayView {
     this.afterChange();
   }
 
-  /** One-stroke mode: draw one stroke from the entrance, and get hints for that stroke. */
+  /** One-shot mode: draw one stroke from the entrance, and get hints for that stroke. */
   setOneStroke(on: boolean): void {
     this.oneStroke = on;
     this.shownHint = null;
     this.render();
   }
 
-  /** One-stroke mode is on and the puzzle has an entrance to start from. */
+  /** One-shot mode is on and the puzzle has an entrance to start from. */
   private get strokeMode(): boolean {
     return this.oneStroke && this.puzzle.endpoints.length > 0;
   }
@@ -244,7 +244,7 @@ export class PlayView {
   }
 
   /**
-   * One-stroke mode: a drag that starts on the stroke cuts it back to there, then draws on from
+   * One-shot mode: a drag that starts on the stroke cuts it back to there, then draws on from
    * its end. Going back onto the tile before takes the last line back; the stroke never runs
    * into itself.
    */

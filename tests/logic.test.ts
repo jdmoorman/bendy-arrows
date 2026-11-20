@@ -449,8 +449,10 @@ describe('findStrokeHint', async () => {
   const { checkSolution } = await import('../src/rules');
   const { PACKS } = await import('../src/levels');
 
-  test('draws every Single Stroke Minis level in one stroke from the entrance', () => {
-    for (const code of PACKS.find((k) => k.name === 'Single Stroke Minis')!.levels) {
+  test('draws every One-Shot Minis level in one stroke from the entrance', () => {
+    const packs = PACKS.filter((k) => k.name === 'One-Shot Minis');
+    expect(packs.length).toBe(1);
+    for (const code of packs.flatMap((k) => k.levels)) {
       const p = decodePuzzle(code);
       let head = portCell(p, p.endpoints[0].port);
       const stroke = new Set<number>();
@@ -459,13 +461,17 @@ describe('findStrokeHint', async () => {
         if (h.kind === 'solved') break;
         expect(h.kind, code).toBe('deduction');
         if (h.kind !== 'deduction') break;
-        const e = h.deduction.segments.find((x) => !stroke.has(x) && edgeCells(p, x).includes(head))!;
-        stroke.add(e);
-        head = edgeCells(p, e).find((c) => c !== head)!;
+        // Only lines that carry the stroke on, each joined to the one before, from the tip.
+        expect(h.deduction.xs, code).toEqual([]);
+        for (const e of h.deduction.segments) {
+          expect(edgeCells(p, e), code).toContain(head);
+          stroke.add(e);
+          head = edgeCells(p, e).find((c) => c !== head)!;
+        }
       }
       expect(checkSolution(p, stroke).solved, code).toBe(true);
     }
-  });
+    }, 60_000);
 
   test('says so when the rules can’t pick the next line', () => {
     const p = endsBottomRight(4, 4);

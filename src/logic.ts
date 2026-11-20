@@ -473,7 +473,7 @@ export function findHint(p: Puzzle, state: LogicState, rules: Iterable<RuleId> =
 }
 
 /**
- * One-stroke mode's hint: the simplest deduction that forces the stroke's next line out of
+ * One-shot mode's hint: the simplest deduction that forces the stroke's next line out of
  * `head`, from the stroke alone (its lines, no X marks).
  */
 export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opts: LogicOptions = {}): Hint {
@@ -481,10 +481,20 @@ export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opt
   const an = analyse(p, state, new Set(HINT_ORDER), opts);
   if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
   if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
-  const atHead = an.deductions.filter((d) => d.segments.some((e) => !stroke.has(e) && edgeCells(p, e).includes(head)));
-  const d = simplest(atHead);
-  if (d) return { kind: 'deduction', deduction: d, text: explain(p, state, d) };
-  return { kind: 'none', text: 'The rules can’t tell where the stroke goes next from here.' };
+  const next = (d: Deduction) => d.segments.find((e) => !stroke.has(e) && edgeCells(p, e).includes(head));
+  const d = simplest(an.deductions.filter((x) => next(x) !== undefined));
+  if (!d) return { kind: 'none', text: 'The rules can’t tell where the stroke goes next from here.' };
+  // Show only the lines that carry the stroke on, one after another from its tip (a corner's
+  // two lines, say); the rule may force others elsewhere too.
+  const chain = [next(d)!];
+  let tip = edgeCells(p, chain[0]).find((c) => c !== head)!;
+  for (;;) {
+    const e = d.segments.find((x) => !stroke.has(x) && !chain.includes(x) && edgeCells(p, x).includes(tip));
+    if (e === undefined) break;
+    chain.push(e);
+    tip = edgeCells(p, e).find((c) => c !== tip)!;
+  }
+  return { kind: 'deduction', deduction: { ...d, segments: chain, xs: [] }, text: explain(p, state, d) };
 }
 
 /** The deduction a hint would show: simplest rule first, then the simplest use of it. */

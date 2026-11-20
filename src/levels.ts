@@ -45,7 +45,7 @@ export const PACKS: LevelPack[] = [
     ],
   },
   {
-    name: 'Single Stroke Minis',
+    name: 'One-Shot Minis',
     description: 'Try to solve each one in one go, from tail to head, without lifting a finger.',
     levels: [
       'BhCgErA',
@@ -66,8 +66,8 @@ export const PACKS: LevelPack[] = [
     ],
   },
   {
-    name: 'Single Stroke: more',
-    description: 'More single strokes, straight from the search: bigger boards, more obstacles.',
+    name: 'One-Shot: more',
+    description: 'More one-shots, straight from the search: bigger boards, more obstacles.',
     levels: [
       'BhjsVPOQ',
       'BhjtVN0A',
@@ -99,8 +99,8 @@ export const PACKS: LevelPack[] = [
     ],
   },
   {
-    name: 'Single Stroke: hard',
-    description: 'One stroke from tail to head, but somewhere along the way the simple rules run out. Try one-stroke mode in Settings.',
+    name: 'One-Shot: hard',
+    description: 'One go from tail to head, but somewhere along the way the simple rules run out. Try one-shot mode in Settings.',
     levels: [
       'BhkhpZdkqoA',
       'BhlnPhMSGA',
