@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ALL_RULES, applyStep, BASIC_RULES, logicStep, type LogicState, type RuleId } from '../src/logic';
+import { ALL_RULES, applyStep, BASIC_RULES, deductions, logicStep, type LogicState, type RuleId } from '../src/logic';
 import { createPuzzle, edgeBetween, edgeCount, endpointCells, isUsableEdge, portEnd, portId, type Puzzle } from '../src/model';
 import { solve } from '../src/solver';
 import { endsBottomRight, pathEdges } from './helpers';
@@ -90,13 +90,16 @@ describe('logic rules', () => {
     expect(step.segments).toEqual(expect.arrayContaining([edgeBetween(p, 1, 2), edgeBetween(p, 4, 8)]));
   });
 
-  test('checkerboard balance: an area with an extra white tile is entered on white tiles', () => {
+  test('checkerboard imbalance: an area with an extra white tile is entered on white tiles', () => {
     // 3x4, ends low on the right: the top row is white, shaded, white, so the path must enter it on
     // white tiles twice more than on shaded ones: down from both corners, never the middle.
     const p = board(3, 4);
-    const step = logicStep(p, empty(), ['balance']);
+    const step = logicStep(p, empty(), ['imbalance']);
     expect(step.segments).toEqual(expect.arrayContaining([edgeBetween(p, 0, 3), edgeBetween(p, 2, 5)]));
     expect(step.xs).toContain(edgeBetween(p, 1, 4));
+    // Checkerboard balance alone only looks at areas with as many shaded tiles as white.
+    expect(deductions(p, empty(), ['balance']).every((d) => d.rule === 'balance' && d.cells!.filter((c) => (Math.floor(c / 3) + (c % 3)) % 2).length * 2 === d.cells!.length)).toBe(true);
+    expect(ALL_RULES).not.toContain('imbalance');
   });
 
   test('checkerboard balance: a balanced area is left on shaded and white tiles equally', () => {
@@ -197,7 +200,6 @@ describe('findHint', async () => {
   const { findHint } = await import('../src/logic');
 
   test('No early loops measures each application by the piece it would close', async () => {
-    const { deductions } = await import('../src/logic');
     const p = board(6, 6);
     const piece = (cells: number[]) => cells.slice(1).map((c, i) => edgeBetween(p, cells[i], c));
     // A 6-tile U at the top and a 4-tile U at the right are obvious (no X); an 8-tile U along the

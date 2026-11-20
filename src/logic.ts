@@ -14,7 +14,8 @@ export type RuleId =
   | 'noFinish'
   | 'noSeal'
   | 'bottlenecks'
-  | 'balance';
+  | 'balance'
+  | 'imbalance';
 
 export interface RuleInfo {
   id: RuleId;
@@ -49,9 +50,21 @@ export const RULES: RuleInfo[] = [
   {
     id: 'balance',
     label: 'Checkerboard balance',
-    hint: 'The path alternates colours, so it crosses into an area on its commoner colour twice as many extra times as that colour has extra tiles — and a balanced area equally often on each.',
+    hint: 'The path alternates colours, so it crosses into an area with as many shaded tiles as white ones on shaded and white tiles equally often.',
   },
 ];
+
+/**
+ * Checkerboard balance for areas with more of one colour than the other: the path crosses
+ * in on the commoner colour twice as many extra times as that colour has extra tiles.
+ * Hard to spot on the grid, so it is left out of RULES (and so of ALL_RULES and every
+ * hint, rating and logic run); pass it explicitly to use it.
+ */
+export const IMBALANCE_RULE: RuleInfo = {
+  id: 'imbalance',
+  label: 'Checkerboard imbalance',
+  hint: 'The path alternates colours, so it crosses into an area on its commoner colour twice as many extra times as that colour has extra tiles.',
+};
 
 /** The rules from before the advanced ones were added (for migrating saved choices). */
 export const BASIC_RULES: RuleId[] = ['continue', 'corners', 'passages', 'noLoops'];
@@ -190,19 +203,25 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
   if (enabled.has('noSeal')) deductions.push(...sealingEdges(p, state, need, closed));
   const sources = new Set(opts.areaSources ?? AREA_SOURCES);
   const maxArea = opts.balanceMaxArea ?? Infinity;
-  if (enabled.has('bottlenecks') || enabled.has('balance')) {
+  const colours = colourRules(enabled);
+  if (enabled.has('bottlenecks') || colours.size) {
     // Areas cut off by three borders are slow to find, so they wait for the pass below.
     const found = areaRules(p, state, need, closed, enabled, maxArea, new Set([...sources].filter((x) => x !== 'cuts3')));
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
   }
   // Last resort: areas cut off by three borders, only when nothing else applies.
-  if (enabled.has('balance') && sources.has('cuts3') && !deductions.length) {
-    const found = areaRules(p, state, need, closed, new Set<RuleId>(['balance']), maxArea, new Set<AreaSource>(['cuts3']), opts.threeCuts ?? 'labels');
+  if (colours.size && sources.has('cuts3') && !deductions.length) {
+    const found = areaRules(p, state, need, closed, colours, maxArea, new Set<AreaSource>(['cuts3']), opts.threeCuts ?? 'labels');
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
   }
   return { kind: 'open', deductions };
+}
+
+/** The checkerboard rules among those enabled. */
+function colourRules(enabled: Set<RuleId>): Set<RuleId> {
+  return new Set([...enabled].filter((r) => r === 'balance' || r === 'imbalance'));
 }
 
 /** Every deduction the rules make from a state (empty if stuck, solved or contradictory). */
@@ -262,7 +281,7 @@ function stepFrom(p: Puzzle, state: LogicState, an: Analysis): StepResult {
 const SPEED_TIERS: RuleId[][] = [
   ['continue', 'corners', 'passages', 'noLoops', 'noFinish'],
   ['noSeal'],
-  ['bottlenecks', 'balance'],
+  ['bottlenecks', 'balance', 'imbalance'],
 ];
 
 /**
@@ -311,7 +330,7 @@ export function runLogic(p: Puzzle, rules: Iterable<RuleId>, start: LogicState =
 }
 
 /** The rules outside the editor's "Easy rules" group. */
-export const ADVANCED_RULES: RuleId[] = ['bottlenecks', 'balance'];
+export const ADVANCED_RULES: RuleId[] = ['bottlenecks', 'balance', 'imbalance'];
 
 /** One hint a player needed: its rule, and for area rules how many tiles the area had. */
 export interface HintStep {
@@ -339,7 +358,7 @@ export function hintJourney(p: Puzzle, opts: LogicOptions = {}): { steps: HintSt
     if (h.kind !== 'deduction') return { steps, outcome: 'stuck' };
     const d = h.deduction;
     // Only the area rules report a size.
-    const areaRule = d.rule === 'balance' || d.rule === 'bottlenecks';
+    const areaRule = d.rule === 'balance' || d.rule === 'imbalance' || d.rule === 'bottlenecks';
     steps.push(areaRule && d.cells ? { rule: d.rule, area: d.cells.length } : { rule: d.rule });
     state = applyStep(state, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
   }
@@ -864,17 +883,21 @@ function areaRules(
    * The path must also cross at least once (twice when the count is even).
    */
   // Satisfied areas (see below), collected for chains when they're switched on.
-  const wantSatisfied = use.has('chains') && enabled.has('balance');
+  const colours = colourRules(enabled);
+  const wantSatisfied = use.has('chains') && colours.size > 0;
   const satisfied: { cells: number[]; lines: number[] }[] = [];
   const balance = (area: number[]): Contradiction | null => {
     if (area.length < 2 || area.length >= cells.length || area.length > balanceMaxArea) return null;
-    const inArea = new Set(area);
     let diff = 0;
+    for (const c of area) diff += shaded(c) ? 1 : -1;
+    // Balanced areas (as many shaded tiles as white) and unbalanced ones are separate rules.
+    const rule: RuleId = diff === 0 ? 'balance' : 'imbalance';
+    if (!enabled.has(rule)) return null;
+    const inArea = new Set(area);
     let endS = 0;
     let endW = 0;
     let needSum = 0;
     for (const c of area) {
-      diff += shaded(c) ? 1 : -1;
       needSum += need[c];
       if (need[c] === 1) shaded(c) ? endS++ : endW++;
     }
@@ -943,7 +966,7 @@ function areaRules(
     const entry =
       sMin <= sMinBalance ? '' : minCrossings === 1 ? ' It has to get into the area at least once.' : ' It has to get into the area and back out.';
     out.push({
-      rule: 'balance',
+      rule,
       cell: Math.min(...area),
       cells: [...area],
       exits: sDrawn + wDrawn + sOpen.length + wOpen.length,
@@ -955,7 +978,7 @@ function areaRules(
   };
 
   /** Try the area rules that look at a whole area. */
-  const checkArea = (area: number[]): Contradiction | null => (enabled.has('balance') ? balance(area) : null);
+  const checkArea = (area: number[]): Contradiction | null => (colours.size ? balance(area) : null);
 
   // Cuts of one or two borders.
   const bridges0 = bridges(n, cells, adj, other, -1);
@@ -1023,7 +1046,7 @@ function areaRules(
   // on a big one, those of up to RECT_AREA tiles plus the strips that run all the way across.
   // (Empty areas, the groups of tiles with no lines yet, were dropped: every sample that
   // needed one was also covered by a cut, rectangle or room.)
-  if (enabled.has('balance')) {
+  if (colours.size) {
     const small = p.w * p.h <= SMALL_BOARD;
     for (let rh = 1; rh <= (use.has('rects') ? p.h : 0); rh++) {
       for (let rw = 1; rw <= p.w; rw++) {
@@ -1188,11 +1211,11 @@ function areaRules(
     // tile across that line plus one of that tile's neighbours (one shaded tile and one white,
     // so the colour difference stays the same). If the bigger area's balance draws a new line
     // out of it, keep the bigger area and repeat from there.
-    if (use.has('chains') && enabled.has('balance')) {
+    if (use.has('chains') && colours.size) {
       const tried = new Set<string>();
       const keyOf = (a: number[]) => [...a].sort((x, y) => x - y).join(',');
       const seeds: { cells: number[]; lines: number[] }[] = out
-        .filter((d) => d.rule === 'balance' && d.cells && d.segments.length)
+        .filter((d) => colours.has(d.rule) && d.cells && d.segments.length)
         .map((d) => ({ cells: d.cells!, lines: d.segments }));
       // Satisfied areas: chains carry on from them through their drawn lines, so a chain the
       // player (or earlier steps) worked part of the way along isn't lost.
@@ -1222,7 +1245,7 @@ function areaRules(
               const bad = checkArea(bigger);
               if (bad) return bad;
               // A balance deduction's lines always cross its area's edge, so any is a new line out.
-              const fresh = out.slice(before).find((d) => d.rule === 'balance' && d.segments.length);
+              const fresh = out.slice(before).find((d) => colours.has(d.rule) && d.segments.length);
               if (fresh) {
                 next = { area: bigger, lines: fresh.segments };
                 break;
