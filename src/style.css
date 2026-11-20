@@ -1511,3 +1511,120 @@ a.btn {
 .packs-status.error {
   color: var(--error);
 }
+/* The end of each pack: a dashed, level-shaped outline that adds a level from the Library. */
+.pack-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 120px;
+  padding: 6px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.pack-add:hover,
+.pack-add:focus-visible {
+  border-color: var(--accent);
+  color: var(--accent);
+  outline: none;
+}
+.pack-add svg {
+  width: 28px;
+  height: 28px;
+}
+.pack-tile {
+  position: relative;
+}
+.pack-tile.added {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+.pack-tile.bad {
+  border-color: var(--error);
+}
+.pack-tile.bad .pack-tile-label {
+  color: var(--error);
+}
+/* Only shown on the tile under the mouse (the Packs tab is used from a computer). */
+.pack-tile-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+}
+.pack-tile:hover .pack-tile-remove,
+.pack-tile:focus-within .pack-tile-remove {
+  opacity: 1;
+}
+.pack-tile-remove:hover {
+  color: var(--error);
+}
+.pack-tile-remove svg {
+  width: 18px;
+  height: 18px;
+}
+.pack-add-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+.pack-add-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pack-add-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--tap);
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+.pack-add-row:hover,
+.pack-add-row:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+.pack-add-row svg.board {
+  position: static;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  touch-action: auto;
+  pointer-events: none;
+}
+.pack-add-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.pack-add-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pack-add-meta,
+.pack-add-empty {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}

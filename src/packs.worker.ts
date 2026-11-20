@@ -4,8 +4,8 @@ import { solve } from './solver';
 
 /** Puzzle codes to solve, in order. */
 export type PacksRequest = string[];
-/** One level's solution (its lines), or none if it has none. */
-export type PacksMessage = { code: string; segments: number[] | null };
+/** One level's solution (its lines), or none if it has none, and whether it's the only one. */
+export type PacksMessage = { code: string; segments: number[] | null; unique: boolean };
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -13,11 +13,14 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope;
 ctx.onmessage = (ev: MessageEvent<PacksRequest>) => {
   for (const code of ev.data) {
     let segments: number[] | null = null;
+    let unique = false;
     try {
-      segments = solve(decodePuzzle(code), { maxSolutions: 1 }).solutions[0] ?? null;
+      const r = solve(decodePuzzle(code), { maxSolutions: 2 });
+      segments = r.solutions[0] ?? null;
+      unique = r.status === 'unique';
     } catch {
       segments = null;
     }
-    ctx.postMessage({ code, segments } satisfies PacksMessage);
+    ctx.postMessage({ code, segments, unique } satisfies PacksMessage);
   }
 };

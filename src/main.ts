@@ -47,7 +47,7 @@ const editor = new EditorView();
 const library = new LibraryView(storage);
 // The pack organiser saves through the local dev server, so only it has one (and the
 // published site's bundle leaves it out).
-const packs = import.meta.env.DEV ? new PacksView() : null;
+const packs = import.meta.env.DEV ? new PacksView(storage) : null;
 views.append(play.el, editor.el, library.el);
 if (packs) {
   views.append(packs.el);

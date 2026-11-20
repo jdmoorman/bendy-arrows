@@ -1,8 +1,11 @@
-import { decodePuzzle } from './codec';
+import { decodePuzzle, encodePuzzle } from './codec';
 import { MIN_PACK_LEVELS, PACKS } from './levels';
 import type { PacksMessage, PacksRequest } from './packs.worker';
+import { transformPuzzle } from './model';
 import { padFor, renderBoard } from './render';
-import { el, toast } from './ui';
+import type { Storage } from './storage';
+import { ICONS } from './icons';
+import { el, openSheet, toast } from './ui';
 
 /** Hold this long (ms) on a touch screen before a level picks up, so a swipe still scrolls. */
 const HOLD_MS = 300;
@@ -14,8 +17,9 @@ const EDGE = 60;
 /**
  * The creator's pack organiser: every pack's levels as their solved boards, in play order.
  * Drag a level (on a touch screen, hold it first) to move it within its pack or into another;
- * tap one to play it. Each pack's name and description can be edited too. Save writes it all
- * to src/levels.ts (through the local dev server, the only place the organiser appears).
+ * tap one to play it. Each pack's name and description can be edited too, puzzles from the
+ * Library added to the end of a pack, and levels removed. Save writes it all to src/levels.ts (through the local dev
+ * server, the only place the organiser appears).
  */
 export class PacksView {
   readonly el: HTMLElement;
@@ -31,7 +35,10 @@ export class PacksView {
   /** Each pack's name and description, as edited. */
   private names: string[] = PACKS.map((p) => p.name);
   private descriptions: string[] = PACKS.map((p) => p.description);
-  private solutions = new Map<string, Set<number> | null>();
+  /** Each level's solution once solved (none if it has none), and whether it's the only one. */
+  private solutions = new Map<string, { lines: Set<number> | null; unique: boolean }>();
+  /** Levels sent to the solver and not back yet. */
+  private solving = new Set<string>();
   private worker: Worker | null = null;
   private drag: {
     tile: HTMLElement;
@@ -47,7 +54,7 @@ export class PacksView {
   } | null = null;
   private scrollFrame = 0;
 
-  constructor() {
+  constructor(private storage: Storage) {
     this.el = el('section', 'view packs-view hidden');
     this.el.innerHTML = `
       <div class="packs-top">
@@ -78,18 +85,28 @@ export class PacksView {
   /** Show the view: draw the packs, and solve any levels not solved yet. */
   show(): void {
     this.draw();
-    const todo = this.order.flat().filter((c) => !this.solutions.has(c));
-    if (!todo.length || this.worker) return;
-    this.worker = new Worker(new URL('./packs.worker.ts', import.meta.url), { type: 'module' });
-    this.worker.onmessage = (ev: MessageEvent<PacksMessage>) => {
-      const { code, segments } = ev.data;
-      this.solutions.set(code, segments ? new Set(segments) : null);
-      for (const t of this.body.querySelectorAll<HTMLElement>(`.pack-tile[data-code="${code}"]`)) this.drawTile(t);
-      if (this.order.flat().every((c) => this.solutions.has(c))) {
-        this.worker?.terminate();
-        this.worker = null;
-      }
-    };
+    this.solveNew();
+  }
+
+  /** Send levels not solved (or being solved) yet to the solver. */
+  private solveNew() {
+    const todo = this.order.flat().filter((c) => !this.solutions.has(c) && !this.solving.has(c));
+    if (!todo.length) return;
+    for (const c of todo) this.solving.add(c);
+    if (!this.worker) {
+      this.worker = new Worker(new URL('./packs.worker.ts', import.meta.url), { type: 'module' });
+      this.worker.onmessage = (ev: MessageEvent<PacksMessage>) => {
+        const { code, segments, unique } = ev.data;
+        this.solving.delete(code);
+        this.solutions.set(code, { lines: segments ? new Set(segments) : null, unique });
+        for (const t of this.body.querySelectorAll<HTMLElement>(`.pack-tile[data-code="${code}"]`)) this.drawTile(t);
+        this.update();
+        if (!this.solving.size) {
+          this.worker?.terminate();
+          this.worker = null;
+        }
+      };
+    }
     this.worker.postMessage(todo satisfies PacksRequest);
   }
 
@@ -103,6 +120,8 @@ export class PacksView {
     if (names.some((n) => !n)) return 'Every pack needs a name.';
     if (new Set(names).size !== names.length) return 'Two packs have the same name.';
     if (this.descriptions.some((d) => !d.trim())) return 'Every pack needs a description.';
+    const notUnique = this.order.flat().filter((c) => this.solutions.get(c)?.unique === false).length;
+    if (notUnique) return `${notUnique === 1 ? 'A level has' : `${notUnique} levels have`} more than one solution, or none.`;
     return '';
   }
 
@@ -131,6 +150,10 @@ export class PacksView {
         const grid = el('div', 'pack-tiles');
         grid.dataset.pack = String(pi);
         for (const code of this.order[pi]) grid.append(this.tile(code));
+        // The end of each pack: a level-shaped outline to add one from the Library.
+        const add = el('button', 'pack-add', `${ICONS.plus}<span>Add level</span>`);
+        add.addEventListener('click', () => this.openAddSheet(pi));
+        grid.append(add);
         section.append(head, desc, grid);
         return section;
       }),
@@ -150,6 +173,17 @@ export class PacksView {
       }
     });
     t.append(document.createElementNS('http://www.w3.org/2000/svg', 'svg'), el('span', 'pack-tile-label'));
+    // Any level can be taken out of its pack (a saved one leaves src/levels.ts on Save).
+    const remove = el('button', 'pack-tile-remove', ICONS.close);
+    remove.setAttribute('aria-label', 'Remove this level');
+    remove.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+    remove.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.order = this.order.map((levels) => levels.filter((c) => c !== code));
+      t.remove();
+      this.update();
+    });
+    t.append(remove);
     this.drawTile(t);
     return t;
   }
@@ -159,9 +193,11 @@ export class PacksView {
     const p = decodePuzzle(t.dataset.code!);
     const svg = t.querySelector('svg')!;
     svg.classList.add('board');
-    const lines = this.solutions.get(t.dataset.code!);
+    const known = this.solutions.get(t.dataset.code!);
+    const lines = known?.lines;
     renderBoard(svg, p, { pad: padFor(p), segments: lines ?? undefined, solved: !!lines });
-    t.classList.toggle('pending', !this.solutions.has(t.dataset.code!));
+    t.classList.toggle('pending', !known);
+    t.classList.toggle('bad', known?.unique === false);
   }
 
   /** Number the tiles, count each pack, and say what's unsaved. */
@@ -172,9 +208,11 @@ export class PacksView {
       tiles.forEach((t, i) => {
         const p = decodePuzzle(t.dataset.code!);
         const label = t.querySelector('.pack-tile-label')!;
-        label.textContent = `${i + 1} · ${p.w}×${p.h}`;
+        const bad = this.solutions.get(t.dataset.code!)?.unique === false;
+        label.textContent = `${i + 1} · ${p.w}×${p.h}${bad ? ' · not unique' : ''}`;
         t.setAttribute('aria-label', `${this.names[pi]} ${i + 1}, ${p.w} by ${p.h}`);
         t.classList.toggle('moved', PACKS[pi].levels[i] !== t.dataset.code);
+        t.classList.toggle('added', !PACKS.some((k) => k.levels.includes(t.dataset.code!)));
       });
       const count = grid.parentElement!.querySelector('.pack-count')!;
       const n = tiles.length;
@@ -188,9 +226,76 @@ export class PacksView {
     this.status.classList.toggle('error', !!problem);
     this.status.textContent = problem
       ? problem
-: changed
-        ? 'Unsaved changes. Save writes them to src/levels.ts.'
+      : changed
+        ? `Unsaved changes${this.removed.length ? ` (${this.removed.length} level${this.removed.length === 1 ? '' : 's'} removed)` : ''}. Save writes them to src/levels.ts.`
         : 'Drag a level to move it (hold it first on a touch screen). Tap to play it. Edit names and descriptions in place.';
+  }
+
+  /** Pick a Library puzzle to add to the end of pack `pi`. */
+  private openAddSheet(pi: number) {
+    const inPacks = new Set(this.order.flat());
+    const entries = this.storage
+      .list()
+      .map((e) => ({ e, code: this.asLevel(e.code, pi) }))
+      .filter((x): x is { e: (typeof x)['e']; code: string } => !!x.code && !inPacks.has(x.code))
+      .sort((a, b) => b.e.updated - a.e.updated);
+    const body = el('div', 'pack-add-sheet');
+    const search = el('input', 'text-input');
+    search.type = 'search';
+    search.placeholder = 'Search your Library';
+    search.setAttribute('aria-label', 'Search your Library');
+    const list = el('div', 'pack-add-list');
+    const empty = el('p', 'pack-add-empty');
+    body.append(search, list, empty);
+    const sheet = openSheet(`Add to ${this.names[pi]}`, body);
+    const show = () => {
+      const q = search.value.trim().toLowerCase();
+      const shown = entries.filter(({ e }) => !q || e.name.toLowerCase().includes(q) || (e.collection ?? '').toLowerCase().includes(q));
+      empty.textContent = entries.length ? (shown.length ? '' : 'Nothing in your Library matches.') : 'Everything in your Library is already in a pack (or your Library is empty).';
+      list.replaceChildren(
+        ...shown.slice(0, 200).map(({ e, code }) => {
+          const p = decodePuzzle(code);
+          const row = el('button', 'pack-add-row');
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.classList.add('board');
+          renderBoard(svg, p, { pad: padFor(p) });
+          const text = el('span', 'pack-add-text');
+          const name = el('span', 'pack-add-name');
+          name.textContent = e.name;
+          const meta = el('span', 'pack-add-meta');
+          meta.textContent = `${p.w}×${p.h}${e.collection ? ` · ${e.collection}` : ''}`;
+          text.append(name, meta);
+          row.append(svg, text);
+          row.addEventListener('click', () => {
+            this.order[pi].push(code);
+            sheet.close();
+            this.draw();
+            this.solveNew();
+            toast(`Added ${e.name} to ${this.names[pi]}.`);
+            this.body.querySelector(`.pack-tiles[data-pack="${pi}"] .pack-add`)?.scrollIntoView({ block: 'nearest' });
+          });
+          return row;
+        }),
+      );
+    };
+    search.addEventListener('input', show);
+    show();
+  }
+
+  /**
+   * A Library puzzle as a level of pack `pi`: turned upright if it's wider than tall, and a
+   * one-shot exactly when the pack is a One-Shot pack. None if it can't be read.
+   */
+  private asLevel(code: string, pi: number): string | null {
+    try {
+      let p = decodePuzzle(code);
+      if (p.w > p.h) p = transformPuzzle(p, 'rotateRight');
+      if (this.names[pi].startsWith('One-Shot') || PACKS[pi].name.startsWith('One-Shot')) p.oneShot = true;
+      else delete p.oneShot;
+      return encodePuzzle(p);
+    } catch {
+      return null;
+    }
   }
 
   // --- Dragging ------------------------------------------------------------
@@ -265,7 +370,9 @@ export class PacksView {
     d.ghost!.style.transform = `translate(${d.x - d.offX}px, ${d.y - d.offY}px)`;
     const target = this.dropTarget(d.x, d.y);
     if (!target) return;
-    const { grid, before } = target;
+    const { grid } = target;
+    // Levels go before a pack's Add level outline, never after it.
+    const before = target.before ?? grid.querySelector('.pack-add');
     if (before === d.tile || (before === d.tile.nextElementSibling && d.tile.parentElement === grid)) return;
     grid.insertBefore(d.tile, before);
   }
@@ -326,13 +433,21 @@ export class PacksView {
 
   // --- Saving --------------------------------------------------------------
 
+  /** Saved levels taken out of every pack. */
+  private get removed(): string[] {
+    const kept = new Set(this.order.flat());
+    return PACKS.flatMap((p) => p.levels).filter((c) => !kept.has(c));
+  }
+
   private async save() {
+    const n = this.removed.length;
+    if (n && !confirm(`Remove ${n} level${n === 1 ? '' : 's'} from src/levels.ts? Players' progress on ${n === 1 ? 'it' : 'them'} goes too.`)) return;
     this.saveBtn.disabled = true;
     try {
       const res = await fetch('/__packs', {
         method: 'POST',
         body: JSON.stringify({
-          packs: PACKS.map((p, i) => ({ name: p.name, newName: this.names[i].trim(), description: this.descriptions[i].trim(), levels: this.order[i] })),
+          packs: PACKS.map((p, i) => ({ name: p.name, newName: this.names[i].trim(), description: this.descriptions[i].trim(), levels: this.order[i], was: p.levels })),
         }),
       });
       const reply = (await res.json()) as { error?: string };
