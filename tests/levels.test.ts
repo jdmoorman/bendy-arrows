@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { decodePuzzle, encodePuzzle } from '../src/codec';
 import { findLevel, levelName, MIN_PACK_LEVELS, PACKS } from '../src/levels';
-import { isOneShot, transformPuzzle, type Puzzle } from '../src/model';
+import { ADVANCED_RULES, ALL_RULES, runStroke } from '../src/logic';
+import { isOneShot, openCells, transformPuzzle, type Puzzle } from '../src/model';
 import { solve } from '../src/solver';
 
 // Every official level must be a good puzzle before it ships: GitHub runs these before
@@ -21,6 +22,15 @@ describe('level packs', () => {
   test('the One-Shot packs hold one-shots, and the other packs none', () => {
     for (const pack of PACKS) {
       for (const code of pack.levels) expect(isOneShot(decodePuzzle(code)), `${pack.name}: ${code}`).toBe(pack.name.startsWith('One-Shot'));
+    }
+  });
+
+  test('One-Shot Midis: at least 30 tiles to visit, and the easy rules draw the whole stroke', () => {
+    const easy = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
+    for (const code of PACKS.find((k) => k.name === 'One-Shot Midis')!.levels) {
+      const p = decodePuzzle(code);
+      expect(openCells(p).length, code).toBeGreaterThanOrEqual(30);
+      expect(runStroke(p, easy).solved, code).toBe(true);
     }
   });
 

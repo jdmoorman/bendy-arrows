@@ -195,3 +195,29 @@ export function tilesOnly(run: number): void {
     }
   }
 }
+
+/**
+ * One-shots the easy rules draw all the way, for One-Shot Midis: generated easy puzzles of
+ * CLUES ('walls' or 'mixed'; default 'mixed') from 5×5 to 7×8, at least 30 tiles to visit.
+ */
+export function midis(run: number): void {
+  const end = Date.now() + Number(process.env.RESEARCH_MINUTES ?? 10) * 60 * 1000;
+  const clues = (process.env.CLUES ?? 'mixed') as ClueKind;
+  const sizes: [number, number][] = [];
+  for (let w = 5; w <= 7; w++) for (let h = w; h <= 8; h++) sizes.push([w, h]);
+  for (let seed = run * 1_000_000 + 900_000; Date.now() < end; seed++) {
+    const [w, h] = sizes[seed % sizes.length];
+    try {
+      const r = generate({ w, h, difficulties: ['easy'], clues, minimal: true, attempts: 1, seed });
+      if (r.difficulty !== 'easy') continue;
+      const q = tall(r.puzzle);
+      if (openCells(q).length < 30) continue;
+      const code = encodePuzzle(q);
+      if (seen.has(code)) continue;
+      seen.add(code);
+      if (singleStroke(q)) record(`one-shot/midis-${clues}.txt`, `One-shot ${q.w}×${q.h} — #p=${code}`);
+    } catch {
+      /* no puzzle this seed */
+    }
+  }
+}
