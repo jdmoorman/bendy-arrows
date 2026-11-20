@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { decodePuzzle, encodePuzzle } from '../src/codec';
 import { findLevel, levelName, MIN_PACK_LEVELS, PACKS } from '../src/levels';
-import { transformPuzzle, type Puzzle } from '../src/model';
+import { isOneShot, transformPuzzle, type Puzzle } from '../src/model';
 import { solve } from '../src/solver';
 
 // Every official level must be a good puzzle before it ships: GitHub runs these before
@@ -16,6 +16,12 @@ describe('level packs', () => {
     expect(new Set(PACKS.map((p) => p.name)).size).toBe(PACKS.length);
     const codes = PACKS.flatMap((p) => p.levels);
     expect(new Set(codes).size).toBe(codes.length);
+  });
+
+  test('the One-Shot packs hold one-shots, and the other packs none', () => {
+    for (const pack of PACKS) {
+      for (const code of pack.levels) expect(isOneShot(decodePuzzle(code)), `${pack.name}: ${code}`).toBe(pack.name.startsWith('One-Shot'));
+    }
   });
 
   test('no level is another turned, mirrored or with its ends swapped', () => {

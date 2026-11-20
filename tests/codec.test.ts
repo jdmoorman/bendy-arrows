@@ -18,6 +18,21 @@ describe('codec', () => {
     expect(q.endpoints).toEqual(p.endpoints);
   });
 
+  test('a one-shot keeps its flag through the share code and JSON; other codes are unchanged', () => {
+    const p = sample();
+    const plain = encodePuzzle(p);
+    p.oneShot = true;
+    const code = encodePuzzle(p);
+    expect(code).not.toBe(plain);
+    expect(decodePuzzle(code).oneShot).toBe(true);
+    expect(decodePuzzle(plain).oneShot).toBeUndefined();
+    expect(puzzlesEqual(p, decodePuzzle(code))).toBe(true);
+    expect(puzzleFromJson(JSON.parse(JSON.stringify(puzzleToJson(p)))).oneShot).toBe(true);
+    // Without both ends it isn't a one-shot, and the code doesn't say so.
+    p.endpoints = p.endpoints.slice(0, 1);
+    expect(encodePuzzle(p)).toBe(encodePuzzle({ ...p, oneShot: undefined }));
+  });
+
   test('puzzles without ends and large grids round-trip', () => {
     const p = createPuzzle(30, 30);
     p.blocked.add(899);

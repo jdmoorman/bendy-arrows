@@ -2,7 +2,8 @@
 import { decodePuzzle } from './codec';
 import { rateDifficulty } from './generator';
 import { RATING_VERSION, type Rating } from './library-table';
-import { hintJourney, searchMetrics } from './logic';
+import { hintJourney, searchMetrics, strokeJourney } from './logic';
+import { isOneShot } from './model';
 import { solve } from './solver';
 
 export type RatingMessage = { code: string; rating: Rating };
@@ -20,7 +21,8 @@ ctx.onmessage = (ev: MessageEvent<RatingRequest>) => {
       const unique = solve(p, { maxSolutions: 2 }).status === 'unique';
       rating = { v: RATING_VERSION, unique, difficulty: unique ? rateDifficulty(p) : null, hints: null, tightest: null, effort: null };
       if (unique) {
-        const j = hintJourney(p);
+        // A one-shot's hints are those for its stroke.
+        const j = isOneShot(p) ? strokeJourney(p) : hintJourney(p);
         rating.hints = j.steps.length;
         if (j.outcome === 'stuck') rating.hintsStuck = true;
         const m = searchMetrics(p);

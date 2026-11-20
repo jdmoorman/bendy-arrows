@@ -1,9 +1,9 @@
 import { History } from './history';
 import { solveInBackground, type SolverRun } from './solver-client';
-import { findHint, findStrokeHint, type Hint } from './logic';
+import { findHint, findStrokeHint, strokeFrom, type Hint } from './logic';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
-import { cellEdges, edgeBetween, edgeCells, isUsableEdge, portCell, type Puzzle } from './model';
+import { cellEdges, edgeBetween, isOneShot, isUsableEdge, type Puzzle } from './model';
 import { padFor, renderBoard } from './render';
 import { canPlace, checkSolution } from './rules';
 
@@ -29,8 +29,6 @@ export class PlayView {
   private nextBtn!: HTMLButtonElement;
 
   private autoCheck = false;
-  /** One-shot mode: the path is drawn as one stroke from the entrance (see `strokeCells`). */
-  private oneStroke = false;
 
   private puzzle!: Puzzle;
   private segments = new Set<number>();
@@ -204,37 +202,17 @@ export class PlayView {
     this.afterChange();
   }
 
-  /** One-shot mode: draw one stroke from the entrance, and get hints for that stroke. */
-  setOneStroke(on: boolean): void {
-    this.oneStroke = on;
-    this.shownHint = null;
-    this.render();
-  }
-
-  /** One-shot mode is on and the puzzle has an entrance to start from. */
-  private get strokeMode(): boolean {
-    return this.oneStroke && this.puzzle.endpoints.length > 0;
-  }
-
   /**
-   * The stroke's tiles in order: from the entrance tile, along the drawn lines, as far as they
-   * go. (Lines not joined to it are left alone.)
+   * One-shot mode, for one-shot puzzles: the path is drawn as one stroke from the entrance
+   * (going back over it takes it back), and hints are for that stroke.
    */
+  private get strokeMode(): boolean {
+    return isOneShot(this.puzzle);
+  }
+
+  /** The stroke's tiles in order, from the entrance tile along the drawn lines (see `strokeFrom`). */
   private strokeCells(): number[] {
-    const p = this.puzzle;
-    let cur = portCell(p, p.endpoints[0].port);
-    const cells = [cur];
-    const seen = new Set(cells);
-    for (;;) {
-      const next = cellEdges(p, cur)
-        .filter((e) => this.segments.has(e))
-        .map((e) => edgeCells(p, e).find((c) => c !== cur)!)
-        .find((c) => !seen.has(c));
-      if (next === undefined) return cells;
-      cells.push(next);
-      seen.add(next);
-      cur = next;
-    }
+    return strokeFrom(this.puzzle, this.segments).tiles;
   }
 
   /** Take the stroke back to its `i`th tile, removing the lines after it. */
@@ -454,9 +432,8 @@ export class PlayView {
     }
     if (this.strokeMode) {
       // The next line of the stroke, from the stroke alone.
-      const s = this.strokeCells();
-      const lines = new Set(s.slice(1).map((c, k) => edgeBetween(this.puzzle, s[k], c)));
-      this.shownHint = findStrokeHint(this.puzzle, lines, s[s.length - 1]);
+      const { tiles, lines } = strokeFrom(this.puzzle, this.segments);
+      this.shownHint = findStrokeHint(this.puzzle, lines, tiles[tiles.length - 1]);
     } else {
       this.shownHint = findHint(this.puzzle, { segments: this.segments, xs: this.xMarks });
     }

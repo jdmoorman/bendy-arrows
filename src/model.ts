@@ -28,6 +28,11 @@ export interface Puzzle {
    * where the path enters or leaves. The first is the entrance.
    */
   endpoints: End[];
+  /**
+   * A one-shot puzzle: the path is drawn as one stroke from the entrance, and hints and the
+   * logic helper follow that stroke. Only kept with both ends placed.
+   */
+  oneShot?: boolean;
 }
 
 /** A fixed end of the path: a border segment (port) on the outer frame. */
@@ -60,7 +65,13 @@ export function clonePuzzle(p: Puzzle): Puzzle {
     blocked: new Set(p.blocked),
     walls: new Set(p.walls),
     endpoints: p.endpoints.map((e) => ({ ...e })),
+    ...(p.oneShot ? { oneShot: true } : {}),
   };
+}
+
+/** Whether a puzzle plays as a one-shot: flagged so, with an entrance and an exit. */
+export function isOneShot(p: Puzzle): boolean {
+  return !!p.oneShot && p.endpoints.length === 2;
 }
 
 export function cellCount({ w, h }: Size): number {
@@ -231,6 +242,7 @@ export function resizePuzzle(p: Puzzle, w: number, h: number): Puzzle {
     const limit = side === 'top' || side === 'bottom' ? w : h;
     if (i < limit) out.endpoints.push(portEnd(portId(out, side, i)));
   }
+  if (p.oneShot) out.oneShot = true;
   return out;
 }
 
@@ -242,7 +254,8 @@ export function puzzlesEqual(a: Puzzle, b: Puzzle): boolean {
     setEq(a.blocked, b.blocked) &&
     setEq(a.walls, b.walls) &&
     a.endpoints.length === b.endpoints.length &&
-    a.endpoints.every((v, i) => endsEqual(v, b.endpoints[i]))
+    a.endpoints.every((v, i) => endsEqual(v, b.endpoints[i])) &&
+    isOneShot(a) === isOneShot(b)
   );
 }
 
@@ -297,6 +310,7 @@ export function transformPuzzle(p: Puzzle, t: Transform): Puzzle {
     const [r, c] = cellRC(out, mapCell(portCell(p, end.port)));
     return portEnd(portId(out, newSide, newSide === 'top' || newSide === 'bottom' ? c : r));
   });
+  if (p.oneShot) out.oneShot = true;
   return out;
 }
 

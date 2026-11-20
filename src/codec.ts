@@ -1,4 +1,4 @@
-import { cellCount, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, portCount, portEnd, type Puzzle } from './model';
+import { cellCount, createPuzzle, edgeCount, isOneShot, MAX_SIZE, MIN_SIZE, portCount, portEnd, type Puzzle } from './model';
 
 /**
  * Compact share code for a puzzle.
@@ -8,7 +8,7 @@ import { cellCount, createPuzzle, edgeCount, MAX_SIZE, MIN_SIZE, portCount, port
  *
  * Layout (0.6): byte 0 is the version (6), then a bit stream, most significant bit first:
  *   5 bits each   width - 1, height - 1
- *   2 bits        number of ends
+ *   2 bits        number of ends; 3 means two ends and a one-shot puzzle
  *   per end       frame port index, in just enough bits for the board's port count
  *   3 bits        Rice parameter k
  *   Elias gamma   number of obstacles + 1
@@ -37,7 +37,7 @@ export function encodePuzzle(p: Puzzle): string {
   out.write(p.w - 1, 5);
   out.write(p.h - 1, 5);
   const endpoints = p.endpoints.slice(0, 2);
-  out.write(endpoints.length, 2);
+  out.write(endpoints.length === 2 && p.oneShot ? 3 : endpoints.length, 2);
   const portBits = bitsFor(portCount(p));
   for (const end of endpoints) out.write(end.port, portBits);
   out.write(k, 3);
@@ -66,8 +66,11 @@ function decodePacked(bytes: Uint8Array): Puzzle {
   const p = createPuzzle(w, h);
   const n = cellCount(p);
   const total = n + edgeCount(p);
-  const nEnd = r.read(2);
-  if (nEnd > 2) throw new Error('Puzzle code has too many ends.');
+  let nEnd = r.read(2);
+  if (nEnd === 3) {
+    p.oneShot = true;
+    nEnd = 2;
+  }
   const portBits = bitsFor(portCount(p));
   for (let i = 0; i < nEnd; i++) {
     const v = r.read(portBits);
@@ -146,6 +149,8 @@ export interface PuzzleJson {
   walls: number[];
   /** Frame ends, entrance first. */
   endpoints: { port: number }[];
+  /** A one-shot puzzle (see Puzzle.oneShot); left out when not. */
+  oneShot?: boolean;
   code: string;
 }
 
@@ -159,6 +164,7 @@ export function puzzleToJson(p: Puzzle): PuzzleJson {
     blocked: sorted(p.blocked),
     walls: sorted(p.walls),
     endpoints: p.endpoints.map((e) => ({ port: e.port })),
+    ...(isOneShot(p) ? { oneShot: true } : {}),
     code: encodePuzzle(p),
   };
 }
@@ -187,6 +193,7 @@ export function puzzleFromJson(value: unknown): Puzzle {
   if (j.endpoints !== undefined && !Array.isArray(j.endpoints)) throw new Error('"endpoints" must be a list.');
   const ports = (j.endpoints ?? []).map((x) => (x && typeof x === 'object' ? (x as { port?: unknown }).port : undefined));
   p.endpoints = ints(ports, portCount(p), 'endpoints').slice(0, 2).map(portEnd);
+  if (j.oneShot === true && p.endpoints.length === 2) p.oneShot = true;
   return p;
 }
 

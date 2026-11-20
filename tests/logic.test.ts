@@ -478,3 +478,42 @@ describe('findStrokeHint', async () => {
     expect(findStrokeHint(p, new Set(), portCell(p, p.endpoints[0].port)).kind).toBe('none');
   });
 });
+
+describe('one-shot logic', async () => {
+  const { runStroke, strokeFrom, strokeJourney, ADVANCED_RULES: advanced } = await import('../src/logic');
+  const { decodePuzzle } = await import('../src/codec');
+  const { checkSolution } = await import('../src/rules');
+  const { portCell } = await import('../src/model');
+  const { PACKS } = await import('../src/levels');
+  const pack = (name: string) => PACKS.find((k) => k.name === name)!.levels.map((c) => decodePuzzle(c));
+  const easy = ALL_RULES.filter((r) => !advanced.includes(r));
+
+  test('the easy rules draw every One-Shot Minis level as one stroke, with no hints', () => {
+    for (const p of pack('One-Shot Minis')) {
+      const run = runStroke(p, easy);
+      expect(run.solved).toBe(true);
+      expect(checkSolution(p, run.state.segments).solved).toBe(true);
+      expect(strokeJourney(p)).toEqual({ steps: [], outcome: 'solved' });
+    }
+  });
+
+  test('One-Shot: hard levels need hints for the stroke, and the hints finish it', () => {
+    for (const p of pack('One-Shot: hard').slice(0, 3)) {
+      expect(runStroke(p, easy).solved).toBe(false);
+      const j = strokeJourney(p);
+      expect(j.outcome).toBe('solved');
+      expect(j.steps.length).toBeGreaterThan(0);
+    }
+  }, 60_000);
+
+  test('the stroke runs from the entrance along joined lines only', () => {
+    const p = pack('One-Shot Minis')[0];
+    const run = runStroke(p, easy);
+    const start = portCell(p, p.endpoints[0].port);
+    const lines = [...run.state.segments];
+    const s = strokeFrom(p, new Set(lines.slice(0, 3)));
+    expect(s.tiles[0]).toBe(start);
+    expect(s.lines.size).toBeLessThanOrEqual(3);
+    expect(strokeFrom(p, new Set()).tiles).toEqual([start]);
+  });
+});

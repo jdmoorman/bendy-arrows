@@ -40,9 +40,21 @@ const play = new PlayView();
 const levels = el('div', 'view levels-view hidden');
 app.querySelector('.views')!.append(play.el, levels);
 play.setAutoCheck(settings.autoCheck);
-play.setOneStroke(settings.oneStroke);
 
 const state: PlayerState = storage.loadPlayer();
+
+// One-shot levels used to be plain puzzles: their codes changed when they learned they're
+// one-shots, so carry solved marks and unfinished boards over from the old codes.
+for (const pack of PACKS) {
+  for (const code of pack.levels) {
+    const p = decodePuzzle(code);
+    if (!p.oneShot) continue;
+    const old = encodePuzzle({ ...p, oneShot: undefined });
+    if (storage.isSolved(old)) storage.markSolved(code);
+    if (state.progress[old] && !state.progress[code]) state.progress[code] = state.progress[old];
+    delete state.progress[old];
+  }
+}
 /** The level on the board, or none for a puzzle opened from a link. */
 let current: LevelRef | undefined;
 let currentCode = '';
@@ -174,7 +186,6 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
     applySettings(s);
     play.render();
     play.setAutoCheck(s.autoCheck);
-    play.setOneStroke(s.oneStroke);
     storage.saveSettings(s);
   });
 });

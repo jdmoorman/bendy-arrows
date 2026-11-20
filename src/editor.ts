@@ -13,6 +13,7 @@ import {
   openCells,
   endTile,
   endsEqual,
+  isOneShot,
   type End,
   resizePuzzle,
   transformPuzzle,
@@ -21,7 +22,7 @@ import {
 } from './model';
 import { padFor, renderBoard } from './render';
 import { missingEnds } from './rules';
-import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, RULES, runLogic, type AreaSource, type LogicOptions, type LogicState, type RuleId } from './logic';
+import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, findStrokeHint, RULES, runLogic, runStroke, strokeFrom, type AreaSource, type LogicOptions, type LogicState, type RuleId } from './logic';
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
@@ -97,6 +98,7 @@ export class EditorView {
   /** Logic engine options: whether rooms stop growing at a tie. */
   private logicOpts: LogicOptions = loadLogicOptions(new Storage());
   private autoWorker: Worker | null = null;
+  private oneShotBtn!: HTMLButtonElement;
   private autoId = 0;
 
   constructor() {
@@ -112,6 +114,7 @@ export class EditorView {
             <button class="seg-btn" data-tool="walls">Walls</button>
             <button class="seg-btn" data-tool="ends">Ends</button>
           </div>
+          <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the entrance, and hints and logic follow it">One-shot</button>
         </div>
         <div class="toolbar-row logic-row">
           <button class="btn" data-logic="rules" aria-label="Logic rules">${ICONS.list}<span>Rules</span></button>
@@ -146,6 +149,8 @@ export class EditorView {
 
     for (const t of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[t].addEventListener('click', () => this.setTool(t));
     q<HTMLButtonElement>('[data-act=transform]').addEventListener('click', () => this.openTransformSheet());
+    this.oneShotBtn = q<HTMLButtonElement>('[data-act=oneshot]');
+    this.oneShotBtn.addEventListener('click', () => this.toggleOneShot());
     q<HTMLButtonElement>('[data-logic=step]').addEventListener('click', () => this.stepLogic());
     this.logicBackBtn = q<HTMLButtonElement>('[data-logic=back]');
     this.logicBackBtn.addEventListener('click', () => this.stepLogicBack());
@@ -231,6 +236,19 @@ export class EditorView {
     for (const fn of this.changeListeners) fn(this.puzzle);
   }
 
+  /** Make the puzzle a one-shot, or an ordinary puzzle again (one undoable step). */
+  private toggleOneShot() {
+    this.cancelAutoLogic();
+    const on = !this.puzzle.oneShot;
+    this.edit((p) => {
+      const q = clonePuzzle(p);
+      if (on) q.oneShot = true;
+      else delete q.oneShot;
+      return q;
+    });
+    if (on && this.puzzle.endpoints.length < 2) this.setMessage('One-shot: place an entrance and an exit for it to take effect.', 'error');
+  }
+
   // --- Logic helper -------------------------------------------------------
 
   private resetLogic() {
@@ -247,8 +265,12 @@ export class EditorView {
     this.cancelAutoLogic();
     this.clearMessage();
     const p = this.puzzle;
-    // One step is exactly what a Play hint would suggest, using the chosen rules.
-    const hint = findHint(p, this.logic, this.logicRules, this.logicOpts);
+    // One step is exactly what a Play hint would suggest, using the chosen rules (for a
+    // one-shot, the next lines of the stroke from the entrance).
+    const stroke = isOneShot(p) ? strokeFrom(p, this.logic.segments) : null;
+    const hint = stroke
+      ? findStrokeHint(p, stroke.lines, stroke.tiles[stroke.tiles.length - 1], this.logicOpts, this.logicRules)
+      : findHint(p, this.logic, this.logicRules, this.logicOpts);
     this.logicFresh = new Set();
     this.logicFocus = new Set();
     this.logicBad = hint.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
@@ -269,7 +291,7 @@ export class EditorView {
     }
     const d = hint.deduction;
     this.logicHistory.push({ logic: this.logic, steps: this.logicSteps });
-    this.logic = applyStep(this.logic, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
+    this.logic = applyStep(stroke ? { segments: stroke.lines, xs: new Set() } : this.logic, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
     this.logicFresh = new Set([...d.segments, ...d.xs]);
     this.logicFocus = new Set(d.cells ?? [d.cell]);
     this.logicSteps++;
@@ -285,7 +307,7 @@ export class EditorView {
     const rules = [...this.logicRules].filter((r) => !ADVANCED_RULES.includes(r));
     const before = { logic: this.logic, steps: this.logicSteps };
     // Speed matters here, not the order a hint would pick: run the easy rules to the end.
-    const run = runLogic(p, rules, this.logic, this.logicOpts);
+    const run = isOneShot(p) ? runStroke(p, rules, this.logic, this.logicOpts) : runLogic(p, rules, this.logic, this.logicOpts);
     const fresh = new Set([...run.state.segments, ...run.state.xs].filter((e) => !this.logic.segments.has(e) && !this.logic.xs.has(e)));
     const lines = [...run.state.segments].filter((e) => !this.logic.segments.has(e)).length;
     const xs = fresh.size - lines;
@@ -762,6 +784,7 @@ export class EditorView {
       focusCells: logic && this.logicFocus.size ? this.logicFocus : undefined,
       errorCells: logic && this.logicBad.length ? new Set(this.logicBad) : undefined,
     });
+    this.oneShotBtn.setAttribute('aria-pressed', String(!!p.oneShot));
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;
     this.logicBackBtn.disabled = !this.logicHistory.length;

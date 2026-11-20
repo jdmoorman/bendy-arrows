@@ -1,4 +1,4 @@
-import { cellCount, cellEdges, edgeCells, edgeCount, endpointCells, isHorizontalEdge, isUsableEdge, neighbors, openCells, type Puzzle } from './model';
+import { cellCount, cellEdges, edgeCells, edgeCount, endpointCells, isHorizontalEdge, isUsableEdge, neighbors, openCells, portCell, type Puzzle } from './model';
 
 /**
  * Simple, local deduction rules for the editor's logic helper. A "step"
@@ -473,16 +473,34 @@ export function findHint(p: Puzzle, state: LogicState, rules: Iterable<RuleId> =
 }
 
 /**
- * One-shot mode's hint: the simplest deduction that forces the stroke's next line out of
- * `head`, from the stroke alone (its lines, no X marks).
+ * A one-shot's stroke: its tiles in order from the entrance tile, along `segments` as far as
+ * they go (lines not joined to it are left out), and the lines it uses.
  */
-export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opts: LogicOptions = {}): Hint {
+export function strokeFrom(p: Puzzle, segments: Set<number>): { tiles: number[]; lines: Set<number> } {
+  let cur = portCell(p, p.endpoints[0].port);
+  const tiles = [cur];
+  const lines = new Set<number>();
+  for (;;) {
+    const e = cellEdges(p, cur).find((x) => segments.has(x) && !lines.has(x) && !tiles.includes(edgeCells(p, x).find((c) => c !== cur)!));
+    if (e === undefined) return { tiles, lines };
+    cur = edgeCells(p, e).find((c) => c !== cur)!;
+    tiles.push(cur);
+    lines.add(e);
+  }
+}
+
+/**
+ * One-shot mode's hint: the simplest deduction (with `rules`) that forces the stroke's next
+ * line out of `head`, from the stroke alone (its lines, no X marks).
+ */
+export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opts: LogicOptions = {}, rules: Iterable<RuleId> = HINT_ORDER): Hint {
   const state: LogicState = { segments: stroke, xs: new Set() };
-  const an = analyse(p, state, new Set(HINT_ORDER), opts);
+  const allowed = new Set(rules);
+  const an = analyse(p, state, new Set(HINT_ORDER.filter((r) => allowed.has(r))), opts);
   if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
   if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
   const next = (d: Deduction) => d.segments.find((e) => !stroke.has(e) && edgeCells(p, e).includes(head));
-  const d = simplest(an.deductions.filter((x) => next(x) !== undefined));
+  const d = simplest(an.deductions.filter((x) => next(x) !== undefined), HINT_ORDER.filter((r) => allowed.has(r)));
   if (!d) return { kind: 'none', text: 'The rules can’t tell where the stroke goes next from here.' };
   // Show only the lines that carry the stroke on, one after another from its tip (a corner's
   // two lines, say); the rule may force others elsewhere too.
@@ -495,6 +513,49 @@ export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opt
     tip = edgeCells(p, e).find((c) => c !== tip)!;
   }
   return { kind: 'deduction', deduction: { ...d, segments: chain, xs: [] }, text: explain(p, state, d) };
+}
+
+/**
+ * A one-shot drawn as far as `rules` force it, one hint at a time from the stroke in `start`
+ * (only the lines joined to the entrance count).
+ */
+export function runStroke(p: Puzzle, rules: Iterable<RuleId>, start: LogicState = { segments: new Set(), xs: new Set() }, opts: LogicOptions = {}): LogicRun {
+  const chosen = [...rules];
+  let { tiles, lines } = strokeFrom(p, start.segments);
+  for (let rounds = 0; rounds <= edgeCount(p); rounds++) {
+    const state = { segments: lines, xs: new Set<number>() };
+    const h = findStrokeHint(p, lines, tiles[tiles.length - 1], opts, chosen);
+    if (h.kind === 'solved') return { state, rounds, solved: true };
+    if (h.kind === 'mistake') return { state, rounds, solved: false, contradiction: { cell: h.cell, cells: h.cells, reason: 'The stroke can’t be finished.', hint: h.text } };
+    if (h.kind !== 'deduction') return { state, rounds, solved: false };
+    ({ tiles, lines } = strokeFrom(p, new Set([...lines, ...h.deduction.segments])));
+  }
+  return { state: { segments: lines, xs: new Set() }, rounds: edgeCount(p), solved: false };
+}
+
+/**
+ * `hintJourney` for a one-shot: the stroke goes on as far as the easy rules force it; where they
+ * can't, a hint (all the rules) takes it one step further.
+ */
+export function strokeJourney(p: Puzzle, opts: LogicOptions = {}): { steps: HintStep[]; outcome: 'solved' | 'stuck' } {
+  const easy = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
+  const steps: HintStep[] = [];
+  let state: LogicState = { segments: new Set(), xs: new Set() };
+  for (let i = 0; i <= edgeCount(p); i++) {
+    const run = runStroke(p, easy, state, opts);
+    state = run.state;
+    if (run.solved) return { steps, outcome: 'solved' };
+    if (run.contradiction) return { steps, outcome: 'stuck' };
+    const { tiles, lines } = strokeFrom(p, state.segments);
+    const h = findStrokeHint(p, lines, tiles[tiles.length - 1], opts);
+    if (h.kind === 'solved') return { steps, outcome: 'solved' };
+    if (h.kind !== 'deduction') return { steps, outcome: 'stuck' };
+    const d = h.deduction;
+    const areaRule = d.rule === 'balance' || d.rule === 'imbalance' || d.rule === 'bottlenecks';
+    steps.push(areaRule && d.cells ? { rule: d.rule, area: d.cells.length } : { rule: d.rule });
+    state = { segments: new Set([...lines, ...d.segments]), xs: new Set() };
+  }
+  return { steps, outcome: 'stuck' };
 }
 
 /** The deduction a hint would show: simplest rule first, then the simplest use of it. */

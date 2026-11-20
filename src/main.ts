@@ -45,7 +45,6 @@ const editor = new EditorView();
 const library = new LibraryView(storage);
 views.append(play.el, editor.el, library.el);
 play.setAutoCheck(settings.autoCheck);
-play.setOneStroke(settings.oneStroke);
 
 /** The puzzle currently loaded in the play view, and where it came from. */
 let playing: Puzzle = createPuzzle(6, 6);
@@ -181,7 +180,6 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
     play.render();
     editor.render();
     play.setAutoCheck(s.autoCheck);
-    play.setOneStroke(s.oneStroke);
     storage.saveSettings(s);
   });
 });

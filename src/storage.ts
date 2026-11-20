@@ -56,11 +56,9 @@ export interface Settings {
   darkTheme: boolean;
   /** Label columns with letters (A, B, …) and rows with numbers (1, 2, …) around the board. */
   coordinates: boolean;
-  /** Draw the path as one stroke from the entrance (going back over it takes it back), with hints for that stroke. */
-  oneStroke: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false, oneStroke: false };
+export const DEFAULT_SETTINGS: Settings = { checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false };
 
 /** The player app's place: the level being played, the tab shown, and unfinished boards. */
 export interface PlayerState {

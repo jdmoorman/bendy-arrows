@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import { decodePuzzle } from './codec';
-import { runLogic, type Contradiction, type LogicOptions, type RuleId } from './logic';
+import { runLogic, runStroke, type Contradiction, type LogicOptions, type RuleId } from './logic';
+import { isOneShot } from './model';
 
 export type LogicRequest = { id: number; code: string; rules: RuleId[]; opts?: LogicOptions };
 export type LogicReply = {
@@ -14,10 +15,11 @@ export type LogicReply = {
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
-/** Run the chosen rules on a puzzle until they get stuck, off the main thread. */
+/** Run the chosen rules on a puzzle until they get stuck (a one-shot's stroke, from its entrance), off the main thread. */
 ctx.onmessage = (ev: MessageEvent<LogicRequest>) => {
   const { id, code, rules, opts } = ev.data;
-  const run = runLogic(decodePuzzle(code), rules, undefined, opts);
+  const p = decodePuzzle(code);
+  const run = isOneShot(p) ? runStroke(p, rules, undefined, opts) : runLogic(p, rules, undefined, opts);
   ctx.postMessage({
     id,
     segments: [...run.state.segments],
