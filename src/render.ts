@@ -25,14 +25,14 @@ export interface RenderOptions {
   xMarks?: Set<number>;
   errorCells?: Set<number>;
   errorEdges?: Set<number>;
+  /** Show the board as solved (the lines change colour). */
+  solved?: boolean;
   /** A solution drawn faintly underneath (e.g. "show solution" in the editor). */
   ghost?: Set<number>;
   /** Draw faint markers on every border so editors can see where to tap. */
   showBorderTargets?: boolean;
   /** Draw faint markers on every frame border where an end could go. */
   showPortTargets?: boolean;
-  /** Celebrate a solved board. */
-  solved?: boolean;
   /** Margin around the grid in SVG units (default PAD). */
   pad?: number;
   /** Tiles to shade in the highlight colour (e.g. the tile a hint is about). */

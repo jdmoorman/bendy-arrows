@@ -12,7 +12,6 @@ import { openSaveSheet } from './save-ui';
 import { hashWantsEditor, openShareSheet, puzzleFromHash } from './share';
 import { openSettingsSheet, applySettings } from './settings-ui';
 import { Storage } from './storage';
-import { openSolvedSheet } from './solved-ui';
 import { applyTheme, DEFAULT_THEME } from './themes';
 import { solveInBackground } from './solver-client';
 import { el, openSheet, toast } from './ui';
@@ -78,13 +77,9 @@ function requestPlay() {
 editor.onPlay = requestPlay;
 attachUniquenessCheck(editor);
 
-play.onSolved = () => {
-  storage.markSolved(playingCode);
-  openSolvedSheet({
-    onPlayAgain: () => play.playAgain(),
-    onAnotherPuzzle: openLibrary,
-  });
-};
+play.onSolved = () => storage.markSolved(playingCode);
+// Solved: Another puzzle (the Library) beside Play again.
+play.solvedAction = () => ({ label: 'Another puzzle', run: () => setTab('library') });
 
 play.onProgress = (progress, solved) => {
   if (libraryId) storage.updateProgress(libraryId, playingCode, progress, solved);
@@ -196,11 +191,6 @@ app.querySelector('[data-act=share]')!.addEventListener('click', () => {
     onOpen: (p) => loadPuzzle(p),
   });
 });
-
-/** Show the Library tab (also used to pick another puzzle after solving). */
-function openLibrary() {
-  setTab('library');
-}
 
 /** Save the editor's puzzle, or the one being played, to the library. */
 function saveCurrent(fromEditor: boolean, toLibrary = false) {

@@ -21,6 +21,13 @@ export class PlayView {
   onProgress?: (progress: Progress, solved: boolean) => void;
   /** Called whenever the board becomes solved. */
   onSolved?: () => void;
+  /**
+   * The second button beside Play again (e.g. Next level), worked out when the view is built
+   * and on each load; none if this returns null.
+   */
+  solvedAction: () => { label: string; run: () => void } | null = () => null;
+  private nextBtn!: HTMLButtonElement;
+  private againBtn!: HTMLButtonElement;
 
   private autoCheck = false;
 
@@ -61,7 +68,6 @@ export class PlayView {
     this.el.className = 'view play-view';
     this.el.innerHTML = `
       <div class="board-wrap"><svg class="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Puzzle board"></svg></div>
-      <p class="status" role="status" aria-live="polite"></p>
       <div class="toolbar">
         <div class="toolbar-row">
           <button class="btn" data-act="undo" aria-label="Undo">${ICONS.undo}<span>Undo</span></button>
@@ -69,8 +75,19 @@ export class PlayView {
           <button class="btn" data-act="reset" aria-label="Clear the board" title="Clear the board">${ICONS.rotateLeft}</button>
           <button class="btn primary" data-act="hint" aria-label="Hint">${ICONS.bulb}<span>Hint</span></button>
         </div>
-      </div>`;
+      </div>
+      <div class="solved-row">
+        <button class="btn" data-act="again">${ICONS.rotateLeft}<span>Play again</span></button>
+        <button class="btn primary" data-act="next"><span>Next level</span></button>
+      </div>
+      <p class="status" role="status" aria-live="polite"></p>`;
     this.svg = this.el.querySelector('svg')!;
+    // Upright, the board sits at the bottom of its space, right above the toolbar; side by side
+    // (landscape), it stays centred beside the buttons.
+    const upright = window.matchMedia('(orientation: portrait), (max-width: 599px)');
+    const place = () => this.svg.setAttribute('preserveAspectRatio', upright.matches ? 'xMidYMax meet' : 'xMidYMid meet');
+    place();
+    upright.addEventListener('change', place);
     this.status = this.el.querySelector('.status')!;
     this.undoBtn = this.el.querySelector('[data-act=undo]')!;
     this.redoBtn = this.el.querySelector('[data-act=redo]')!;
@@ -79,6 +96,13 @@ export class PlayView {
     this.undoBtn.addEventListener('click', () => this.undo());
     this.redoBtn.addEventListener('click', () => this.redo());
     this.el.querySelector('[data-act=hint]')!.addEventListener('click', () => this.showHint());
+    this.nextBtn = this.el.querySelector('[data-act=next]')!;
+    this.againBtn = this.el.querySelector('[data-act=again]')!;
+    // Both always show and work once the board is solved, greyed out until then. They must not
+    // appear on solving: in Safari on iPhone, content that becomes visible right after a tap is
+    // taken as a hover menu, and the next tap is spent closing it (every button took two taps).
+    this.againBtn.addEventListener('click', () => this.playAgain());
+    this.nextBtn.addEventListener('click', () => this.solvedAction()?.run());
 
     attachBoardInput(this.svg, () => this.puzzle, {
       kind: () => 'path',
@@ -132,6 +156,9 @@ export class PlayView {
     this.history.clear();
     this.shownHint = null;
     this.solved = checkSolution(p, this.segments).solved;
+    const action = this.solvedAction();
+    this.nextBtn.querySelector('span')!.textContent = action?.label ?? '';
+    this.nextBtn.classList.toggle('hidden', !action);
     this.render();
   }
 
@@ -277,10 +304,9 @@ export class PlayView {
     this.shownHint = null;
     const wasSolved = this.solved;
     this.solved = checkSolution(this.puzzle, this.segments).solved;
-    if (this.solved && !wasSolved) navigator.vibrate?.([30, 60, 30]);
     this.render();
     this.onProgress?.(this.progress, this.solved);
-    // Every time the board becomes solved (e.g. again after Reset or Undo), not just the first.
+    // Every time the board becomes solved (e.g. again after Clear or Undo), not just the first.
     if (this.solved && !wasSolved) this.onSolved?.();
   }
 
@@ -360,12 +386,11 @@ export class PlayView {
 
   render(): void {
     if (!this.puzzle) return;
-    const live = checkSolution(this.puzzle, this.segments);
     const errorCells = new Set<number>();
-    const errorEdges = new Set<number>(this.autoCheck && !live.solved ? this.autoCheckEdges() : []);
-    if (!live.solved && this.shownHint?.kind === 'wrong') for (const e of this.shownHint.edges) errorEdges.add(e);
+    const errorEdges = new Set<number>(this.autoCheck ? this.autoCheckEdges() : []);
+    if (this.shownHint?.kind === 'wrong') for (const e of this.shownHint.edges) errorEdges.add(e);
     // A shown hint is drawn on top of the board in the highlight colour.
-    const hint = live.solved ? null : this.shownHint;
+    const hint = this.shownHint;
     const d = hint?.kind === 'deduction' ? hint.deduction : null;
     const focus = d ? (d.cells ?? [d.cell]) : hint?.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
     renderBoard(this.svg, this.puzzle, {
@@ -376,20 +401,20 @@ export class PlayView {
       focusCells: focus.length ? new Set(focus) : undefined,
       errorCells,
       errorEdges,
-      solved: live.solved,
+      solved: this.solved,
     });
 
-    const kind = live.solved ? 'success' : hint ? (hint.kind === 'mistake' || hint.kind === 'wrong' ? 'error' : 'hint') : '';
-    this.status.classList.toggle('success', kind === 'success');
+    const kind = hint ? (hint.kind === 'mistake' || hint.kind === 'wrong' ? 'error' : 'hint') : '';
     this.status.classList.toggle('error', kind === 'error');
     this.status.classList.toggle('hint', kind === 'hint');
-    if (live.solved) this.status.textContent = live.message;
-    else if (hint) this.status.textContent = hint.text;
-    else this.status.textContent = '';
+    this.status.textContent = hint ? hint.text : '';
 
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;
+    this.againBtn.disabled = !this.solved;
+    this.nextBtn.disabled = !this.solved;
   }
+
 }
 
 /** The marks that don't fit the solution closest to the board (puzzles from the editor may have several). */

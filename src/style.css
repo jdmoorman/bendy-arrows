@@ -303,6 +303,22 @@ a.btn {
   font-size: 0.92rem;
 }
 
+/* Play's order under the board: the toolbar, then Play again and Next level (always shown,
+   usable once solved), then the status line at the bottom. */
+.play-view > .toolbar {
+  padding-bottom: 0;
+}
+.solved-row {
+  display: flex;
+  justify-content: center;
+  gap: var(--gap);
+  padding: 8px 12px 0;
+}
+.solved-row > .btn {
+  flex: 0 1 200px;
+  min-width: 0;
+}
+
 .status.success {
   color: var(--success);
   font-weight: 600;
@@ -920,15 +936,6 @@ a.btn {
   outline-offset: 2px;
 }
 
-/* ---------- Solved sheet ---------- */
-.solved-title {
-  margin: 4px 0 0;
-  text-align: center;
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--success);
-}
-
 /* Latest logic-helper deductions. */
 .seg.hint {
   stroke: var(--hint);
@@ -1107,11 +1114,12 @@ a.btn {
     display: grid;
     grid-template-columns: minmax(0, 1fr) clamp(220px, 30vw, 320px);
     column-gap: 16px;
-    grid-template-rows: 1fr auto auto 1fr;
+    grid-template-rows: 1fr auto auto auto 1fr;
     grid-template-areas:
       'board .'
-      'board status'
       'board toolbar'
+      'board solved'
+      'board status'
       'board .';
   }
   .play-view > .board-wrap {
@@ -1126,6 +1134,10 @@ a.btn {
   .play-view > .toolbar {
     grid-area: toolbar;
     padding: 0 12px 0 0;
+  }
+  .play-view > .solved-row {
+    grid-area: solved;
+    padding: 8px 12px 0 0;
   }
   .play-view .toolbar-row {
     flex-wrap: wrap;

@@ -7,7 +7,6 @@ import { PlayView } from './play';
 import { puzzleFromHash } from './share';
 import { applySettings, openSettingsSheet } from './settings-ui';
 import { Storage, type PlayerState } from './storage';
-import { openSolvedSheet } from './solved-ui';
 import { applyTheme, DEFAULT_THEME } from './themes';
 import { el, toast } from './ui';
 
@@ -84,27 +83,26 @@ function openLevel(ref: LevelRef) {
   load(decodePuzzle(code), code, ref);
 }
 
-/** The level after this one: the next in the pack, else the first of the next pack. */
-function nextLevel(ref: LevelRef): LevelRef | undefined {
-  if (ref.level + 1 < PACKS[ref.pack].levels.length) return { pack: ref.pack, level: ref.level + 1 };
-  return ref.pack + 1 < PACKS.length ? { pack: ref.pack + 1, level: 0 } : undefined;
-}
-
 play.onProgress = (progress, solved) => {
+  // A solved level starts afresh next time; an unfinished one keeps its lines.
   if (solved) delete state.progress[currentCode];
   else if (progress.segments.length || progress.xMarks.length) state.progress[currentCode] = progress;
   else delete state.progress[currentCode];
   save();
 };
 
-play.onSolved = () => {
-  storage.markSolved(currentCode);
+play.onSolved = () => storage.markSolved(currentCode);
+
+/** The level after this one: the next in the pack, else the first of the next pack. */
+function nextLevel(ref: LevelRef): LevelRef | undefined {
+  if (ref.level + 1 < PACKS[ref.pack].levels.length) return { pack: ref.pack, level: ref.level + 1 };
+  return ref.pack + 1 < PACKS.length ? { pack: ref.pack + 1, level: 0 } : undefined;
+}
+
+// Solved: the Hint button becomes Next level (after the very last level, All levels).
+play.solvedAction = () => {
   const next = current && nextLevel(current);
-  openSolvedSheet({
-    onPlayAgain: () => play.playAgain(),
-    onAnotherPuzzle: () => (next ? openLevel(next) : setTab('levels')),
-    anotherLabel: next ? 'Next level' : 'All levels',
-  });
+  return next ? { label: 'Next level', run: () => openLevel(next) } : { label: 'All levels', run: () => setTab('levels') };
 };
 
 /** The packs, each with its levels as numbered buttons: solved ones ticked, the current one marked. */
