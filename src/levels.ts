@@ -8,7 +8,8 @@
  *      line into a pack's `levels` below (or write the code by hand: everything after
  *      `#p=` in the puzzle's share link). Levels play in the order listed.
  *   3. `npm test` checks every pack: a name, a description, at least MIN_PACK_LEVELS
- *      levels, each with exactly one solution, and no code used twice.
+ *      levels, each at least as tall as it is wide (phones are held upright) and with
+ *      exactly one solution, and no code used twice.
  *   4. Commit and push to main. GitHub builds the site and publishes it to Pages.
  *
  * Players' progress is kept by a level's code, so changing a published level's walls,
@@ -29,8 +30,8 @@ export const PACKS: LevelPack[] = [
     name: 'Zeros and Ones',
     description: 'Puzzles with at most one obstacle, yet still a unique solution.',
     levels: [
-      'BhDtUQ',
       'BhDssQ',
+      'BhDtUQ',
       'BhDsQQ',
       'BhjuYQ',
       'BhkoHEA',

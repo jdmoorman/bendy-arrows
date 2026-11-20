@@ -26,9 +26,11 @@ describe('level packs', () => {
 
   for (const pack of PACKS) {
     pack.levels.forEach((code, i) => {
-      test(`${pack.name} ${i + 1}: decodes in the current format and has exactly one solution`, () => {
+      test(`${pack.name} ${i + 1}: decodes in the current format, is tall rather than wide, and has exactly one solution`, () => {
         const p = decodePuzzle(code);
         expect(encodePuzzle(p)).toBe(code);
+        // Phones are held upright: a level is at least as tall as it is wide.
+        expect(p.h, `${p.w}×${p.h} is wider than tall`).toBeGreaterThanOrEqual(p.w);
         expect(solve(p, { maxSolutions: 2 }).status).toBe('unique');
       }, 60000);
     });
