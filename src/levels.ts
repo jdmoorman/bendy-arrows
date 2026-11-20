@@ -9,7 +9,8 @@
  *      `#p=` in the puzzle's share link). Levels play in the order listed.
  *   3. `npm test` checks every pack: a name, a description, at least MIN_PACK_LEVELS
  *      levels, each at least as tall as it is wide (phones are held upright) and with
- *      exactly one solution, and no code used twice.
+ *      exactly one solution, and no level used twice (not even turned, mirrored or with its
+ *      ends swapped).
  *   4. Commit and push to main. GitHub builds the site and publishes it to Pages.
  *
  * Players' progress is kept by a level's code, so changing a published level's walls,
@@ -53,13 +54,12 @@ export const PACKS: LevelPack[] = [
       'BhDkxrU',
       'BhDjtq4',
       'BhEk1LQ',
-      'BhEk1qw',
       'BhjuRvuw',
       'BhjhmLCA',
+      'BhlouJfDKA',
       'BhFiOirA',
       'BhklqiuA',
       'Bhkjhjzp',
-      'BhlouJfDKA',
       'BhlmCqqg',
       'BhmoIJjdngA',
       'BiEjCJOGAA',
@@ -74,7 +74,6 @@ export const PACKS: LevelPack[] = [
       'BhjuRvuo',
       'Bhjp5kpGQA',
       'BhjuGLCA',
-      'BhjlqLEA',
       'BhklxJDzAA',
       'BhkjERJjAA',
       'BhkoRL2g',
@@ -84,9 +83,7 @@ export const PACKS: LevelPack[] = [
       'BhkoIbXg',
       'BhknLb9E',
       'BhkhPbzg',
-      'BhkoCj2i',
       'BhloFRKoAA',
-      'BhlooRMiwA',
       'BhlnlTeQ',
       'BiEjmJPIAA',
       'BiEkDJfwEA',

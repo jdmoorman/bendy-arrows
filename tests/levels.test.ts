@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { decodePuzzle, encodePuzzle } from '../src/codec';
 import { findLevel, levelName, MIN_PACK_LEVELS, PACKS } from '../src/levels';
+import { transformPuzzle, type Puzzle } from '../src/model';
 import { solve } from '../src/solver';
 
 // Every official level must be a good puzzle before it ships: GitHub runs these before
@@ -15,6 +16,33 @@ describe('level packs', () => {
     expect(new Set(PACKS.map((p) => p.name)).size).toBe(PACKS.length);
     const codes = PACKS.flatMap((p) => p.levels);
     expect(new Set(codes).size).toBe(codes.length);
+  });
+
+  test('no level is another turned, mirrored or with its ends swapped', () => {
+    // Every way a board can face (4 turns, each mirrored or not), with the ends either way round.
+    const variants = (p: Puzzle): string[] => {
+      const out: string[] = [];
+      for (const q0 of [p, { ...p, endpoints: [...p.endpoints].reverse() }]) {
+        let q = q0;
+        for (let r = 0; r < 4; r++) {
+          out.push(encodePuzzle(q), encodePuzzle(transformPuzzle(q, 'flipH')));
+          q = transformPuzzle(q, 'rotateRight');
+        }
+      }
+      return out;
+    };
+    const seen = new Map<string, string>();
+    const same: string[] = [];
+    PACKS.forEach((pack) =>
+      pack.levels.forEach((code, i) => {
+        const name = `${pack.name} ${i + 1}`;
+        const vs = variants(decodePuzzle(code));
+        const hit = vs.map((v) => seen.get(v)).find((n) => n);
+        if (hit) same.push(`${name} is ${hit}`);
+        for (const v of vs) seen.set(v, name);
+      }),
+    );
+    expect(same).toEqual([]);
   });
 
   test('levels are found by code and named by pack and number', () => {
