@@ -5,6 +5,7 @@ import { decodePuzzle, encodePuzzle } from './codec';
 import { EditorView } from './editor';
 import { ICONS } from './icons';
 import { LibraryView } from './library-view';
+import { PacksView } from './packs-view';
 import { clonePuzzle, createPuzzle, puzzlesEqual, type Puzzle } from './model';
 import { PlayView, type Progress } from './play';
 import { findLevel, levelName, PACKS, type LevelRef } from './levels';
@@ -18,7 +19,7 @@ import { el, openSheet, toast } from './ui';
 
 applyTheme(DEFAULT_THEME);
 
-type Tab = 'play' | 'edit' | 'library';
+type Tab = 'play' | 'edit' | 'library' | 'packs';
 
 const app = document.getElementById('app')!;
 app.innerHTML = `
@@ -28,6 +29,7 @@ app.innerHTML = `
       <button class="seg-btn" role="tab" data-tab="play">Play</button>
       <button class="seg-btn" role="tab" data-tab="edit">Create</button>
       <button class="seg-btn" role="tab" data-tab="library">Library</button>
+      <button class="seg-btn" role="tab" data-tab="packs">Packs</button>
     </div>
     <button class="btn icon" data-act="share" aria-label="Share or open a puzzle">${ICONS.share}</button>
     <button class="btn icon" data-act="settings" aria-label="Settings">${ICONS.settings}</button>
@@ -43,7 +45,9 @@ const titleEl = app.querySelector<HTMLElement>('.app-title')!;
 const play = new PlayView();
 const editor = new EditorView();
 const library = new LibraryView(storage);
-views.append(play.el, editor.el, library.el);
+const packs = new PacksView();
+views.append(play.el, editor.el, library.el, packs.el);
+packs.onOpen = (code) => loadPuzzle(decodePuzzle(code));
 play.setAutoCheck(settings.autoCheck);
 
 /** The puzzle currently loaded in the play view, and where it came from. */
@@ -154,10 +158,12 @@ function setTab(t: Tab) {
     editor.replaced = false;
     updateHeader();
   }
-  if (t !== 'library') lastBoardTab = t;
+  if (t === 'play' || t === 'edit') lastBoardTab = t;
   play.el.classList.toggle('hidden', t !== 'play');
   editor.el.classList.toggle('hidden', t !== 'edit');
   library.el.classList.toggle('hidden', t !== 'library');
+  packs.el.classList.toggle('hidden', t !== 'packs');
+  if (t === 'packs') packs.show();
   if (t === 'library') {
     library.currentCode = playingCode;
     library.refresh();
@@ -296,7 +302,7 @@ library.onDeleted = (id) => {
 document.addEventListener('keydown', (ev) => {
   const target = ev.target as HTMLElement | null;
   if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
-  if (document.querySelector('dialog[open]') || tab === 'library') return;
+  if (document.querySelector('dialog[open]') || tab === 'library' || tab === 'packs') return;
   const handled = tab === 'play' ? play.handleKey(ev) : editor.handleKey(ev);
   if (handled) ev.preventDefault();
 });

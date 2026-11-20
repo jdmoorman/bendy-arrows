@@ -1382,3 +1382,91 @@ a.btn {
 .level-btn.current {
   box-shadow: 0 0 0 2px var(--accent);
 }
+
+/* ---------- Pack organiser (creator) ---------- */
+.packs-view {
+  padding: 4px 12px 0;
+  gap: 8px;
+}
+.packs-top {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+}
+.packs-status {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.packs-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+.pack-section + .pack-section {
+  margin-top: 16px;
+}
+.pack-count.short {
+  color: var(--error);
+}
+.pack-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: var(--gap);
+  min-height: 80px;
+}
+.pack-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.pack-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* A small board in the tile's flow (not the play area's full-size board), and a swipe on it scrolls. */
+.pack-tile svg.board {
+  position: static;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  touch-action: auto;
+  pointer-events: none;
+}
+.pack-tile.pending svg {
+  opacity: 0.6;
+}
+.pack-tile-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.pack-tile.moved {
+  border-color: var(--accent);
+}
+.pack-tile.dragging {
+  opacity: 0.3;
+}
+.pack-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 50;
+  pointer-events: none;
+  cursor: grabbing;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+  opacity: 0.95;
+}

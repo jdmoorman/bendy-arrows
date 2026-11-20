@@ -28,7 +28,7 @@ export interface Session {
   editorCode?: string;
   /** The unsaved editor puzzle was made with New puzzle or Generate (not edited from the played one). */
   editorReplaced?: boolean;
-  tab?: 'play' | 'edit' | 'library';
+  tab?: 'play' | 'edit' | 'library' | 'packs';
 }
 
 const LIBRARY_KEY = 'bendyarrows.library.v1';
