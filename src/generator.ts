@@ -234,7 +234,7 @@ const onFrame = (p: Puzzle, c: number) => {
  * A random Hamiltonian path through the open tiles (as a tile order), made
  * by "backbite" moves from a starting path, with both ends on the frame.
  */
-function randomHamiltonian(p: Puzzle, rand: () => number): number[] | null {
+export function randomHamiltonian(p: Puzzle, rand: () => number): number[] | null {
   const start = startingPath(p);
   if (!start) return null;
   let path = start;
@@ -295,7 +295,7 @@ function walkEdges(p: Puzzle, edges: number[], start: number): number[] {
 }
 
 /** A frame end just outside tile `c`. */
-function portFor(p: Puzzle, c: number, rand: () => number) {
+export function portFor(p: Puzzle, c: number, rand: () => number) {
   const [r, col] = cellRC(p, c);
   const sides: [Side, number][] = [];
   if (r === 0) sides.push(['top', col]);
