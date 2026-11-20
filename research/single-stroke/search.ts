@@ -117,10 +117,10 @@ export function generated(run: number): void {
   }
 }
 
-/** Sizes for the hard strokes: at least 4 tiles each way, at most 50 in all (already tall). */
-const sizeOk = (w: number, h: number) => w >= 4 && h >= 4 && w * h <= 50;
+/** Sizes for the hard strokes: at least 4 tiles each way, at most 50 in all, at most twice as tall as wide (already tall). */
+const sizeOk = (w: number, h: number) => w >= 4 && h >= 4 && w * h <= 50 && h <= 2 * w;
 const HARD_SIZES: [number, number][] = [];
-for (let w = 4; w <= 7; w++) for (let h = w; w * h <= 50; h++) HARD_SIZES.push([w, h]);
+for (let w = 4; w <= 7; w++) for (let h = w; w * h <= 50 && h <= 2 * w; h++) HARD_SIZES.push([w, h]);
 
 /** Hard single strokes: steps the easy rules can't force, but all the rules (a hint) can. */
 export const HARD_LIST = 'single-stroke/hard-levels.txt';

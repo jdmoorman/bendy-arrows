@@ -8,7 +8,8 @@
  *      line into a pack's `levels` below (or write the code by hand: everything after
  *      `#p=` in the puzzle's share link). Levels play in the order listed.
  *   3. `npm test` checks every pack: a name, a description, at least MIN_PACK_LEVELS
- *      levels, each at least as tall as it is wide (phones are held upright) and with
+ *      levels, each at least as tall as it is wide (phones are held upright) but no more
+ *      than twice as tall, and with
  *      exactly one solution, and no level used twice (not even turned, mirrored or with its
  *      ends swapped).
  *   4. Commit and push to main. GitHub builds the site and publishes it to Pages.
@@ -104,7 +105,6 @@ export const PACKS: LevelPack[] = [
       'BiF3uZvfYkI',
       'BilxIYj4ixWxAA',
       'Bil6xZ_04Aow',
-      'Bhq6yYn8mCcGvAA',
       'Bin8pYz-YM4s0YRY',
       'BiJ-TYj_DsblggA',
       'BjG7qYi-Fz-54A',

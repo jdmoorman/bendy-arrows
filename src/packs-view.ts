@@ -7,6 +7,12 @@ import type { Storage } from './storage';
 import { ICONS } from './icons';
 import { el, openSheet, toast } from './ui';
 
+/** Why a level's shape can't be a level (phones are held upright), or '' if it's fine. */
+function shapeProblem(code: string): string {
+  const p = decodePuzzle(code);
+  return p.w > p.h ? 'wider than tall' : p.h > 2 * p.w ? 'too tall' : '';
+}
+
 /** Hold this long (ms) on a touch screen before a level picks up, so a swipe still scrolls. */
 const HOLD_MS = 300;
 /** A press that moves further than this (px) before picking up is a scroll or a stray drag. */
@@ -120,6 +126,8 @@ export class PacksView {
     if (names.some((n) => !n)) return 'Every pack needs a name.';
     if (new Set(names).size !== names.length) return 'Two packs have the same name.';
     if (this.descriptions.some((d) => !d.trim())) return 'Every pack needs a description.';
+    const shape = this.order.flat().filter((c) => shapeProblem(c)).length;
+    if (shape) return `${shape === 1 ? 'A level is' : `${shape} levels are`} wider than tall or more than twice as tall as wide.`;
     const notUnique = this.order.flat().filter((c) => this.solutions.get(c)?.unique === false).length;
     if (notUnique) return `${notUnique === 1 ? 'A level has' : `${notUnique} levels have`} more than one solution, or none.`;
     return '';
@@ -197,7 +205,7 @@ export class PacksView {
     const lines = known?.lines;
     renderBoard(svg, p, { pad: padFor(p), segments: lines ?? undefined, solved: !!lines });
     t.classList.toggle('pending', !known);
-    t.classList.toggle('bad', known?.unique === false);
+    t.classList.toggle('bad', known?.unique === false || !!shapeProblem(t.dataset.code!));
   }
 
   /** Number the tiles, count each pack, and say what's unsaved. */
@@ -208,8 +216,8 @@ export class PacksView {
       tiles.forEach((t, i) => {
         const p = decodePuzzle(t.dataset.code!);
         const label = t.querySelector('.pack-tile-label')!;
-        const bad = this.solutions.get(t.dataset.code!)?.unique === false;
-        label.textContent = `${i + 1} · ${p.w}×${p.h}${bad ? ' · not unique' : ''}`;
+        const bad = shapeProblem(t.dataset.code!) || (this.solutions.get(t.dataset.code!)?.unique === false ? 'not unique' : '');
+        label.textContent = `${i + 1} · ${p.w}×${p.h}${bad ? ` · ${bad}` : ''}`;
         t.setAttribute('aria-label', `${this.names[pi]} ${i + 1}, ${p.w} by ${p.h}`);
         t.classList.toggle('moved', PACKS[pi].levels[i] !== t.dataset.code);
         t.classList.toggle('added', !PACKS.some((k) => k.levels.includes(t.dataset.code!)));
@@ -237,7 +245,7 @@ export class PacksView {
     const entries = this.storage
       .list()
       .map((e) => ({ e, code: this.asLevel(e.code, pi) }))
-      .filter((x): x is { e: (typeof x)['e']; code: string } => !!x.code && !inPacks.has(x.code))
+      .filter((x): x is { e: (typeof x)['e']; code: string } => !!x.code && !inPacks.has(x.code) && !shapeProblem(x.code))
       .sort((a, b) => b.e.updated - a.e.updated);
     const body = el('div', 'pack-add-sheet');
     const search = el('input', 'text-input');
@@ -251,7 +259,11 @@ export class PacksView {
     const show = () => {
       const q = search.value.trim().toLowerCase();
       const shown = entries.filter(({ e }) => !q || e.name.toLowerCase().includes(q) || (e.collection ?? '').toLowerCase().includes(q));
-      empty.textContent = entries.length ? (shown.length ? '' : 'Nothing in your Library matches.') : 'Everything in your Library is already in a pack (or your Library is empty).';
+      empty.textContent = entries.length
+        ? shown.length
+          ? ''
+          : 'Nothing in your Library matches.'
+        : 'Nothing in your Library can be added: everything is already in a pack, or more than twice as long one way as the other.';
       list.replaceChildren(
         ...shown.slice(0, 200).map(({ e, code }) => {
           const p = decodePuzzle(code);
