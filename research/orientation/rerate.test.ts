@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import { writeFileSync } from 'node:fs';
 import { decodePuzzle } from '../../src/codec';
 import { rateDifficulty } from '../../src/generator';
-import { SAMPLES } from '../../src/samples';
+import { SAMPLES } from '../../tests/samples';
 import { outPath, record } from '../out';
 
 // Rate every sample with the current logic and list the ones whose label no longer fits.

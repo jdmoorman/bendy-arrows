@@ -13,6 +13,9 @@ export interface SaveContext {
   solved?: boolean;
   /** Library entry the puzzle was opened from, if any. */
   currentId?: string;
+  /** For a new entry: the name to suggest, and the collection to put it in. */
+  suggestedName?: string;
+  collection?: string;
   onSaved(entry: LibraryEntry): void;
 }
 
@@ -29,7 +32,7 @@ export function openSaveSheet(ctx: SaveContext): void {
   const code = encodePuzzle(ctx.current);
 
   const nameInput = el('input', 'text-input') as HTMLInputElement;
-  nameInput.value = existing?.name ?? defaultName(ctx.current);
+  nameInput.value = existing?.name ?? ctx.suggestedName ?? defaultName(ctx.current);
   nameInput.setAttribute('aria-label', 'Puzzle name');
   nameInput.maxLength = 60;
   const save = (asNew: boolean) => {
@@ -44,7 +47,7 @@ export function openSaveSheet(ctx: SaveContext): void {
       updated: now,
       progress: ctx.progress ?? (keepProgress ? existing?.progress : undefined),
       solved: ctx.solved ?? (keepProgress ? existing?.solved : false),
-      collection: asNew ? undefined : existing?.collection,
+      collection: asNew || !existing ? ctx.collection : existing.collection,
     };
     if (!storage.put(entry)) {
       toast('Could not save — browser storage is unavailable', 'error');

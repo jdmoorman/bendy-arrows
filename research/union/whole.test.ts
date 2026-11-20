@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import { writeFileSync } from 'node:fs';
 import { decodePuzzle } from '../../src/codec';
 import { clonePuzzle, type Puzzle } from '../../src/model';
-import { SAMPLES } from '../../src/samples';
+import { SAMPLES } from '../../tests/samples';
 import { solutionUnion, solve } from '../../src/solver';
 import { outPath, record } from '../out';
 

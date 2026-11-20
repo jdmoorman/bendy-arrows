@@ -1,12 +1,11 @@
 import { decodePuzzle } from './codec';
 import type { Difficulty } from './generator';
 import { openCells, type Puzzle } from './model';
-import { LEVELS } from './levels';
-import { LOCAL_SAMPLES, type SampleGroup } from './samples';
+import { levelName, PACKS } from './levels';
 import type { LibraryEntry, Storage } from './storage';
 import { symmetryOf } from './symmetry';
 
-/** One puzzle in the library table: a saved puzzle or a built-in sample. */
+/** One puzzle in the library table: a saved puzzle or an official level. */
 export interface LibRow {
   /** Unique within the table. */
   key: string;
@@ -16,8 +15,6 @@ export interface LibRow {
   /** The saved entry, for your own puzzles. */
   entry?: LibraryEntry;
   collection: string;
-  /** One of the archived built-in samples (not your own puzzles or an official level). */
-  sample: boolean;
   /** Undefined while not rated yet; null if it can't be rated (no unique solution). */
   difficulty?: Difficulty | null;
   /** Undefined while not checked yet. */
@@ -62,13 +59,8 @@ export interface Rating {
   effort?: number | null;
 }
 
-export const COLLECTIONS: Record<SampleGroup | 'samples' | 'yours' | 'levels', string> = {
-  levels: 'Levels',
+export const COLLECTIONS = {
   yours: 'Yours',
-  samples: 'Samples',
-  one: 'Sparse: one obstacle',
-  fewest: 'Sparse: fewest obstacles',
-  hardsparse: 'Sparse: hard',
 };
 
 export const DIFFICULTY_NAMES: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', veryhard: 'Very hard' };
@@ -100,7 +92,7 @@ function facts(code: string) {
 
 const hintsOf = (r: Rating | undefined) => ({ hints: r?.hints, hintsStuck: r?.hintsStuck, tightest: r?.tightest, effort: r?.effort });
 
-/** Every saved puzzle and every sample not deleted on this device, as table rows. */
+/** Every saved puzzle and every official level, as table rows. */
 export function libraryRows(storage: Storage, ratings: Record<string, Rating>): LibRow[] {
   const rows: LibRow[] = [];
   const play = (code: string, saved?: LibraryEntry) => {
@@ -117,26 +109,22 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
       continue;
     }
     const r = ratings[e.code];
-    rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: e.collection ?? COLLECTIONS.yours, sample: false, ...f, difficulty: r?.difficulty, unique: r?.unique, ...hintsOf(r), ...play(e.code, e), added: e.created });
+    rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: e.collection ?? COLLECTIONS.yours, ...f, difficulty: r?.difficulty, unique: r?.unique, ...hintsOf(r), ...play(e.code, e), added: e.created });
   }
-  // Official levels, shipped to everyone.
-  LEVELS.forEach((l, i) => {
-    let f;
-    try {
-      f = facts(l.code);
-    } catch {
-      return;
-    }
-    const saved = storage.findByCode(l.code);
-    rows.push({ key: `level:${i}`, name: l.name, code: l.code, collection: COLLECTIONS.levels, sample: false, ...f, difficulty: l.level, unique: true, ...hintsOf(ratings[l.code]), ...play(l.code, saved) });
-  });
-  const hidden = new Set(storage.loadHiddenSamples());
-  LOCAL_SAMPLES.forEach((s, i) => {
-    if (hidden.has(s.code)) return;
-    const f = facts(s.code);
-    const saved = storage.findByCode(s.code);
-    rows.push({ key: `sample:${i}`, name: s.name, code: s.code, collection: COLLECTIONS[s.group ?? 'samples'], sample: true, ...f, difficulty: s.level, unique: true, ...hintsOf(ratings[s.code]), ...play(s.code, saved) });
-  });
+  // The official level packs, shipped to everyone: each pack is a collection.
+  PACKS.forEach((pack, pi) =>
+    pack.levels.forEach((code, li) => {
+      let f;
+      try {
+        f = facts(code);
+      } catch {
+        return;
+      }
+      const saved = storage.findByCode(code);
+      const r = ratings[code];
+      rows.push({ key: `level:${pi}:${li}`, name: levelName({ pack: pi, level: li }), code, collection: pack.name, ...f, difficulty: r?.difficulty, unique: r?.unique, ...hintsOf(r), ...play(code, saved) });
+    }),
+  );
   return rows;
 }
 
@@ -160,8 +148,7 @@ export interface Column {
 const yesNo = (b: boolean | undefined) => (b === undefined ? null : b ? 'Yes' : 'No');
 
 export const COLUMNS: Column[] = [
-  { key: 'collection', label: 'Collection', kind: 'choice', value: (r) => r.collection, choices: Object.values(COLLECTIONS) },
-  { key: 'sample', label: 'Sample', kind: 'choice', value: (r) => (r.sample ? 'Yes' : 'No'), choices: ['Yes', 'No'] },
+  { key: 'collection', label: 'Collection', kind: 'choice', value: (r) => r.collection, choices: [COLLECTIONS.yours, ...PACKS.map((p) => p.name)] },
   {
     key: 'difficulty',
     label: 'Difficulty',

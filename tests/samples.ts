@@ -1,10 +1,11 @@
-import { decodePuzzle } from './codec';
-import type { Puzzle } from './model';
+import { decodePuzzle } from '../src/codec';
+import type { Puzzle } from '../src/model';
 
 export type SampleLevel = 'easy' | 'medium' | 'hard' | 'veryhard';
 
 /**
- * Built-in puzzles, each with a unique solution. The level is the logic
+ * A corpus of puzzles for the tests and research scripts (they were the app's built-in
+ * samples before the level packs), each with a unique solution. The level is the logic
  * rating (see rateDifficulty): easy without Checkerboard balance, medium
  * with small balance areas, hard with bigger ones, very hard beyond every rule.
  */
@@ -60,8 +61,6 @@ export const SAMPLES: { level: SampleLevel; group?: SampleGroup; name: string; c
  * The samples are archived: the library shows them only when the app runs locally (the dev
  * server, or tests and research scripts). A production build leaves them out entirely.
  */
-export const LOCAL_SAMPLES = import.meta.env.DEV ? SAMPLES : [];
-
 export function samplePuzzle(i = 0): Puzzle {
   return decodePuzzle(SAMPLES[i].code);
 }

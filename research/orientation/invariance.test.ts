@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { decodePuzzle } from '../../src/codec';
 import { rateDifficulty } from '../../src/generator';
 import { transformPuzzle, type Puzzle, type Transform } from '../../src/model';
-import { SAMPLES } from '../../src/samples';
+import { SAMPLES } from '../../tests/samples';
 import { outPath, record } from '../out';
 
 const NAME = `orientation/invariance-${process.env.LABEL ?? 'run'}.txt`;

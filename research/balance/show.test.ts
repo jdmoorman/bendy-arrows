@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import { writeFileSync } from 'node:fs';
 import { decodePuzzle } from '../../src/codec';
 import { cellRC, edgeCells, endTile, type Puzzle } from '../../src/model';
-import { SAMPLES } from '../../src/samples';
+import { SAMPLES } from '../../tests/samples';
 import { outPath } from '../out';
 
 /** Draw a puzzle as text: walls as | and ---, black tiles as #, ends as E. */

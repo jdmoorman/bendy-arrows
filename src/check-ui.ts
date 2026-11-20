@@ -2,7 +2,6 @@ import { encodePuzzle } from './codec';
 import type { EditorView } from './editor';
 import type { Difficulty } from './generator';
 import { missingEnds } from './rules';
-import { defaultName } from './save-ui';
 import type { RatingMessage, RatingRequest } from './rating.worker';
 import { solutionUnionInBackground, solveInBackground, type SolverRun, type UnionRun } from './solver-client';
 import type { SolveResult } from './solver';
@@ -48,10 +47,10 @@ export function attachUniquenessCheck(editor: EditorView): void {
   copyBtn.addEventListener('click', async () => {
     try {
       await navigator.clipboard.writeText(entry);
-      editor.setMessage('Copied. Paste it into LEVELS in src/levels.ts.', 'success');
+      editor.setMessage('Copied. Paste it into a pack’s levels in src/levels.ts.', 'success');
     } catch {
       // No clipboard (e.g. a phone on the dev server over plain http): show it to copy by hand.
-      window.prompt('Copy this line into LEVELS in src/levels.ts.', entry);
+      window.prompt('Copy this line into a pack’s levels in src/levels.ts.', entry);
     }
   });
   if (import.meta.env.DEV) info.append(copyBtn);
@@ -87,7 +86,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
       hints.textContent = ev.data.rating.hintsStuck ? `${count}, then stuck` : count;
       info.setAttribute('aria-label', `Difficulty: ${NAMES[d]}. ${hints.textContent}`);
       const p = editor.current;
-      entry = `  { name: '${defaultName(p)}', code: '${ev.data.code}', level: '${d}' },`;
+      entry = `      '${ev.data.code}', // ${NAMES[d]} ${p.w}×${p.h}`;
       copyBtn.classList.remove('hidden');
     };
     worker.postMessage([encodePuzzle(editor.current)] satisfies RatingRequest);

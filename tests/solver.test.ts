@@ -113,7 +113,7 @@ describe('solve', () => {
 });
 
 describe('samples', async () => {
-  const { SAMPLES } = await import('../src/samples');
+  const { SAMPLES } = await import('./samples');
   const { decodePuzzle } = await import('../src/codec');
   for (const s of SAMPLES) {
     test(`${s.name} is unique`, () => {
@@ -125,7 +125,7 @@ describe('samples', async () => {
 describe('solve with required segments', () => {
   test('finds a solution that uses the given segments, or none if they are wrong', async () => {
     const { decodePuzzle } = await import('../src/codec');
-    const { SAMPLES } = await import('../src/samples');
+    const { SAMPLES } = await import('./samples');
     const p = decodePuzzle(SAMPLES[0].code);
     const sol = solve(p).solutions[0];
     const some = sol.filter((_, i) => i % 3 === 0);

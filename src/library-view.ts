@@ -208,15 +208,6 @@ export class LibraryView {
     this.filterBtn.hidden = hiddenCols.length === 0;
     const narrowed = active > 0 || this.state.search.trim() !== '';
     this.count.replaceChildren(`${shown.length === this.rows.length ? 'All' : `${shown.length} of`} ${this.rows.length} puzzles`);
-    const hidden = this.storage.loadHiddenSamples().length;
-    if (hidden) {
-      const restore = el('button', 'link-btn', `Restore ${hidden} deleted sample${hidden === 1 ? '' : 's'}`);
-      restore.addEventListener('click', () => {
-        this.storage.saveHiddenSamples([]);
-        this.refresh();
-      });
-      this.count.append(' · ', restore);
-    }
     if (narrowed) {
       const clear = el('button', 'link-btn', 'Clear search and filters');
       clear.addEventListener('click', () => {
@@ -321,20 +312,14 @@ export class LibraryView {
       const del = el('button', 'btn icon', ICONS.clear);
       del.setAttribute('aria-label', `Delete ${r.name}`);
       del.addEventListener('click', () => {
-        if (r.entry) {
-          const entry = r.entry;
-          if (!confirm(`Delete “${entry.name}”?`)) return;
-          this.storage.remove(entry.id);
-          this.onDeleted?.(entry.id);
-        } else {
-          // Samples are built in: deleting one hides it on this device.
-          if (!confirm(`Delete the sample “${r.name}” from your library? You can bring deleted samples back later.`)) return;
-          this.storage.saveHiddenSamples([...this.storage.loadHiddenSamples(), r.code]);
-        }
+        const entry = r.entry!;
+        if (!confirm(`Delete “${entry.name}”?`)) return;
+        this.storage.remove(entry.id);
+        this.onDeleted?.(entry.id);
         this.refresh();
       });
-      // Official levels can't be deleted; your puzzles and the archived samples can.
-      if (!r.key.startsWith('level:')) actions.append(del);
+      // Official levels can't be deleted; your puzzles can.
+      if (r.entry) actions.append(del);
       tr.append(actions);
       tbody.append(tr);
     }
@@ -356,7 +341,9 @@ export class LibraryView {
   }
 
   private open(r: LibRow, tab: 'play' | 'edit') {
-    const saved = r.entry ?? this.storage.findByCode(r.code);
+    // A pack level opens on its own, not linked to a saved copy that happens to share its code
+    // (e.g. the puzzle it was exported from): saving then makes a separate Library copy.
+    const saved = r.entry ?? (r.key.startsWith('level:') ? undefined : this.storage.findByCode(r.code));
     this.onOpen?.({ puzzle: decodePuzzle(r.code), progress: saved?.progress, id: saved?.id, name: saved?.name ?? r.name }, tab);
   }
 
@@ -493,11 +480,8 @@ export class LibraryView {
           r.hintsStuck = rating.hintsStuck;
           r.tightest = rating.tightest;
           r.effort = rating.effort;
-          // Levels and samples keep the difficulty they were published with.
-          if (r.entry) {
-            r.difficulty = rating.difficulty;
-            r.unique = rating.unique;
-          }
+          r.difficulty = rating.difficulty;
+          r.unique = rating.unique;
         }
         this.queueRender();
       };

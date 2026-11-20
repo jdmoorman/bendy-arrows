@@ -43,9 +43,8 @@ const LOGIC_KEY = 'bendyarrows.logic.v1';
 const GENERATOR_KEY = 'bendyarrows.generator.v1';
 const TABLE_KEY = 'bendyarrows.libtable.v1';
 const RATINGS_KEY = 'bendyarrows.ratings.v1';
-const HIDDEN_KEY = 'bendyarrows.hiddensamples.v1';
 const SHOW_SOLUTION_KEY = 'bendyarrows.showsolution.v1';
-/** The share-code format the stored codes were last rewritten to. */
+const PLAYER_KEY = 'bendyarrows.player.v1';
 
 /** Per-device display preferences. */
 export interface Settings {
@@ -60,6 +59,17 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = { checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false };
+
+/** The player app's place: the level being played, the tab shown, and unfinished boards. */
+export interface PlayerState {
+  /** The level being played, as pack and level (from 0). */
+  current?: { pack: number; level: number };
+  tab: 'play' | 'levels';
+  /** Lines and X's on each level started and not finished, by code. */
+  progress: Record<string, Progress>;
+  /** Packs folded away in the Levels tab, by name. */
+  collapsed: string[];
+}
 
 export interface KeyValueStore {
   getItem(key: string): string | null;
@@ -81,7 +91,7 @@ export class Storage {
 
   /** Copy data saved under the old app name to the new keys (the old keys are left alone). */
   private migrateOldKeys(): void {
-    const keys = [LIBRARY_KEY, SESSION_KEY, SETTINGS_KEY, SOLVED_KEY, LOGIC_KEY, GENERATOR_KEY, TABLE_KEY, RATINGS_KEY, HIDDEN_KEY, SHOW_SOLUTION_KEY];
+    const keys = [LIBRARY_KEY, SESSION_KEY, SETTINGS_KEY, SOLVED_KEY, LOGIC_KEY, GENERATOR_KEY, TABLE_KEY, RATINGS_KEY, SHOW_SOLUTION_KEY];
     try {
       for (const key of keys) {
         if (this.store?.getItem(key) !== null) continue;
@@ -235,16 +245,6 @@ export class Storage {
   }
 
   /** Whether the editor's hint list sits on one line beside the difficulty (else a list under it). */
-  /** Codes of built-in samples deleted from this device's library. */
-  loadHiddenSamples(): string[] {
-    const h = this.read<unknown>(HIDDEN_KEY, []);
-    return Array.isArray(h) ? h.filter((x): x is string => typeof x === 'string') : [];
-  }
-
-  saveHiddenSamples(codes: string[]): void {
-    this.write(HIDDEN_KEY, codes);
-  }
-
   /** Difficulty and uniqueness of saved puzzles, by code, worked out in the background. */
   loadRatings(): Record<string, Rating> {
     const r = this.read<unknown>(RATINGS_KEY, {});
@@ -271,6 +271,19 @@ export class Storage {
 
   saveSession(s: Session): void {
     this.write(SESSION_KEY, s);
+  }
+
+  loadPlayer(): PlayerState {
+    const s = this.read<Partial<PlayerState> | null>(PLAYER_KEY, null);
+    const progress = s && s.progress && typeof s.progress === 'object' ? s.progress : {};
+    const c = s?.current;
+    const current = c && Number.isInteger(c.pack) && Number.isInteger(c.level) ? { pack: c.pack, level: c.level } : undefined;
+    const collapsed = Array.isArray(s?.collapsed) ? s.collapsed.filter((x): x is string => typeof x === 'string') : [];
+    return { current, tab: s?.tab === 'play' ? 'play' : 'levels', progress, collapsed };
+  }
+
+  savePlayer(s: PlayerState): void {
+    this.write(PLAYER_KEY, s);
   }
 }
 

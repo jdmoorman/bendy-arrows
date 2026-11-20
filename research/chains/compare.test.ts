@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { decodePuzzle } from '../../src/codec';
 import { rateDifficulty } from '../../src/generator';
 import { AREA_SOURCES, hintJourney, RULES, type HintStep } from '../../src/logic';
-import { SAMPLES } from '../../src/samples';
+import { SAMPLES } from '../../tests/samples';
 import { outPath, record } from '../out';
 
 // Does the chains strategy make puzzles easier? For each sample (and an extra CODE, if given):

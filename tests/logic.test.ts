@@ -246,7 +246,7 @@ describe('findHint', async () => {
 });
 
 describe('sample difficulty', async () => {
-  const { SAMPLES } = await import('../src/samples');
+  const { SAMPLES } = await import('./samples');
   const { decodePuzzle } = await import('../src/codec');
   const { rateDifficulty } = await import('../src/generator');
   // The sparse big-board collections are left out: they are slow to rate.
@@ -263,7 +263,7 @@ describe('sample difficulty', async () => {
 
 describe('hint choice', async () => {
   const { findHint, deductions } = await import('../src/logic');
-  const { SAMPLES } = await import('../src/samples');
+  const { SAMPLES } = await import('./samples');
   const { decodePuzzle } = await import('../src/codec');
   const { EASY_RULES } = await import('../src/generator');
   test('among checkerboard deductions, the hint picks the fewest exits, then the smallest area', () => {
@@ -346,7 +346,7 @@ describe('area sources', async () => {
   const { deductions } = await import('../src/logic');
   const { decodePuzzle } = await import('../src/codec');
   const { edgeBetween: between } = await import('../src/model');
-  const { SAMPLES } = await import('../src/samples');
+  const { SAMPLES } = await import('./samples');
   // Path 7×7 · walls: the bottom-row edge between columns 3 and 4 comes from an L-shaped room.
   const p = decodePuzzle('BjGhLYr-SEN9QHQ');
   const target = between(p, 6 * 7 + 2, 6 * 7 + 3);
@@ -368,7 +368,7 @@ describe('area sources', async () => {
 describe('three-border cuts', async () => {
   const { deductions, AREA_SOURCES } = await import('../src/logic');
   const { decodePuzzle } = await import('../src/codec');
-  const { SAMPLES } = await import('../src/samples');
+  const { SAMPLES } = await import('./samples');
   test('are only looked at when nothing else applies', () => {
     const noCuts3 = AREA_SOURCES.filter((x) => x !== 'cuts3');
     for (const s of SAMPLES.slice(0, 20)) {
@@ -385,7 +385,7 @@ describe('three-border cuts by labels', async () => {
   const { deductions } = await import('../src/logic');
   const { decodePuzzle } = await import('../src/codec');
   const { EASY_RULES } = await import('../src/generator');
-  const { SAMPLES } = await import('../src/samples');
+  const { SAMPLES } = await import('./samples');
   const marks = (d: { segments: number[]; xs: number[] }) => JSON.stringify([[...d.segments].sort((a, b) => a - b), [...d.xs].sort((a, b) => a - b)]);
   test('find the same marks as the original search', () => {
     for (const s of SAMPLES.filter((x) => !x.group).slice(0, 8)) {
@@ -404,7 +404,7 @@ describe('three-border cuts by labels', async () => {
 describe('hintJourney', async () => {
   const { hintJourney, ADVANCED_RULES } = await import('../src/logic');
   const { decodePuzzle } = await import('../src/codec');
-  const { SAMPLES } = await import('../src/samples');
+  const { SAMPLES } = await import('./samples');
   test('only advanced rules appear, and every sample short of very hard gets solved', () => {
     for (const s of SAMPLES.filter((x) => !x.group && x.level !== 'veryhard')) {
       const j = hintJourney(decodePuzzle(s.code));
@@ -427,7 +427,7 @@ describe('hintJourney', async () => {
 describe('searchMetrics', async () => {
   const { hintJourney, searchMetrics } = await import('../src/logic');
   const { decodePuzzle } = await import('../src/codec');
-  const { SAMPLES } = await import('../src/samples');
+  const { SAMPLES } = await import('./samples');
   test('the samples get scores, with hard rounds only where the easy rules need help', () => {
     for (const s of SAMPLES.filter((x) => !x.group && x.level !== 'veryhard')) {
       const p = decodePuzzle(s.code);

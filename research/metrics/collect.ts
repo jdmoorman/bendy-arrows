@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { decodePuzzle, encodePuzzle } from '../../src/codec';
 import { obstacleCount, rateDifficulty } from '../../src/generator';
 import { hintJourney, searchMetrics } from '../../src/logic';
-import { SAMPLES } from '../../src/samples';
+import { SAMPLES } from '../../tests/samples';
 import { outPath, record } from '../out';
 
 /** Every puzzle on hand: the research lists in research/out, and the samples. */

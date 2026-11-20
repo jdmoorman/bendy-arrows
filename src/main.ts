@@ -7,15 +7,15 @@ import { ICONS } from './icons';
 import { LibraryView } from './library-view';
 import { clonePuzzle, createPuzzle, puzzlesEqual, type Puzzle } from './model';
 import { PlayView, type Progress } from './play';
-import { LEVELS } from './levels';
-import { LOCAL_SAMPLES } from './samples';
+import { findLevel, levelName, PACKS, type LevelRef } from './levels';
 import { openSaveSheet } from './save-ui';
 import { hashWantsEditor, openShareSheet, puzzleFromHash } from './share';
 import { openSettingsSheet, applySettings } from './settings-ui';
 import { Storage } from './storage';
 import { openSolvedSheet } from './solved-ui';
 import { applyTheme, DEFAULT_THEME } from './themes';
-import { toast } from './ui';
+import { solveInBackground } from './solver-client';
+import { el, openSheet, toast } from './ui';
 
 applyTheme(DEFAULT_THEME);
 
@@ -52,6 +52,11 @@ let playing: Puzzle = createPuzzle(6, 6);
 let playingCode = encodePuzzle(playing);
 let libraryId: string | undefined;
 let puzzleName: string | undefined;
+/**
+ * The pack level the puzzle was opened from (it stays through edits), when it isn't linked to
+ * a Library entry: saving it makes a Library copy named after the level, in the pack's collection.
+ */
+let fromLevel: LevelRef | undefined;
 let tab: Tab = 'play';
 /** The last of Play and Create to be shown, so the Library knows which puzzle is "current". */
 let lastBoardTab: 'play' | 'edit' = 'play';
@@ -97,10 +102,13 @@ interface LoadMeta {
 function loadPuzzle(p: Puzzle, meta: LoadMeta = {}, startTab: Tab = 'play') {
   playing = clonePuzzle(p);
   playingCode = encodePuzzle(playing);
-  // A puzzle that is already in the library picks up its saved name and progress.
-  const saved = meta.id ? storage.get(meta.id) : storage.findByCode(playingCode);
+  // A puzzle that is already in the library picks up its saved name and progress; a pack level
+  // stays unlinked from saved copies that share its code (unless one was opened on purpose).
+  const level = findLevel(playingCode);
+  const saved = meta.id ? storage.get(meta.id) : level ? undefined : storage.findByCode(playingCode);
   libraryId = saved && saved.code === playingCode ? saved.id : undefined;
-  puzzleName = meta.name ?? saved?.name ?? [...LEVELS, ...LOCAL_SAMPLES].find((s) => s.code === playingCode)?.name;
+  fromLevel = libraryId ? undefined : level;
+  puzzleName = meta.name ?? saved?.name ?? (level ? levelName(level) : undefined);
   play.load(playing, meta.progress ?? saved?.progress);
   editor.load(playing);
   updateHeader();
@@ -135,9 +143,14 @@ function setTab(t: Tab) {
     // Keep whatever progress still fits the edited puzzle; it is a new puzzle now.
     playing = clonePuzzle(editor.current);
     playingCode = encodePuzzle(playing);
-    const saved = storage.findByCode(playingCode);
+    // New puzzle or Generate replaced it: it no longer comes from a pack level.
+    if (editor.replaced) fromLevel = undefined;
+    const level = findLevel(playingCode);
+    const saved = level ? undefined : storage.findByCode(playingCode);
     libraryId = saved?.id;
-    puzzleName = saved?.name;
+    if (libraryId) fromLevel = undefined;
+    else if (level) fromLevel = level;
+    puzzleName = saved?.name ?? (level ? levelName(level) : undefined);
     // An edited puzzle is a new puzzle: keep the marks that still fit.
     // A replaced, resized or turned puzzle starts with an empty board.
     const { segments, xMarks } = play.progress;
@@ -190,11 +203,17 @@ function openLibrary() {
 }
 
 /** Save the editor's puzzle, or the one being played, to the library. */
-function saveCurrent(fromEditor: boolean) {
+function saveCurrent(fromEditor: boolean, toLibrary = false) {
   const editing = fromEditor && !puzzlesEqual(playing, editor.current);
   // A puzzle needs its ends before it can be saved; the editor says what's missing.
   if (editing && !editor.checkPlayable()) {
     setTab('edit');
+    return;
+  }
+  // Running locally, a pack level saves back into src/levels.ts.
+  const level = fromLevel && !(editing && editor.replaced) ? fromLevel : undefined;
+  if (import.meta.env.DEV && level && !toLibrary) {
+    openLevelSaveSheet(level, editing ? editor.current : playing, fromEditor);
     return;
   }
   openSaveSheet({
@@ -205,6 +224,9 @@ function saveCurrent(fromEditor: boolean) {
     // An edited puzzle still came from this entry, so offer to update it (or save as new),
     // unless New puzzle or Generate replaced it with a different one.
     currentId: editing && editor.replaced ? undefined : libraryId,
+    // An edited (or unedited) pack level saves as a Library copy named after the level.
+    suggestedName: fromLevel && !(editing && editor.replaced) ? levelName(fromLevel) : undefined,
+    collection: fromLevel && !(editing && editor.replaced) ? PACKS[fromLevel.pack].name : undefined,
     onSaved: (entry) => {
       if (editing) {
         // Saving the editor's puzzle makes it the current puzzle.
@@ -217,6 +239,45 @@ function saveCurrent(fromEditor: boolean) {
       }
       if (tab === 'library') library.refresh();
     },
+  });
+}
+
+/** Save over a pack level in src/levels.ts (the local dev server does the writing). */
+function openLevelSaveSheet(level: LevelRef, p: Puzzle, fromEditor: boolean) {
+  const from = PACKS[level.pack].levels[level.level];
+  const to = encodePuzzle(p);
+  const body = el('div', 'sheet-stack');
+  const note = el('p', 'field-label');
+  note.textContent = to === from ? `${levelName(level)} is unchanged.` : `Replace ${levelName(level)} in src/levels.ts with this puzzle.`;
+  const row = el('div', 'sheet-row');
+  const copy = el('button', 'btn', '<span>Save to Library</span>');
+  const update = el('button', 'btn primary', `${ICONS.save}<span>Update level</span>`);
+  update.disabled = to === from;
+  row.append(copy, update);
+  body.append(note, row);
+  const sheet = openSheet(`Save ${levelName(level)}`, body);
+  copy.addEventListener('click', () => {
+    sheet.close();
+    saveCurrent(fromEditor, true);
+  });
+  update.addEventListener('click', async () => {
+    update.disabled = true;
+    try {
+      // A level must keep exactly one solution (the tests refuse anything else).
+      const r = await solveInBackground(p, undefined, { maxSolutions: 2 }).result;
+      if (r.status !== 'unique') throw new Error('A level needs exactly one solution.');
+      const res = await fetch('/__levels', { method: 'POST', body: JSON.stringify({ from, to }) });
+      const reply = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !reply.ok) throw new Error(reply.error ?? 'The dev server refused the change.');
+      // The packs in memory follow the file until Vite reloads the page with it.
+      PACKS[level.pack].levels[level.level] = to;
+      sheet.close();
+      loadPuzzle(p, {}, tab);
+      toast(`Updated ${levelName(level)} in src/levels.ts.`);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err), 'error');
+      update.disabled = false;
+    }
   });
 }
 
@@ -282,10 +343,8 @@ function start() {
     loadPuzzle(fromLink, same ? { progress: session.progress, id: session.libraryId, name: session.name } : {});
   } else if (session && sessionPuzzle) {
     loadPuzzle(sessionPuzzle, { progress: session.progress, id: session.libraryId, name: session.name });
-  } else if (LOCAL_SAMPLES.length) {
-    loadPuzzle(decodePuzzle(LOCAL_SAMPLES[0].code));
   } else {
-    // First visit, with no samples to start on: open the library, where the levels are.
+    // First visit: open the library, where the levels are.
     loadPuzzle(createPuzzle(6, 6), {}, 'library');
   }
   // The address always holds the current puzzle, so a reload looks like a link: only a reload

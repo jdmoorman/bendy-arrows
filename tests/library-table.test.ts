@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { encodePuzzle } from '../src/codec';
 import { applyTable, choicesFor, COLUMNS, DEFAULT_TABLE_STATE, libraryRows, type TableState } from '../src/library-table';
+import { PACKS } from '../src/levels';
 import { createPuzzle } from '../src/model';
-import { SAMPLES } from '../src/samples';
+import { SAMPLES } from './samples';
 import { Storage, type KeyValueStore } from '../src/storage';
 
 class MemStore implements KeyValueStore {
@@ -16,34 +17,31 @@ class MemStore implements KeyValueStore {
 }
 
 const state = (s: Partial<TableState>): TableState => ({ ...DEFAULT_TABLE_STATE, ...s });
+/** The official levels, one row each, in their packs' collections. */
+const LEVEL_COUNT = PACKS.reduce((n, p) => n + p.levels.length, 0);
 
 describe('library table', () => {
   const storage = new Storage(new MemStore());
   const mine = createPuzzle(3, 3);
   mine.walls.add(0);
   storage.put({ id: 'm', name: 'My little path', code: encodePuzzle(mine), created: 5, updated: 5 });
-  const rows = libraryRows(storage, {});
+  // Saved copies of the test corpus, rated as the corpus says (the worker does this in the app).
+  SAMPLES.forEach((x, i) => storage.put({ id: `s${i}`, name: x.name, code: x.code, created: i, updated: i }));
+  const ratings = Object.fromEntries(SAMPLES.map((x) => [x.code, { difficulty: x.level, unique: true }]));
+  const rows = libraryRows(storage, ratings);
 
-  test('lists saved puzzles and every sample, with their facts', () => {
-    expect(rows).toHaveLength(SAMPLES.length + 1);
-    const r = rows.find((x) => x.entry)!;
+  test('lists saved puzzles and every level, with their facts', () => {
+    expect(rows).toHaveLength(SAMPLES.length + 1 + LEVEL_COUNT);
+    expect(rows.filter((x) => x.key.startsWith('level:')).map((x) => x.collection)).toEqual(PACKS.flatMap((p) => p.levels.map(() => p.name)));
+    const r = rows.find((x) => x.entry?.id === 'm')!;
     expect(r).toMatchObject({ name: 'My little path', collection: 'Yours', w: 3, h: 3, walls: 1, black: 0, obstacles: 1, status: 'New' });
     // Not rated yet.
     expect(r.difficulty).toBeUndefined();
-    expect(rows.find((x) => !x.entry)!.unique).toBe(true);
-  });
-
-  test('deleted samples are left out', () => {
-    const store = new Storage(new MemStore());
-    store.saveHiddenSamples([SAMPLES[0].code, SAMPLES[1].code]);
-    const left = libraryRows(store, {});
-    expect(left).toHaveLength(SAMPLES.length - 2);
-    expect(left.some((r) => r.code === SAMPLES[0].code)).toBe(false);
   });
 
   test('a rating fills in difficulty and uniqueness', () => {
     const rated = libraryRows(storage, { [encodePuzzle(mine)]: { difficulty: null, unique: false } });
-    const r = rated.find((x) => x.entry)!;
+    const r = rated.find((x) => x.entry?.id === 'm')!;
     const show = (key: string) => COLUMNS.find((c) => c.key === key)!.show!(r);
     expect([show('difficulty'), show('unique')]).toEqual(['—', 'No']);
   });
@@ -57,7 +55,7 @@ describe('library table', () => {
     expect(sparse.every((r) => r.obstacles <= 1 && r.w >= 8)).toBe(true);
     expect(applyTable(rows, state({ search: 'LITTLE' })).map((r) => r.name)).toEqual(['My little path']);
     // Rows without a value (an unrated difficulty) fail a filter on it.
-    expect(applyTable(rows, state({ filters: { difficulty: { values: ['Easy', 'Medium', 'Hard', 'Very hard'] } } })).some((r) => r.entry)).toBe(false);
+    expect(applyTable(rows, state({ filters: { difficulty: { values: ['Easy', 'Medium', 'Hard', 'Very hard'] } } })).some((r) => r.entry?.id === 'm')).toBe(false);
   });
 
   test('sorts numbers, choices in their own order, and missing values last', () => {
@@ -66,22 +64,13 @@ describe('library table', () => {
     const levels = ['Easy', 'Medium', 'Hard', 'Very hard'];
     for (const dir of [1, -1] as const) {
       const sorted = applyTable(rows, state({ sort: { key: 'difficulty', dir } }));
-      expect(sorted.at(-1)!.entry).toBeDefined(); // unrated goes last either way
-      const ranks = sorted.slice(0, -1).map((r) => levels.indexOf({ easy: 'Easy', medium: 'Medium', hard: 'Hard', veryhard: 'Very hard' }[r.difficulty!]));
+      // Unrated (your new puzzle, and levels before the worker rates them) goes last either way.
+      const rated = sorted.filter((r) => r.difficulty);
+      expect(rated.length).toBeGreaterThan(0);
+      expect(sorted.slice(rated.length).every((r) => !r.difficulty)).toBe(true);
+      const ranks = rated.map((r) => levels.indexOf({ easy: 'Easy', medium: 'Medium', hard: 'Hard', veryhard: 'Very hard' }[r.difficulty!]));
       expect(ranks).toEqual([...ranks].sort((a, b) => (a - b) * dir));
     }
-  });
-});
-
-describe('sample flag', () => {
-  test('samples are flagged, your own puzzles are not, and the filter separates them', () => {
-    const storage = new Storage(new MemStore());
-    storage.put({ id: 'm', name: 'Mine', code: encodePuzzle(createPuzzle(4, 4)), created: 1, updated: 1 });
-    const rows = libraryRows(storage, {});
-    expect(rows.find((r) => r.name === 'Mine')!.sample).toBe(false);
-    expect(rows.filter((r) => !r.entry).every((r) => r.sample)).toBe(true);
-    const mine = applyTable(rows, state({ filters: { sample: { values: ['No'] } } }));
-    expect(mine.map((r) => r.name)).toEqual(['Mine']);
   });
 });
 

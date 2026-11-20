@@ -1258,3 +1258,118 @@ a.btn {
 .new-puzzle .segmented .seg-btn {
   padding: 0 4px;
 }
+
+/* ---------- Player: level packs ---------- */
+.levels-view {
+  overflow-y: auto;
+  padding: 4px 12px 24px;
+  gap: 20px;
+}
+.pack {
+  display: block;
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+}
+.pack-head {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  min-height: var(--tap);
+  list-style: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.pack-head::-webkit-details-marker {
+  display: none;
+}
+.pack-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.pack-chevron {
+  flex: none;
+  display: inline-flex;
+  color: var(--text-muted);
+  transition: transform 0.15s;
+}
+.pack-chevron svg {
+  width: 18px;
+  height: 18px;
+}
+.pack[open] .pack-chevron {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .pack-chevron {
+    transition: none;
+  }
+}
+.pack-name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.15rem;
+  text-wrap: balance;
+}
+.pack-count {
+  flex: none;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.pack-desc {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.level-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: var(--gap);
+}
+.level-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  aspect-ratio: 1;
+  min-height: var(--tap);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.level-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.level-btn:active {
+  filter: brightness(1.25);
+}
+.level-btn svg {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 14px;
+  height: 14px;
+}
+.level-btn.solved {
+  color: var(--success);
+  border-color: var(--success);
+}
+.level-btn.started {
+  border-color: var(--accent);
+}
+.level-btn.current {
+  box-shadow: 0 0 0 2px var(--accent);
+}

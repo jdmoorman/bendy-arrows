@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { decodePuzzle } from '../../src/codec';
 import { rateDifficulty } from '../../src/generator';
 import { AREA_SOURCES, type AreaSource } from '../../src/logic';
-import { SAMPLES } from '../../src/samples';
+import { SAMPLES } from '../../tests/samples';
 import { outPath, record } from '../out';
 
 // Switch off rooms plus two other kinds of area and re-rate every sample. A sample that

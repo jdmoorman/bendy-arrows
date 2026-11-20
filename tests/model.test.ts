@@ -51,7 +51,7 @@ describe('model', () => {
 describe('transformPuzzle', async () => {
   const { transformPuzzle } = await import('../src/model');
   const { decodePuzzle } = await import('../src/codec');
-  const { SAMPLES } = await import('../src/samples');
+  const { SAMPLES } = await import('./samples');
   const { solve } = await import('../src/solver');
   const { portEnd, portId, puzzlesEqual } = await import('../src/model');
 

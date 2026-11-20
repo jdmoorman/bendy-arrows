@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { decodePuzzle } from '../../src/codec';
 import { rateDifficulty } from '../../src/generator';
 import { AREA_SOURCES } from '../../src/logic';
-import { SAMPLES } from '../../src/samples';
+import { SAMPLES } from '../../tests/samples';
 import { outPath, record } from '../out';
 
 // How long rating every sample takes, with and without the 3-border cuts, and whether

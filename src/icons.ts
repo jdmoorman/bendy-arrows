@@ -32,5 +32,6 @@ export const ICONS = {
   fastForward: svg('<path d="M3 5v14l8-7z"/><path d="M12 5v14l8-7z"/>'),
   stepBack: svg('<path d="M19 5v14l-9-7z"/><path d="M6 5v14"/>'),
   bulb: svg('<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/>'),
+  chevron: svg('<path d="m9 6 6 6-6 6"/>'),
   close: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
 };
