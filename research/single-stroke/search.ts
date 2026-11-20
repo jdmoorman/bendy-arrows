@@ -170,3 +170,28 @@ export function generatedHard(run: number): void {
     }
   }
 }
+
+/** Black-tiles-only single strokes (any rule may force a step), from generated puzzles of 4×4 to 6×6. */
+export function tilesOnly(run: number): void {
+  const end = Date.now() + Number(process.env.RESEARCH_MINUTES ?? 10) * 60 * 1000;
+  const sizes: [number, number][] = [];
+  // FILTER_MIN/FILTER_MAX: the range of widths and heights (default 4 to 6).
+  const lo = Number(process.env.FILTER_MIN ?? 4);
+  const hi = Number(process.env.FILTER_MAX ?? 6);
+  for (let w = lo; w <= hi; w++) for (let h = w; h <= hi; h++) sizes.push([w, h]);
+  for (let seed = run * 1_000_000 + 700_000 + Number(process.env.SEED_OFFSET ?? 0); Date.now() < end; seed++) {
+    const [w, h] = sizes[seed % sizes.length];
+    try {
+      const r = generate({ w, h, difficulties: ['easy', 'medium', 'hard'], clues: 'tiles', minimal: true, attempts: 1, seed });
+      const q = tall(r.puzzle);
+      if (q.walls.size) continue;
+      const code = encodePuzzle(q);
+      if (seen.has(code)) continue;
+      seen.add(code);
+      const s = singleStroke(q, true);
+      if (s) record(`tiles-stroke/filter-${q.w}x${q.h}.txt`, `Tile stroke ${q.w}×${q.h} · ${s.hard} hard — #p=${code}`);
+    } catch {
+      /* no puzzle this seed */
+    }
+  }
+}
