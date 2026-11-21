@@ -381,6 +381,25 @@ export function simplifyPuzzle(p: Puzzle, seed: number): Puzzle | null {
   return q;
 }
 
+/**
+ * The obstacles the puzzle could lose one at a time and keep exactly one solution: each wall
+ * and black tile, taken away on its own. (Taking several away together may not keep it unique.)
+ * Null if the puzzle doesn't have exactly one solution to begin with.
+ */
+export function removableObstacles(p: Puzzle): { walls: number[]; blocked: number[] } | null {
+  if (solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT }).status !== 'unique') return null;
+  const q = clonePuzzle(p);
+  const out = { walls: [] as number[], blocked: [] as number[] };
+  for (const [set, list, wall] of [[q.walls, out.walls, true], [q.blocked, out.blocked, false]] as const) {
+    for (const id of [...set]) {
+      set.delete(id);
+      if ((wall || openTilesOk(q)) && solve(q, { maxSolutions: 2, nodeLimit: NODE_LIMIT }).status === 'unique') list.push(id);
+      set.add(id);
+    }
+  }
+  return out;
+}
+
 /** Remove each clue that isn't needed for the solution to stay unique. */
 function minimise(p: Puzzle, rand: () => number): void {
   const clues = [...[...p.walls].map((id) => ({ wall: true, id })), ...[...p.blocked].map((id) => ({ wall: false, id }))];

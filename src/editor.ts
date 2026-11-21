@@ -27,7 +27,7 @@ import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHi
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
-import { simplifyInBackground } from './generator-client';
+import { removableInBackground } from './generator-client';
 import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from './new-puzzle-ui';
 
 type Tool = 'tiles' | 'walls' | 'ends';
@@ -107,6 +107,11 @@ export class EditorView {
   private logicOpts: LogicOptions = loadLogicOptions(new Storage());
   private autoWorker: Worker | null = null;
   private oneShotBtn!: HTMLButtonElement;
+  /** Whether removable obstacles are shown, what they are (once worked out), and the search for them. */
+  private showRemovable = false;
+  private removable: { walls: Set<number>; blocked: Set<number> } | null = null;
+  private removableRun: { cancel(): void } | null = null;
+  private removableBtn!: HTMLButtonElement;
   /** Row-and-column editing: buttons around the board add and delete rows and columns. */
   private gridEdit = false;
   private gridBtn!: HTMLButtonElement;
@@ -134,7 +139,7 @@ export class EditorView {
           <button class="btn" data-turn="rotateRight" aria-label="Rotate right" title="Rotate right">${ICONS.rotateRight}</button>
           <button class="btn" data-turn="flipH" aria-label="Flip left–right" title="Flip left–right">${ICONS.flipH}</button>
           <button class="btn" data-turn="flipV" aria-label="Flip up–down" title="Flip up–down">${ICONS.flipV}</button>
-          <button class="btn" data-act="simplify" aria-label="Simplify" title="Simplify: remove obstacles the unique solution doesn’t need, in random order">${ICONS.sparkle}</button>
+          <button class="btn" data-act="removable" aria-pressed="false" aria-label="Show removable obstacles" title="Show the walls and black tiles that could each go on its own, keeping the solution unique">${ICONS.sparkle}</button>
         </div>
         <div class="toolbar-row logic-row">
           <button class="btn" data-logic="rules" aria-label="Logic rules">${ICONS.list}<span>Rules</span></button>
@@ -181,8 +186,11 @@ export class EditorView {
         this.edit((p) => transformPuzzle(p, b.dataset.turn as Transform));
       });
     }
-    const simplify = q<HTMLButtonElement>('[data-act=simplify]');
-    simplify.addEventListener('click', () => void this.simplify(simplify));
+    this.removableBtn = q<HTMLButtonElement>('[data-act=removable]');
+    this.removableBtn.addEventListener('click', () => {
+      this.showRemovable = !this.showRemovable;
+      this.checkRemovable();
+    });
     this.oneShotBtn = q<HTMLButtonElement>('[data-act=oneshot]');
     this.oneShotBtn.addEventListener('click', () => this.toggleOneShot());
     q<HTMLButtonElement>('[data-logic=step]').addEventListener('click', () => this.stepLogic());
@@ -267,6 +275,7 @@ export class EditorView {
     this.clearMessage();
     this.render();
     if (this.autoLogic) this.runAutoLogic();
+    if (this.showRemovable) this.checkRemovable();
     for (const fn of this.changeListeners) fn(this.puzzle);
   }
 
@@ -418,34 +427,41 @@ export class EditorView {
   }
 
   /** Grid size, rotate, flip and simplify, in one sheet that stays open while you try things. */
-  /** Simplify: take away the obstacles the unique solution doesn't need, in random order. */
-  private async simplify(button: HTMLButtonElement) {
-    const before = this.puzzle;
-    const code = encodePuzzle(before);
-    const count = before.walls.size + before.blocked.size;
-    button.disabled = true;
-    this.setMessage('Simplifying…');
-    try {
-      const q = await simplifyInBackground(before).result;
-      // Edited in the meantime: the result is for a puzzle that's gone.
-      if (encodePuzzle(this.puzzle) !== code) return;
-      if (!q) {
-        this.setMessage('Simplify needs a puzzle with exactly one solution.', 'error');
-        return;
-      }
-      const removed = count - (q.walls.size + q.blocked.size);
-      if (!removed) {
-        this.setMessage('Every obstacle is needed: nothing to remove.');
-        return;
-      }
-      this.marksStillFit = false;
-      this.edit(() => q);
-      this.setMessage(`Simplified: removed ${removed} of ${count} obstacles.`, 'success');
-    } catch (err) {
-      this.setMessage(err instanceof Error ? err.message : String(err), 'error');
-    } finally {
-      button.disabled = false;
+  /**
+   * While shown, work out (in the background) which walls and black tiles could each go on its
+   * own with the solution staying unique, and colour them; again after every change.
+   */
+  private checkRemovable() {
+    this.removableRun?.cancel();
+    this.removableRun = null;
+    this.removable = null;
+    if (!this.showRemovable) {
+      this.render();
+      return;
     }
+    const p = this.puzzle;
+    if (!p.walls.size && !p.blocked.size) {
+      this.setMessage('No walls or black tiles to check.');
+      return;
+    }
+    this.render();
+    const run = removableInBackground(p);
+    this.removableRun = run;
+    run.result.then(
+      (r) => {
+        if (this.removableRun !== run) return;
+        this.removableRun = null;
+        this.removable = r;
+        if (!r) return this.setMessage('Not unique: removable obstacles show once the puzzle has exactly one solution.');
+        const n = r.walls.size + r.blocked.size;
+        this.setMessage(
+          n
+            ? `${n} of ${p.walls.size + p.blocked.size} obstacles (in amber) could each go on its own and keep the solution unique.`
+            : 'Every obstacle is needed: removing any one makes the solution not unique.',
+        );
+      },
+      () => {},
+    );
   }
 
   /**
@@ -716,6 +732,7 @@ export class EditorView {
     this.clearMessage();
     this.render();
     if (this.autoLogic) this.runAutoLogic();
+    if (this.showRemovable) this.checkRemovable();
     for (const fn of this.changeListeners) fn(this.puzzle);
   }
 
@@ -830,6 +847,7 @@ export class EditorView {
       showPortTargets: this.tool === 'ends',
       ghost: this.ghost ?? undefined,
       suggestWall: this.suggestedWall ?? undefined,
+      removable: this.showRemovable ? (this.removable ?? undefined) : undefined,
       segments: logic ? this.logic.segments : undefined,
       xMarks: logic ? this.logic.xs : undefined,
       highlight: logic ? this.logicFresh : undefined,
@@ -838,6 +856,7 @@ export class EditorView {
     });
     this.oneShotBtn.setAttribute('aria-pressed', String(!!p.oneShot));
     this.gridBtn.setAttribute('aria-pressed', String(this.gridEdit));
+    this.removableBtn.setAttribute('aria-pressed', String(this.showRemovable));
     this.drawGridHandles();
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { generate, isSymmetric, rateDifficulty, simplifyPuzzle, type ClueKind } from '../src/generator';
+import { generate, isSymmetric, rateDifficulty, removableObstacles, simplifyPuzzle, type ClueKind } from '../src/generator';
 import { encodePuzzle } from '../src/codec';
 import { solve } from '../src/solver';
 
@@ -56,5 +56,24 @@ describe('simplifyPuzzle', async () => {
       expect(solve(r, { maxSolutions: 2 }).status, `wall ${e} is spare`).not.toBe('unique');
     }
     expect(simplifyPuzzle(createPuzzle(4, 4), 1)).toBeNull();
+  });
+});
+
+describe('removableObstacles', async () => {
+  const { solve } = await import('../src/solver');
+  const { createPuzzle } = await import('../src/model');
+  test('each obstacle it lists can go on its own, and each it leaves out cannot', () => {
+    const { puzzle } = generate({ w: 5, h: 5, difficulties: ['easy', 'medium'], clues: 'mixed', minimal: false, attempts: 30, seed: 7 });
+    const r = removableObstacles(puzzle)!;
+    for (const [set, kept] of [[puzzle.walls, r.walls], [puzzle.blocked, r.blocked]] as const) {
+      for (const id of set) {
+        const q = { ...puzzle, walls: new Set(puzzle.walls), blocked: new Set(puzzle.blocked) };
+        (set === puzzle.walls ? q.walls : q.blocked).delete(id);
+        expect(solve(q, { maxSolutions: 2 }).status === 'unique', `${id}`).toBe(kept.includes(id));
+      }
+    }
+  });
+  test('a puzzle without exactly one solution has none to list', () => {
+    expect(removableObstacles(createPuzzle(4, 4))).toBeNull();
   });
 });

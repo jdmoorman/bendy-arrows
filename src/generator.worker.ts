@@ -1,23 +1,23 @@
 /// <reference lib="webworker" />
 import { decodePuzzle, encodePuzzle } from './codec';
-import { generate, simplifyPuzzle, type Difficulty, type GenOptions } from './generator';
+import { generate, removableObstacles, type Difficulty, type GenOptions } from './generator';
 
 export type GeneratorMessage =
   | { type: 'progress'; attempt: number }
   | { type: 'done'; code: string; difficulty: Difficulty; attempts: number }
-  | { type: 'simplified'; code: string | null }
+  | { type: 'removable'; walls: number[]; blocked: number[] } | { type: 'removable'; walls: null; blocked: null }
   | { type: 'error'; message: string };
 
-/** Generate a puzzle, or simplify one (its code, and a seed for the order obstacles are tried in). */
-export type GeneratorRequest = GenOptions | { simplify: string; seed: number };
+/** Generate a puzzle, or find the obstacles a puzzle (its code) could lose one at a time. */
+export type GeneratorRequest = GenOptions | { removable: string };
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 ctx.onmessage = (ev: MessageEvent<GeneratorRequest>) => {
   try {
-    if ('simplify' in ev.data) {
-      const q = simplifyPuzzle(decodePuzzle(ev.data.simplify), ev.data.seed);
-      ctx.postMessage({ type: 'simplified', code: q && encodePuzzle(q) } satisfies GeneratorMessage);
+    if ('removable' in ev.data) {
+      const r = removableObstacles(decodePuzzle(ev.data.removable));
+      ctx.postMessage((r ? { type: 'removable', ...r } : { type: 'removable', walls: null, blocked: null }) satisfies GeneratorMessage);
       return;
     }
     const r = generate(ev.data, (attempt) => ctx.postMessage({ type: 'progress', attempt } satisfies GeneratorMessage));

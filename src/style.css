@@ -258,6 +258,13 @@ a.btn {
   stroke-width: 12;
   stroke-linecap: round;
 }
+/* Walls and black tiles the editor shows could go, each on its own, keeping the solution unique. */
+.wall.removable {
+  stroke: rgb(217 119 6);
+}
+.tile.blocked.removable {
+  fill: rgb(217 119 6);
+}
 /* A wall the editor suggests adding. */
 .wall.suggest {
   stroke: var(--accent);
