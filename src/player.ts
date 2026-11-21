@@ -2,7 +2,7 @@ import './style.css';
 import { decodePuzzle, encodePuzzle } from './codec';
 import { ICONS } from './icons';
 import { findLevel, levelName, PACKS, type LevelRef } from './levels';
-import { orientations, type Puzzle } from './model';
+import { endVariants, type Puzzle } from './model';
 import { PlayView } from './play';
 import { puzzleFromHash } from './share';
 import { applySettings, openSettingsSheet } from './settings-ui';
@@ -54,10 +54,11 @@ for (const pack of PACKS) {
       if (state.progress[old] && !state.progress[code]) state.progress[code] = state.progress[old];
       delete state.progress[old];
     }
-    // Levels were turned or mirrored so the tail is low on the left: a level solved the old
-    // way round stays solved (an unfinished board doesn't carry over, as its lines would move).
+    // Levels were turned or mirrored, and their arrows moved round corner tiles, to place the
+    // ends better: a level solved the old way stays solved (an unfinished board doesn't carry
+    // over, as its lines would move).
     if (!storage.isSolved(code)) {
-      for (const q of orientations(p).slice(1)) {
+      for (const q of endVariants(p).slice(1)) {
         for (const old of [encodePuzzle(q), encodePuzzle({ ...q, oneShot: undefined })]) if (storage.isSolved(old)) storage.markSolved(code);
       }
     }

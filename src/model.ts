@@ -357,32 +357,86 @@ function levelTurns(p: Puzzle): Puzzle[] {
   return [p, flipped, transformPuzzle(p, 'flipV'), transformPuzzle(flipped, 'flipV')];
 }
 
-/** How well placed the tail (first end) is: on the left edge first, then in the bottom half, then the left half. */
-function tailScore(p: Puzzle): number {
-  const [side] = portSide(p, p.endpoints[0].port);
-  const [r, c] = cellRC(p, portCell(p, p.endpoints[0].port));
-  return (side === 'left' ? 4 : 0) + (2 * r >= p.h - 1 ? 2 : 0) + (2 * c <= p.w - 1 ? 1 : 0);
+const OPPOSITE: Record<Side, Side> = { left: 'right', right: 'left', top: 'bottom', bottom: 'top' };
+
+/** For each end, the sides its arrow can come in from: its own first, then its corner's other side if it's on a corner tile. */
+function cornerChoices(p: Puzzle): { side: Side; port: number }[][] {
+  return p.endpoints.map((end) => {
+    const [side] = portSide(p, end.port);
+    const [r, c] = cellRC(p, portCell(p, end.port));
+    const sides: Side[] = [side];
+    for (const [s, on] of [['top', r === 0], ['bottom', r === p.h - 1], ['left', c === 0], ['right', c === p.w - 1]] as [Side, boolean][]) {
+      if (on && s !== side) sides.push(s);
+    }
+    return sides.map((s) => ({ side: s, port: portId(p, s, s === 'top' || s === 'bottom' ? c : r) }));
+  });
+}
+
+/** The same level with its arrows on any side of their corner tiles, turned or mirrored any way: every code it might once have had. */
+export function endVariants(p: Puzzle): Puzzle[] {
+  let out: Puzzle[] = [p];
+  cornerChoices(p).forEach((options, i) => {
+    out = out.flatMap((q) => options.map((o) => ({ ...q, endpoints: q.endpoints.map((end, j) => (j === i ? { ...end, port: o.port } : end)) })));
+  });
+  return out.flatMap(orientations);
 }
 
 /**
- * Whether a level's tail is as well placed as turning or mirroring it can make it (see
- * `levelTurns` and `tailScore`): on the left edge, in its bottom half, where it can be.
- * Levels without frame ends pass.
+ * The ends' arrows moved round their corner tiles, where that helps: an end on a corner tile
+ * can come in from either of the corner's two sides (the path is the same). Best is the two
+ * arrows on opposite sides, then on the same side; failing both, or if they already are, the
+ * ends stay as they were (and otherwise move as few as they can).
+ */
+export function cornerEnds(p: Puzzle): Puzzle {
+  if (p.endpoints.length !== 2) return p;
+  const choices = cornerChoices(p);
+  const fit = (a: Side, b: Side) => (OPPOSITE[a] === b ? 2 : a === b ? 1 : 0);
+  let best = { score: -1, moves: 0, ports: [0, 0] };
+  choices[0].forEach((a, i) =>
+    choices[1].forEach((b, j) => {
+      const score = fit(a.side, b.side);
+      const moves = (i ? 1 : 0) + (j ? 1 : 0);
+      if (score > best.score || (score === best.score && moves < best.moves)) best = { score, moves, ports: [a.port, b.port] };
+    }),
+  );
+  if (!best.moves) return p;
+  return { ...p, endpoints: p.endpoints.map((end, i) => ({ ...end, port: best.ports[i] })) };
+}
+
+/**
+ * How well placed the ends are: the tail (first end) on the left edge first, then the head on
+ * the side opposite the tail, then the tail in the bottom half, then in the left half.
+ */
+function tailScore(p: Puzzle): number {
+  const [side] = portSide(p, p.endpoints[0].port);
+  const head = p.endpoints[1] ? portSide(p, p.endpoints[1].port)[0] : null;
+  const [r, c] = cellRC(p, portCell(p, p.endpoints[0].port));
+  return (side === 'left' ? 8 : 0) + (head === OPPOSITE[side] ? 4 : 0) + (2 * r >= p.h - 1 ? 2 : 0) + (2 * c <= p.w - 1 ? 1 : 0);
+}
+
+/**
+ * Whether a level's ends are as well placed as they can be: arrows on corner tiles already on
+ * the best side of their corner (see `cornerEnds`), and the level turned or mirrored (see
+ * `levelTurns`) so the tail is on the left edge with the head opposite, low, where it can be
+ * (see `tailScore`). Levels without frame ends pass.
  */
 export function tailLeftLow(p: Puzzle): boolean {
   if (!p.endpoints.length) return true;
+  if (cornerEnds(p) !== p) return false;
   return tailScore(p) === Math.max(...levelTurns(p).map(tailScore));
 }
 
 /**
- * A level turned or mirrored so its tail is as well placed as it can be (see `tailLeftLow`).
- * Of the ways that do, the one whose head is lowest, then furthest right. Levels that already
- * pass are returned as they are.
+ * A level with its ends placed as well as they can be (see `tailLeftLow`): first the arrows
+ * moved round their corners, then turned or mirrored. Of the ways that do, the one whose head
+ * is lowest, then furthest right. Levels that already pass are returned as they are.
  */
 export function orientTail(p: Puzzle): Puzzle {
   if (tailLeftLow(p)) return p;
-  const headAt = (q: Puzzle) => (q.endpoints[1] ? cellRC(q, portCell(q, q.endpoints[1].port)) : [0, 0]);
-  const fits = levelTurns(p).filter(tailLeftLow);
+  const q = cornerEnds(p);
+  if (tailLeftLow(q)) return q;
+  const headAt = (x: Puzzle) => (x.endpoints[1] ? cellRC(x, portCell(x, x.endpoints[1].port)) : [0, 0]);
+  const fits = levelTurns(q).filter(tailLeftLow);
   fits.sort((a, b) => headAt(b)[0] - headAt(a)[0] || headAt(b)[1] - headAt(a)[1]);
   return fits[0];
 }

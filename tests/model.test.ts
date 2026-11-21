@@ -99,7 +99,8 @@ describe('transformPuzzle', async () => {
 });
 
 describe('orientTail', async () => {
-  const { orientTail, tailLeftLow } = await import('../src/model');
+  const modelModule = await import('../src/model');
+  const { orientTail, tailLeftLow } = modelModule;
   test('a square level ends up with its tail low on the left, its head as low and far right as can be', () => {
     for (const side of ['top', 'right', 'bottom', 'left'] as Side[]) {
       for (let i = 0; i < 5; i++) {
@@ -116,10 +117,10 @@ describe('orientTail', async () => {
   });
   test('levels that already fit are left alone', () => {
     const p = createPuzzle(4, 4);
-    p.endpoints = [portEnd(portId(p, 'left', 3)), portEnd(portId(p, 'top', 0))];
+    p.endpoints = [portEnd(portId(p, 'left', 2)), portEnd(portId(p, 'right', 1))];
     expect(orientTail(p)).toBe(p);
     const tall = createPuzzle(4, 6);
-    tall.endpoints = [portEnd(portId(tall, 'bottom', 0)), portEnd(portId(tall, 'right', 0))];
+    tall.endpoints = [portEnd(portId(tall, 'left', 4)), portEnd(portId(tall, 'right', 1))];
     expect(orientTail(tall)).toBe(tall);
   });
   test('a tall level is only mirrored or turned half round: tail on the left edge if it can be, then low', () => {
@@ -127,10 +128,29 @@ describe('orientTail', async () => {
     p.endpoints = [portEnd(portId(p, 'right', 1)), portEnd(portId(p, 'top', 2))];
     const q = orientTail(p);
     expect([q.w, q.h, ...portSide(q, q.endpoints[0].port)]).toEqual([4, 6, 'left', 4]);
+  });
+  test('an arrow on a corner tile moves round its corner: opposite the other end, or else beside it', () => {
+    const { cornerEnds } = modelModule;
+    // Tail in the top-right corner coming in from the top, head on the left: the tail moves
+    // to the corner's right side (opposite the head), then the level is mirrored.
     const top = createPuzzle(4, 6);
     top.endpoints = [portEnd(portId(top, 'top', 3)), portEnd(portId(top, 'left', 2))];
+    expect(portSide(top, cornerEnds(top).endpoints[0].port)).toEqual(['right', 0]);
     const t = orientTail(top);
-    expect([t.w, t.h, ...portSide(t, t.endpoints[0].port)]).toEqual([4, 6, 'bottom', 0]);
+    expect([t.w, t.h, ...portSide(t, t.endpoints[0].port), portSide(t, t.endpoints[1].port)[0]]).toEqual([4, 6, 'left', 5, 'right']);
+    // Head on the top edge (not a corner), tail in the bottom-left corner from the left: the
+    // tail moves to the bottom, opposite the head.
+    const q = createPuzzle(4, 6);
+    q.endpoints = [portEnd(portId(q, 'left', 5)), portEnd(portId(q, 'top', 1))];
+    expect(portSide(q, cornerEnds(q).endpoints[0].port)).toEqual(['bottom', 0]);
+    // Can't be opposite: the same side instead (tail in the top-left corner from the top, head on the left).
+    const same = createPuzzle(4, 6);
+    same.endpoints = [portEnd(portId(same, 'top', 0)), portEnd(portId(same, 'left', 3))];
+    expect(portSide(same, cornerEnds(same).endpoints[0].port)).toEqual(['left', 0]);
+    // Already opposite: left alone.
+    const fine = createPuzzle(4, 6);
+    fine.endpoints = [portEnd(portId(fine, 'left', 0)), portEnd(portId(fine, 'right', 3))];
+    expect(cornerEnds(fine)).toBe(fine);
   });
 });
 
