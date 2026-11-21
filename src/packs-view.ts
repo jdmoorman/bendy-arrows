@@ -2,7 +2,7 @@ import { decodePuzzle, encodePuzzle } from './codec';
 import { MIN_PACK_LEVELS, PACK_SIZE_STEP, PACKS } from './levels';
 import type { PackRating, PacksMessage, PacksRequest } from './packs.worker';
 import { orientTail, pathKey, tailLeftLow, transformPuzzle } from './model';
-import { padFor, renderBoard } from './render';
+import { boardSize, padFor, renderBoard } from './render';
 import type { Storage } from './storage';
 import { ICONS } from './icons';
 import { el, openSheet, toast } from './ui';
@@ -13,6 +13,11 @@ function shapeProblem(code: string): string {
   return p.w > p.h ? 'wider than tall' : p.h > 2 * p.w ? 'too tall' : !tailLeftLow(p) ? 'tail not low on the left' : '';
 }
 
+/** How long (ms) each step of a hint journey shows when hovering over a level: a hint longer. */
+const STEP_MS = 600;
+const HINT_MS = 1500;
+/** The magnified board's longer side (px) while its hint journey plays. */
+const ZOOM_PX = 360;
 /** Hold this long (ms) on a touch screen before a level picks up, so a swipe still scrolls. */
 const HOLD_MS = 300;
 /** A press that moves further than this (px) before picking up is a scroll or a stray drag. */
@@ -47,6 +52,8 @@ export class PacksView {
   private ratings = new Map<string, PackRating | null>();
   /** Levels sent to the solver and not back yet. */
   private solving = new Set<string>();
+  /** The tile whose hint journey is playing (while the mouse is over it), and its next step. */
+  private playing: { tile: HTMLElement; timer: number; off: () => void } | null = null;
   private worker: Worker | null = null;
   private drag: {
     tile: HTMLElement;
@@ -206,6 +213,12 @@ export class PacksView {
       }
     });
     t.append(document.createElementNS('http://www.w3.org/2000/svg', 'svg'), el('span', 'pack-tile-label'), el('span', 'pack-tile-rating'));
+    // Hovering plays the level's hint journey (the Packs tab is used with a mouse).
+    // It stops when the mouse moves off the tile (see playJourney): redrawing the board under
+    // the mouse can make the browser report a leave that isn't one.
+    t.addEventListener('pointerenter', (ev) => {
+      if (ev.pointerType === 'mouse' && !this.drag && this.playing?.tile !== t) this.playJourney(t);
+    });
     // Any level can be taken out of its pack (a saved one leaves src/levels.ts on Save).
     const remove = el('button', 'pack-tile-remove', ICONS.close);
     remove.setAttribute('aria-label', 'Remove this level');
@@ -353,7 +366,83 @@ export class PacksView {
 
   // --- Dragging ------------------------------------------------------------
 
+  /**
+   * Play a tile's hint journey on its board, a step every STEP_MS: the empty board, the easy
+   * rules run to the end, a hint (its marks and tiles highlighted), and so on to the solved
+   * board; then again from the start.
+   */
+  private playJourney(t: HTMLElement) {
+    this.stopJourney();
+    const code = t.dataset.code!;
+    const frames = this.ratings.get(code)?.frames;
+    if (!frames) return;
+    const p = decodePuzzle(code);
+    const pad = padFor(p);
+    // A magnified copy beside the tile (on whichever side has room), where the journey plays.
+    const zoom = el('div', 'pack-zoom');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.classList.add('board');
+    zoom.append(svg);
+    const { width, height } = boardSize(p, pad);
+    const scale = Math.min(ZOOM_PX / Math.max(width, height), (window.innerHeight - 32) / height);
+    const [zw, zh] = [width * scale, height * scale];
+    const r = t.getBoundingClientRect();
+    const x = r.right + 12 + zw <= window.innerWidth - 8 ? r.right + 12 : Math.max(8, r.left - 12 - zw);
+    const y = Math.min(Math.max(8, r.top + r.height / 2 - zh / 2), window.innerHeight - 8 - zh);
+    Object.assign(zoom.style, { left: `${x}px`, top: `${y}px`, width: `${zw}px`, height: `${zh}px` });
+    document.body.append(zoom);
+    const solution = this.solutions.get(code)?.lines ?? undefined;
+    let i = 0;
+    let shown = new Set<number>();
+    // Stop once the mouse moves off the tile, or out of the window.
+    const moved = (ev: PointerEvent) => {
+      if (!(ev.target instanceof Node && t.contains(ev.target))) this.stopJourney();
+    };
+    const left = (ev: MouseEvent) => {
+      if (!ev.relatedTarget) this.stopJourney();
+    };
+    document.addEventListener('pointermove', moved);
+    document.addEventListener('mouseout', left);
+    const off = () => {
+      document.removeEventListener('pointermove', moved);
+      document.removeEventListener('mouseout', left);
+      zoom.remove();
+    };
+    const step = () => {
+      let wait = STEP_MS;
+      if (i === 0) {
+        renderBoard(svg, p, { pad });
+        shown = new Set();
+      } else if (i <= frames.length) {
+        const f = frames[i - 1];
+        const segments = new Set(f.segments);
+        const xMarks = new Set(f.xs);
+        const fresh = new Set([...segments, ...xMarks].filter((e) => !shown.has(e)));
+        renderBoard(svg, p, { pad, segments, xMarks, highlight: fresh, focusCells: f.kind === 'hint' ? new Set(f.focus) : undefined });
+        shown = new Set([...segments, ...xMarks]);
+        if (f.kind === 'hint') wait = HINT_MS;
+      } else {
+        renderBoard(svg, p, { pad, segments: solution, solved: !!solution });
+        wait = 2 * STEP_MS;
+      }
+      i = i > frames.length ? 0 : i + 1;
+      this.playing = { tile: t, timer: window.setTimeout(step, wait), off };
+    };
+    step();
+  }
+
+  /** Stop a playing hint journey and take its magnified board away. */
+  private stopJourney() {
+    if (!this.playing) return;
+    window.clearTimeout(this.playing.timer);
+    this.playing.off();
+    const t = this.playing.tile;
+    this.playing = null;
+    this.drawTile(t);
+  }
+
   private press(ev: PointerEvent) {
+    this.stopJourney();
     const tile = (ev.target as HTMLElement).closest<HTMLElement>('.pack-tile');
     if (!tile || ev.button !== 0 || this.drag) return;
     const r = tile.getBoundingClientRect();

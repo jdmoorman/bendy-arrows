@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { decodePuzzle } from './codec';
-import { hintJourney, strokeJourney } from './logic';
+import { hintJourney, strokeJourney, type JourneyFrame } from './logic';
 import { isOneShot } from './model';
 import { solve } from './solver';
 
@@ -17,6 +17,8 @@ export interface PackRating {
   hints: number;
   /** The hints ran out before the end. */
   stuck: boolean;
+  /** Each step: the easy rules run to the end, or one hint. */
+  frames: JourneyFrame[];
 }
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
@@ -42,8 +44,10 @@ ctx.onmessage = (ev: MessageEvent<PacksRequest>) => {
     if (unique.has(code)) {
       const p = decodePuzzle(code);
       // A one-shot's hints are those for its stroke.
-      const j = isOneShot(p) ? strokeJourney(p) : hintJourney(p);
-      rating = { hints: j.steps.length, stuck: j.outcome === 'stuck' };
+      const frames: JourneyFrame[] = [];
+      const watch = (f: JourneyFrame) => frames.push(f);
+      const j = isOneShot(p) ? strokeJourney(p, {}, watch) : hintJourney(p, {}, watch);
+      rating = { hints: j.steps.length, stuck: j.outcome === 'stuck', frames };
     }
     ctx.postMessage({ kind: 'rated', code, rating } satisfies PacksMessage);
   }

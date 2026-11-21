@@ -339,16 +339,38 @@ export interface HintStep {
 }
 
 /**
+ * One step of a hint journey, for watching it: the board after the easy rules ran to the end,
+ * or after one hint (with the rule, and the tiles it's about).
+ */
+export interface JourneyFrame {
+  kind: 'easy' | 'hint';
+  segments: number[];
+  xs: number[];
+  rule?: RuleId;
+  focus?: number[];
+}
+/** Receives each step of a hint journey as it's taken. */
+export type JourneyWatcher = (f: JourneyFrame) => void;
+const frameOf = (kind: 'easy' | 'hint', s: LogicState, d?: Deduction): JourneyFrame => ({
+  kind,
+  segments: [...s.segments],
+  xs: [...s.xs],
+  ...(d ? { rule: d.rule, focus: d.cells ?? [d.cell] } : {}),
+});
+
+
+/**
  * What solving is like for a player who applies the easy rules until they get stuck, then
  * asks for a hint, and repeats: the hints they'd need, in order, and whether that finishes
  * the puzzle or leaves them stuck with no hint to give.
  */
-export function hintJourney(p: Puzzle, opts: LogicOptions = {}): { steps: HintStep[]; outcome: 'solved' | 'stuck' } {
+export function hintJourney(p: Puzzle, opts: LogicOptions = {}, watch?: JourneyWatcher): { steps: HintStep[]; outcome: 'solved' | 'stuck' } {
   const easy = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
   const steps: HintStep[] = [];
   let state: LogicState = { segments: new Set(), xs: new Set() };
   for (let i = 0; i <= edgeCount(p); i++) {
     const run = runLogic(p, easy, state, opts);
+    if (watch && run.state.segments.size + run.state.xs.size > state.segments.size + state.xs.size) watch(frameOf('easy', run.state));
     state = run.state;
     if (run.solved) return { steps, outcome: 'solved' };
     if (run.contradiction) return { steps, outcome: 'stuck' };
@@ -361,6 +383,7 @@ export function hintJourney(p: Puzzle, opts: LogicOptions = {}): { steps: HintSt
     const areaRule = d.rule === 'balance' || d.rule === 'imbalance' || d.rule === 'bottlenecks';
     steps.push(areaRule && d.cells ? { rule: d.rule, area: d.cells.length } : { rule: d.rule });
     state = applyStep(state, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
+    watch?.(frameOf('hint', state, d));
   }
   return { steps, outcome: 'stuck' };
 }
@@ -540,12 +563,13 @@ export function runStroke(p: Puzzle, rules: Iterable<RuleId>, start: LogicState 
  * `hintJourney` for a one-shot: the stroke goes on as far as the easy rules force it; where they
  * can't, a hint (all the rules) takes it one step further.
  */
-export function strokeJourney(p: Puzzle, opts: LogicOptions = {}): { steps: HintStep[]; outcome: 'solved' | 'stuck' } {
+export function strokeJourney(p: Puzzle, opts: LogicOptions = {}, watch?: JourneyWatcher): { steps: HintStep[]; outcome: 'solved' | 'stuck' } {
   const easy = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
   const steps: HintStep[] = [];
   let state: LogicState = { segments: new Set(), xs: new Set() };
   for (let i = 0; i <= edgeCount(p); i++) {
     const run = runStroke(p, easy, state, opts);
+    if (watch && run.state.segments.size > state.segments.size) watch(frameOf('easy', run.state));
     state = run.state;
     if (run.solved) return { steps, outcome: 'solved' };
     if (run.contradiction) return { steps, outcome: 'stuck' };
@@ -557,6 +581,7 @@ export function strokeJourney(p: Puzzle, opts: LogicOptions = {}): { steps: Hint
     const areaRule = d.rule === 'balance' || d.rule === 'imbalance' || d.rule === 'bottlenecks';
     steps.push(areaRule && d.cells ? { rule: d.rule, area: d.cells.length } : { rule: d.rule });
     state = { segments: new Set([...lines, ...d.segments]), xs: new Set() };
+    watch?.(frameOf('hint', state, d));
   }
   return { steps, outcome: 'stuck' };
 }

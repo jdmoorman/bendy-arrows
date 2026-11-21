@@ -1447,7 +1447,8 @@ a.btn {
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
-/* Hint steps, under the label. */
+/* Hint steps, under the label (and a playing hint journey's step): one line, so the tile
+   keeps its size under the mouse. */
 .pack-tile-rating {
   text-align: center;
   font-size: 0.7rem;
@@ -1455,7 +1456,12 @@ a.btn {
   font-variant-numeric: tabular-nums;
   min-height: 1.2em;
 }
+  align-self: stretch;
+  min-width: 0;
 .pack-tile.moved {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border-color: var(--accent);
 }
 .pack-tile.dragging {
@@ -1557,6 +1563,24 @@ a.btn {
   top: 2px;
   right: 2px;
   display: grid;
+/* A hovered level, magnified beside it while its hint journey plays. */
+.pack-zoom {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  padding: 8px;
+  box-sizing: content-box;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.18);
+}
+.pack-zoom svg.board {
+  position: static;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
   place-items: center;
   width: 32px;
   height: 32px;
