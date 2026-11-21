@@ -12,7 +12,7 @@ const quote = (s) => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
  * Dev server only: lets the creator change src/levels.ts.
  * POST /__levels with {"from": oldCode, "to": newCode} replaces a pack level's code. The old
  * code must appear exactly once and the new one not at all. POST /__packs reorders the packs
- * and renames and redescribes them (see below). Vite then reloads the page with the changed packs.
+ * and renames them (see below). Vite then reloads the page with the changed packs.
  */
 export function levelsWriter() {
   return {
@@ -43,8 +43,8 @@ export function levelsWriter() {
           }
         });
       });
-      // POST /__packs with {"packs": [{"name", "levels", "newName"?, "description"?}]}: new
-      // orders (and names and descriptions) for the packs called `name`. Levels may move between
+      // POST /__packs with {"packs": [{"name", "levels", "newName"?}]}: new
+      // orders (and names) for the packs called `name`. Levels may move between
       // them, new ones be added, and (when every pack comes with "was", its levels as the page
       // loaded them) old ones be removed.
       server.middlewares.use('/__packs', (req, res) => {
@@ -64,10 +64,9 @@ export function levelsWriter() {
             const text1 = (x) => typeof x === 'string' && x.trim() !== '' && !/[\n\r]/.test(x);
             // Where each pack sits in the file: from its name to the end of its level list.
             const codes = (xs) => Array.isArray(xs) && xs.every((c) => typeof c === 'string' && CODE.test(c));
-            const spots = packs.map(({ name, newName, description, levels, was }) => {
+            const spots = packs.map(({ name, newName, levels, was }) => {
               if (!text1(name) || !codes(levels) || (was !== undefined && !codes(was))) throw new Error('That is not a pack.');
               if (newName !== undefined && !text1(newName)) throw new Error('A pack name must be one line, not empty.');
-              if (description !== undefined && !text1(description)) throw new Error('A pack description must be one line, not empty.');
               const at = text.indexOf(`name: ${quote(name)},`);
               if (at < 0 || text.indexOf(`name: ${quote(name)},`, at + 1) >= 0) throw new Error(`Can't find the pack "${name}" in src/levels.ts.`);
               const open = text.indexOf('levels: [', at) + 'levels: ['.length;
@@ -77,7 +76,7 @@ export function levelsWriter() {
               if (was !== undefined && was.join() !== old.join()) {
                 throw new Error('The packs in src/levels.ts have changed since this page loaded. Reload and try again.');
               }
-              return { at, open, close, old, name, newName, description, levels, was };
+              return { at, open, close, old, name, newName, levels, was };
             });
             // Levels may only be removed from packs sent with `was` (what the page loaded, checked
             // above); new ones are added only if they're no level yet, anywhere in the file.
@@ -96,11 +95,6 @@ export function levelsWriter() {
               const levels = '\n' + s.levels.map((c) => `${indent}  '${c}',\n`).join('') + indent;
               let head = text.slice(s.at, s.open);
               head = head.replace(/^name: (?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"),/, () => `name: ${quote(s.newName ?? s.name)},`);
-              if (s.description !== undefined) {
-                const before = head;
-                head = head.replace(/description:\s*(?:'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")/, () => `description: ${quote(s.description)}`);
-                if (head === before && !head.includes(`description: ${quote(s.description)}`)) throw new Error(`Can't find the description of "${s.name}" in src/levels.ts.`);
-              }
               text = text.slice(0, s.at) + head + levels + text.slice(s.close);
             }
             writeFileSync(FILE, text);

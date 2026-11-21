@@ -28,7 +28,7 @@ const EDGE = 60;
 /**
  * The creator's pack organiser: every pack's levels as their solved boards, in play order.
  * Drag a level (on a touch screen, hold it first) to move it within its pack or into another;
- * tap one to edit it. Each pack's name and description can be edited too, puzzles from the
+ * tap one to edit it. Each pack's name can be edited too, puzzles from the
  * Library added to the end of a pack, and levels removed. Save writes it all to src/levels.ts (through the local dev
  * server, the only place the organiser appears).
  */
@@ -43,9 +43,8 @@ export class PacksView {
   private revertBtn: HTMLButtonElement;
   /** Each pack's levels, in the order shown. */
   private order: string[][] = PACKS.map((p) => [...p.levels]);
-  /** Each pack's name and description, as edited. */
+  /** Each pack's name, as edited. */
   private names: string[] = PACKS.map((p) => p.name);
-  private descriptions: string[] = PACKS.map((p) => p.description);
   /** Each level's solution once solved (none if it has none), and whether it's the only one. */
   private solutions = new Map<string, { lines: Set<number> | null; unique: boolean }>();
   /** Hint steps, worked out after the solutions (null if not unique). */
@@ -89,7 +88,6 @@ export class PacksView {
     this.revertBtn.addEventListener('click', () => {
       this.order = PACKS.map((p) => [...p.levels]);
       this.names = PACKS.map((p) => p.name);
-      this.descriptions = PACKS.map((p) => p.description);
       this.draw();
     });
     // Once a level is picked up on a touch screen, a finger moving it mustn't scroll the page.
@@ -133,15 +131,14 @@ export class PacksView {
   }
 
   private get changed(): boolean {
-    return PACKS.some((p, i) => this.order[i].join() !== p.levels.join() || this.names[i] !== p.name || this.descriptions[i] !== p.description);
+    return PACKS.some((p, i) => this.order[i].join() !== p.levels.join() || this.names[i] !== p.name);
   }
 
-  /** What's wrong with the edited names and descriptions, if anything. */
+  /** What's wrong with the edited names or the levels, if anything. */
   private get problem(): string {
     const names = this.names.map((n) => n.trim());
     if (names.some((n) => !n)) return 'Every pack needs a name.';
     if (new Set(names).size !== names.length) return 'Two packs have the same name.';
-    if (this.descriptions.some((d) => !d.trim())) return 'Every pack needs a description.';
     const shape = this.order.flat().filter((c) => shapeProblem(c)).length;
     if (shape) return `${shape === 1 ? 'A level is' : `${shape} levels are`} wider than tall, more than twice as tall as wide, or with a tail that could be turned onto the left edge or lower.`;
     const notUnique = this.order.flat().filter((c) => this.solutions.get(c)?.unique === false).length;
@@ -170,21 +167,13 @@ export class PacksView {
 
   private draw() {
     this.body.replaceChildren(
-      ...PACKS.map((pack, pi) => {
+      ...PACKS.map((_, pi) => {
         const section = el('section', 'pack-section');
         const name = el('input', 'pack-name-input');
         name.value = this.names[pi];
         name.setAttribute('aria-label', 'Pack name');
         name.addEventListener('input', () => {
           this.names[pi] = name.value;
-          this.update();
-        });
-        const desc = el('textarea', 'pack-desc-input');
-        desc.value = this.descriptions[pi];
-        desc.rows = 2;
-        desc.setAttribute('aria-label', `${pack.name}: description`);
-        desc.addEventListener('input', () => {
-          this.descriptions[pi] = desc.value;
           this.update();
         });
         const count = el('span', 'pack-count');
@@ -197,7 +186,7 @@ export class PacksView {
         const add = el('button', 'pack-add', `${ICONS.plus}<span>Add level</span>`);
         add.addEventListener('click', () => this.openAddSheet(pi));
         grid.append(add);
-        section.append(head, desc, grid);
+        section.append(head, grid);
         return section;
       }),
     );
@@ -310,7 +299,7 @@ export class PacksView {
       ? problem
       : changed
         ? `Unsaved changes${this.removed.length ? ` (${this.removed.length} level${this.removed.length === 1 ? '' : 's'} removed)` : ''}. Save writes them to src/levels.ts.`
-        : 'Drag a level to move it (hold it first on a touch screen). Click to edit it. Edit names and descriptions in place.';
+        : 'Drag a level to move it (hold it first on a touch screen). Click to edit it. Edit names in place.';
   }
 
   /** Pick a Library puzzle to add to the end of pack `pi`. */
@@ -611,7 +600,7 @@ export class PacksView {
       const res = await fetch('/__packs', {
         method: 'POST',
         body: JSON.stringify({
-          packs: PACKS.map((p, i) => ({ name: p.name, newName: this.names[i].trim(), description: this.descriptions[i].trim(), levels: this.order[i], was: p.levels })),
+          packs: PACKS.map((p, i) => ({ name: p.name, newName: this.names[i].trim(), levels: this.order[i], was: p.levels })),
         }),
       });
       const reply = (await res.json()) as { error?: string };
@@ -620,7 +609,6 @@ export class PacksView {
       PACKS.forEach((p, i) => {
         p.levels = [...this.order[i]];
         p.name = this.names[i] = this.names[i].trim();
-        p.description = this.descriptions[i] = this.descriptions[i].trim();
       });
       this.update();
       toast('Saved the packs to src/levels.ts.');

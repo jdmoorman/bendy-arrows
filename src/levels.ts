@@ -7,7 +7,7 @@
  *   2. Running locally, tap "Copy level entry" beside the hint count, and paste the
  *      line into a pack's `levels` below (or write the code by hand: everything after
  *      `#p=` in the puzzle's share link). Levels play in the order listed.
- *   3. `npm test` checks every pack: a name, a description, at least MIN_PACK_LEVELS
+ *   3. `npm test` checks every pack: a name, at least MIN_PACK_LEVELS
  *      levels, each at least as tall as it is wide (phones are held upright) but no more
  *      than twice as tall, and with
  *      exactly one solution, and no level used twice (not even turned, mirrored or with its
@@ -19,7 +19,6 @@
  */
 export interface LevelPack {
   name: string;
-  description: string;
   /** Share codes, in play order. */
   levels: string[];
   /** Every level is a one-shot (and only such packs hold one-shots). */
@@ -34,7 +33,6 @@ export const PACK_SIZE_STEP = 5;
 export const PACKS: LevelPack[] = [
   {
     name: 'Zeros and Ones',
-    description: 'Puzzles with at most one obstacle, yet still a unique solution.',
     levels: [
       'BhDssQ',
       'BhDtUQ',
@@ -51,7 +49,6 @@ export const PACKS: LevelPack[] = [
   {
     name: 'One-Shot Minis',
     oneShot: true,
-    description: 'Try to solve each one in one go, from tail to head, without lifting a finger.',
     levels: [
       'BhC7orA',
       'BhC7VLY',
@@ -68,7 +65,6 @@ export const PACKS: LevelPack[] = [
   {
     name: 'One-Shot Midis',
     oneShot: true,
-    description: 'Try to solve each one in one go, from tail to head, without lifting a finger.',
     levels: [
       'BiF2Ij7BgA',
       'BiF6IZvdRhM',
@@ -90,7 +86,6 @@ export const PACKS: LevelPack[] = [
   {
     name: 'Tricky One-Shots',
     oneShot: true,
-    description: '.',
     levels: [
       'Bil7XZ_fG7sQ',
       'BiJ-OYj_DsblggA',
@@ -107,9 +102,9 @@ export const PACKS: LevelPack[] = [
       'Bin8pYz-YM4s0YRY',
       'BjH9lQrKcxqMIA',
       'Bim72YnrCIDPG4A',
-      'Bjn_LQyLjqgVFwA',
       'BiH2kYn8qhORC4A',
       'BiH7lYr8TTVGMGA',
+      'Bjn_LQyLjqgVFwA',
       'Bim3JYj-15mJIA',
       'BjH-YQrPEUAB0A',
     ],

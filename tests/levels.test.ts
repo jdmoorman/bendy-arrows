@@ -8,10 +8,9 @@ import { solve } from '../src/solver';
 // Every official level must be a good puzzle before it ships: GitHub runs these before
 // publishing, and a failure stops the deploy.
 describe('level packs', () => {
-  test('each pack has a name, a description and enough levels; names and codes are all different', () => {
+  test('each pack has a name and enough levels; names and codes are all different', () => {
     for (const pack of PACKS) {
       expect(pack.name.trim(), 'name').not.toBe('');
-      expect(pack.description.trim(), `${pack.name}: description`).not.toBe('');
       expect(pack.levels.length, `${pack.name}: levels`).toBeGreaterThanOrEqual(MIN_PACK_LEVELS);
     }
     expect(new Set(PACKS.map((p) => p.name)).size).toBe(PACKS.length);
