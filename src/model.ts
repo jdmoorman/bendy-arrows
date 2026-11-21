@@ -336,6 +336,57 @@ export function orientEnds(p: Puzzle, keepSize = false): Puzzle {
   return t ? transformPuzzle(p, t) : p;
 }
 
+/** The puzzle turned and mirrored all 8 ways (the first is the puzzle itself). */
+export function orientations(p: Puzzle): Puzzle[] {
+  const out: Puzzle[] = [];
+  let q = p;
+  for (let r = 0; r < 4; r++) {
+    out.push(q, transformPuzzle(q, 'flipH'));
+    q = transformPuzzle(q, 'rotateRight');
+  }
+  return out;
+}
+
+/**
+ * The ways a level may be turned or mirrored: all 8 for a square, otherwise only those that
+ * keep its width and height (as it is, mirrored either way, or turned half round).
+ */
+function levelTurns(p: Puzzle): Puzzle[] {
+  if (p.w === p.h) return orientations(p);
+  const flipped = transformPuzzle(p, 'flipH');
+  return [p, flipped, transformPuzzle(p, 'flipV'), transformPuzzle(flipped, 'flipV')];
+}
+
+/** How well placed the tail (first end) is: on the left edge first, then in the bottom half, then the left half. */
+function tailScore(p: Puzzle): number {
+  const [side] = portSide(p, p.endpoints[0].port);
+  const [r, c] = cellRC(p, portCell(p, p.endpoints[0].port));
+  return (side === 'left' ? 4 : 0) + (2 * r >= p.h - 1 ? 2 : 0) + (2 * c <= p.w - 1 ? 1 : 0);
+}
+
+/**
+ * Whether a level's tail is as well placed as turning or mirroring it can make it (see
+ * `levelTurns` and `tailScore`): on the left edge, in its bottom half, where it can be.
+ * Levels without frame ends pass.
+ */
+export function tailLeftLow(p: Puzzle): boolean {
+  if (!p.endpoints.length) return true;
+  return tailScore(p) === Math.max(...levelTurns(p).map(tailScore));
+}
+
+/**
+ * A level turned or mirrored so its tail is as well placed as it can be (see `tailLeftLow`).
+ * Of the ways that do, the one whose head is lowest, then furthest right. Levels that already
+ * pass are returned as they are.
+ */
+export function orientTail(p: Puzzle): Puzzle {
+  if (tailLeftLow(p)) return p;
+  const headAt = (q: Puzzle) => (q.endpoints[1] ? cellRC(q, portCell(q, q.endpoints[1].port)) : [0, 0]);
+  const fits = levelTurns(p).filter(tailLeftLow);
+  fits.sort((a, b) => headAt(b)[0] - headAt(a)[0] || headAt(b)[1] - headAt(a)[1]);
+  return fits[0];
+}
+
 /**
  * A key for a solution path's shape: the same for two paths exactly when one is the other
  * turned or mirrored (whatever obstacles and ends the puzzles have). `edges` are the path's lines.

@@ -98,6 +98,42 @@ describe('transformPuzzle', async () => {
   });
 });
 
+describe('orientTail', async () => {
+  const { orientTail, tailLeftLow } = await import('../src/model');
+  test('a square level ends up with its tail low on the left, its head as low and far right as can be', () => {
+    for (const side of ['top', 'right', 'bottom', 'left'] as Side[]) {
+      for (let i = 0; i < 5; i++) {
+        const p = createPuzzle(5, 5);
+        p.endpoints = [portEnd(portId(p, side, i)), portEnd(portId(p, side === 'top' ? 'bottom' : 'top', 2))];
+        p.blocked.add(6);
+        const q = orientTail(p);
+        const [s, row] = portSide(q, q.endpoints[0].port);
+        expect([s, row >= 2], `${side} ${i}`).toEqual(['left', true]);
+        expect(tailLeftLow(q)).toBe(true);
+        expect(q.blocked.size).toBe(1);
+      }
+    }
+  });
+  test('levels that already fit are left alone', () => {
+    const p = createPuzzle(4, 4);
+    p.endpoints = [portEnd(portId(p, 'left', 3)), portEnd(portId(p, 'top', 0))];
+    expect(orientTail(p)).toBe(p);
+    const tall = createPuzzle(4, 6);
+    tall.endpoints = [portEnd(portId(tall, 'bottom', 0)), portEnd(portId(tall, 'right', 0))];
+    expect(orientTail(tall)).toBe(tall);
+  });
+  test('a tall level is only mirrored or turned half round: tail on the left edge if it can be, then low', () => {
+    const p = createPuzzle(4, 6);
+    p.endpoints = [portEnd(portId(p, 'right', 1)), portEnd(portId(p, 'top', 2))];
+    const q = orientTail(p);
+    expect([q.w, q.h, ...portSide(q, q.endpoints[0].port)]).toEqual([4, 6, 'left', 4]);
+    const top = createPuzzle(4, 6);
+    top.endpoints = [portEnd(portId(top, 'top', 3)), portEnd(portId(top, 'left', 2))];
+    const t = orientTail(top);
+    expect([t.w, t.h, ...portSide(t, t.endpoints[0].port)]).toEqual([4, 6, 'bottom', 0]);
+  });
+});
+
 describe('orientEnds', async () => {
   const { orientEnds } = await import('../src/model');
   const end = portEnd;

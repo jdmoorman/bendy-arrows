@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { decodePuzzle, encodePuzzle } from '../src/codec';
 import { findLevel, levelName, MIN_PACK_LEVELS, PACKS } from '../src/levels';
 import { ADVANCED_RULES, ALL_RULES, runStroke } from '../src/logic';
-import { isOneShot, openCells, pathKey } from '../src/model';
+import { isOneShot, openCells, pathKey, tailLeftLow } from '../src/model';
 import { solve } from '../src/solver';
 
 // Every official level must be a good puzzle before it ships: GitHub runs these before
@@ -25,14 +25,17 @@ describe('level packs', () => {
     }
   });
 
-  test('One-Shot Midis: at least 30 tiles to visit, and the easy rules draw the whole stroke', () => {
+  test('One-Shot Midis packs: at least 30 tiles to visit, and the easy rules draw the whole stroke', () => {
     const easy = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
-    for (const code of PACKS.find((k) => k.name === 'One-Shot Midis')!.levels) {
+    const midis = PACKS.filter((k) => k.name.startsWith('One-Shot Midis'));
+    expect(midis.length).toBeGreaterThan(0);
+    for (const code of midis.flatMap((k) => k.levels)) {
       const p = decodePuzzle(code);
       expect(openCells(p).length, code).toBeGreaterThanOrEqual(30);
       expect(runStroke(p, easy).solved, code).toBe(true);
     }
   });
+
 
   test('no two levels have the same solution path, even turned or mirrored', () => {
     // (This covers repeats of a whole level too, turned, mirrored or with its ends swapped.)
@@ -60,12 +63,14 @@ describe('level packs', () => {
 
   for (const pack of PACKS) {
     pack.levels.forEach((code, i) => {
-      test(`${pack.name} ${i + 1}: decodes in the current format, is upright but at most twice as tall as wide, and has exactly one solution`, () => {
+      test(`${pack.name} ${i + 1}: decodes in the current format, is upright but at most twice as tall as wide, with its tail low on the left where it can be, and has exactly one solution`, () => {
         const p = decodePuzzle(code);
         expect(encodePuzzle(p)).toBe(code);
         // Phones are held upright: a level is at least as tall as it is wide, but no more than twice.
         expect(p.h, `${p.w}×${p.h} is wider than tall`).toBeGreaterThanOrEqual(p.w);
         expect(p.h, `${p.w}×${p.h} is more than twice as tall as wide`).toBeLessThanOrEqual(2 * p.w);
+        // Turned or mirrored so the path starts on the left edge, in its bottom half, where it can.
+        expect(tailLeftLow(p), 'the tail could be turned onto the left edge, or lower').toBe(true);
         expect(solve(p, { maxSolutions: 2 }).status).toBe('unique');
       }, 60000);
     });
