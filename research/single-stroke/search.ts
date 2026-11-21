@@ -1,9 +1,9 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { decodePuzzle, encodePuzzle } from '../../src/codec';
-import { generate, obstacleCount, type ClueKind } from '../../src/generator';
-import { ADVANCED_RULES, ALL_RULES, deductions, searchMetrics, type RuleId } from '../../src/logic';
-import { edgeBetween, edgeCells, neighbors, openCells, portCell, transformPuzzle, type Puzzle } from '../../src/model';
+import { generate, obstacleCount, type ClueKind, type Difficulty } from '../../src/generator';
+import { ADVANCED_RULES, ALL_RULES, deductions, searchMetrics, strokeJourney, type RuleId } from '../../src/logic';
+import { edgeBetween, edgeCells, neighbors, openCells, orientTail, portCell, transformPuzzle, type Puzzle } from '../../src/model';
 import { outPath, record } from '../out';
 
 /** The editor's "Easy rules": everything but the checkerboard rules. */
@@ -216,6 +216,39 @@ export function midis(run: number): void {
       if (seen.has(code)) continue;
       seen.add(code);
       if (singleStroke(q)) record(`one-shot/midis-${clues}.txt`, `One-shot ${q.w}×${q.h} — #p=${code}`);
+    } catch {
+      /* no puzzle this seed */
+    }
+  }
+}
+
+/**
+ * Hard one-shots with walls (walls only, or walls and black tiles): generated puzzles of 5×5
+ * to 8×8, kept when the stroke needs one-shot hints (a Checkerboard balance step) but they
+ * finish it. RESEARCH_MINUTES bounds the run. Output: single-stroke/hard-walls-<run>.tsv:
+ * code, size, tiles, hints, walls, black, crux.
+ */
+export function hardWalls(run: number): void {
+  const end = Date.now() + Number(process.env.RESEARCH_MINUTES ?? 10) * 60 * 1000;
+  const sizes: [number, number][] = [];
+  for (let w = 5; w <= 8; w++) for (let h = w; h <= 8; h++) sizes.push([w, h]);
+  const kinds: ClueKind[] = ['walls', 'mixed'];
+  for (let seed = run * 1_000_000 + 300_000; Date.now() < end; seed++) {
+    const [w, h] = sizes[seed % sizes.length];
+    const clues = kinds[(seed >> 4) % 2];
+    try {
+      // Half the seeds aim at puzzles the easy rules can't solve whole, which more often need several hints.
+      const difficulties: Difficulty[] = seed % 2 ? ['medium', 'hard'] : ['easy', 'medium', 'hard'];
+      const r = generate({ w, h, difficulties, clues, minimal: true, attempts: 1, seed });
+      const q = orientTail({ ...tall(r.puzzle), oneShot: true });
+      if (!q.walls.size || q.endpoints.length !== 2) continue;
+      const code = encodePuzzle(q);
+      if (seen.has(code)) continue;
+      seen.add(code);
+      const s = strokeJourney(q);
+      if (s.outcome !== 'solved' || !s.steps.length) continue;
+      const tiles = openCells(q).length;
+      record(`single-stroke/hard-walls-${run}.tsv`, [code, `${q.w}x${q.h}`, tiles, s.steps.length, q.walls.size, q.blocked.size, Math.round(searchMetrics(q).tightest)].join('\t'));
     } catch {
       /* no puzzle this seed */
     }
