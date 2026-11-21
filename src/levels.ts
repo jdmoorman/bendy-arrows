@@ -84,8 +84,8 @@ export const PACKS: LevelPack[] = [
     ],
   },
   {
-    name: 'One-Shot: hard',
-    description: 'One go from tail to head, but somewhere along the way the simple rules run out.',
+    name: 'Tricky One-Shots',
+    description: '.',
     levels: [
       'Bil7XZ_fG7sQ',
       'BiJ-OYj_DsblggA',

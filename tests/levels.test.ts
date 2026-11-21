@@ -19,9 +19,9 @@ describe('level packs', () => {
     expect(new Set(codes).size).toBe(codes.length);
   });
 
-  test('the One-Shot packs hold one-shots, and the other packs none', () => {
+  test('packs named for one-shots hold one-shots, and the other packs none', () => {
     for (const pack of PACKS) {
-      for (const code of pack.levels) expect(isOneShot(decodePuzzle(code)), `${pack.name}: ${code}`).toBe(pack.name.startsWith('One-Shot'));
+      for (const code of pack.levels) expect(isOneShot(decodePuzzle(code)), `${pack.name}: ${code}`).toBe(/one-shot/i.test(pack.name));
     }
   });
 

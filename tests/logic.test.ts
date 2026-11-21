@@ -515,8 +515,8 @@ describe('one-shot logic', async () => {
     }
   });
 
-  test('One-Shot: hard levels need hints for the stroke, and the hints finish it', () => {
-    for (const p of pack('One-Shot: hard')) {
+  test('Tricky One-Shots levels need hints for the stroke, and the hints finish it', () => {
+    for (const p of pack('Tricky One-Shots')) {
       expect(runStroke(p, easy).solved).toBe(false);
       const j = strokeJourney(p);
       expect(j.outcome).toBe('solved');
