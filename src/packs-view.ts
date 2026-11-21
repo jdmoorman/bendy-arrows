@@ -395,15 +395,21 @@ export class PacksView {
 
   /** Pick a Library puzzle to add to the end of pack `pi`. */
   private openAddSheet(pi: number) {
-    // A puzzle that's already a level somewhere (the same puzzle, turned, mirrored and so on)
-    // is listed but can't be added again.
+    // Every Library puzzle is listed. One that can't be a level here is faded, saying why: it's
+    // already a level somewhere (the same puzzle, turned, mirrored and so on), it's too long and
+    // thin for a level, or it can't be read.
     const inPacks = new Map<string, string>();
     for (const k of this.packs) for (const c of k.levels) inPacks.set(levelKey(decodePuzzle(c)), k.name);
     const entries = this.storage
       .list()
-      .map((e) => ({ e, code: this.asLevel(e.code, pi) }))
-      .filter((x): x is { e: (typeof x)['e']; code: string } => !!x.code && !shapeProblem(x.code))
-      .map((x) => ({ ...x, taken: inPacks.get(levelKey(decodePuzzle(x.code))) }))
+      .map((e) => {
+        const code = this.asLevel(e.code, pi);
+        if (!code) return { e, code: null, why: 'can’t be read' };
+        const taken = inPacks.get(levelKey(decodePuzzle(code)));
+        const shape = shapeProblem(code);
+        const why = taken ? `already in ${taken}` : shape === 'too tall' ? 'more than twice as long as it is wide' : shape;
+        return { e, code, why };
+      })
       .sort((a, b) => b.e.updated - a.e.updated);
     const body = el('div', 'pack-add-sheet');
     const search = el('input', 'text-input');
@@ -442,31 +448,30 @@ export class PacksView {
     const show = () => {
       const q = search.value.trim().toLowerCase();
       const shown = entries.filter(({ e }) => !q || e.name.toLowerCase().includes(q) || (e.collection ?? '').toLowerCase().includes(q));
-      empty.textContent = entries.length
-        ? shown.length
-          ? ''
-          : 'Nothing in your Library matches.'
-        : 'Nothing in your Library can be added: everything is more than twice as long one way as the other.';
-      const listed = shown.slice(0, 200);
+      empty.textContent = entries.length ? (shown.length ? '' : 'Nothing in your Library matches.') : 'Your Library is empty.';
+      const listed = shown;
       boards.clear();
       list.replaceChildren(
-        ...listed.map(({ e, code, taken }) => {
-          const p = decodePuzzle(code);
+        ...listed.map(({ e, code, why }) => {
+          const p = code ? decodePuzzle(code) : null;
           const row = el('button', 'pack-add-row');
           const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
           svg.classList.add('board');
-          drawBoard(svg, code);
-          boards.set(code, [...(boards.get(code) ?? []), svg]);
+          if (code) {
+            drawBoard(svg, code);
+            boards.set(code, [...(boards.get(code) ?? []), svg]);
+          }
           const text = el('span', 'pack-add-text');
           const name = el('span', 'pack-add-name');
           name.textContent = e.name;
           const meta = el('span', 'pack-add-meta');
-          meta.textContent = `${p.w}×${p.h}${e.collection ? ` · ${e.collection}` : ''}${taken ? ` · already in ${taken}` : ''}`;
+          meta.textContent = [p ? `${p.w}×${p.h}` : '', e.collection ?? '', why].filter(Boolean).join(' · ');
           text.append(name, meta);
           row.append(svg, text);
-          row.disabled = !!taken;
-          if (taken) row.title = `This puzzle is already a level in ${taken}.`;
+          row.disabled = !!why || !code;
+          if (why) row.title = `Can’t be added: ${why}.`;
           row.addEventListener('click', () => {
+            if (!code) return;
             this.packs[pi].levels.push(code);
             sheet.close();
             this.draw();
@@ -477,7 +482,7 @@ export class PacksView {
           return row;
         }),
       );
-      solveShown(listed.map((x) => x.code));
+      solveShown(listed.flatMap((x) => (x.code ? [x.code] : [])));
     };
     search.addEventListener('input', show);
     show();
