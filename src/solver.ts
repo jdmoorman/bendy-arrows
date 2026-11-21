@@ -1,6 +1,6 @@
 import { ALL_RULES, runLogic } from './logic';
 import { checkSolution } from './rules';
-import { cellCount, cellRC, clonePuzzle, edgeBetween, edgeCells, edgeCount, endpointCells, isUsableEdge, openCells, type Puzzle } from './model';
+import { cellCount, cellRC, clonePuzzle, edgeBetween, edgeCells, edgeCount, endpointCells, isUsableEdge, openCells, portCell, portCount, portEnd, type Puzzle } from './model';
 
 export type SolveStatus = 'none' | 'unique' | 'multiple' | 'aborted';
 
@@ -396,4 +396,73 @@ export function solutionUnion(
     if (!suggestedWall || n > suggestedWall.rulesOut) suggestedWall = { edge, rulesOut: n, found: seen.size };
   }
   return { status: first.status, edges: [...used], unchecked, suggestedWall };
+}
+
+/** End placements that give a puzzle with too few ends at least one solution. */
+export interface EndOption {
+  /** The ports each end could use: every frame side of its tile (the puzzle's own end first, if it has one, as just its port). */
+  ports: [number[], number[]];
+  status: 'unique' | 'multiple';
+  /** Lines its solutions use: the solution, or with `union`, every line some solution uses (as far as found). */
+  edges: number[];
+}
+
+/**
+ * For a puzzle with fewer than two ends: every way to place the missing ones (keeping the end
+ * it has) that gives at least one solution, and whether that solution is the only one. Ends on
+ * the same tile behave alike (a corner tile has two frame sides), so each tile is tried once
+ * and its ports share the verdict. `onFound` sees each as it's found; placements whose search
+ * runs out of steps are counted as unchecked.
+ */
+export function endPlacements(
+  p: Puzzle,
+  opts: {
+    nodeLimit?: number;
+    shouldAbort?: () => boolean;
+    onFound?: (o: EndOption) => void;
+    /** For placements with several solutions, find every line some solution uses (slower). */
+    union?: boolean;
+  } = {},
+): { options: EndOption[]; unchecked: number } {
+  const byCell = new Map<number, number[]>();
+  for (let port = 0; port < portCount(p); port++) {
+    const c = portCell(p, port);
+    if (p.blocked.has(c)) continue;
+    byCell.set(c, [...(byCell.get(c) ?? []), port]);
+  }
+  const fixed = p.endpoints[0]?.port;
+  const cells = [...byCell.keys()];
+  const pairs: [number, number][] = [];
+  if (fixed !== undefined) {
+    for (const c of cells) if (c !== portCell(p, fixed)) pairs.push([fixed, byCell.get(c)![0]]);
+  } else {
+    for (let i = 0; i < cells.length; i++) for (let j = i + 1; j < cells.length; j++) pairs.push([byCell.get(cells[i])![0], byCell.get(cells[j])![0]]);
+  }
+  const options: EndOption[] = [];
+  let unchecked = 0;
+  for (const [a, b] of pairs) {
+    if (opts.shouldAbort?.()) {
+      unchecked++;
+      continue;
+    }
+    const q = clonePuzzle(p);
+    q.endpoints = [portEnd(a), portEnd(b)];
+    if (!parityCheck(q).ok) continue;
+    const r = solve(q, { maxSolutions: 2, nodeLimit: opts.nodeLimit ?? 200_000, shouldAbort: opts.shouldAbort });
+    if (r.status === 'aborted') unchecked++;
+    if (r.status !== 'unique' && r.status !== 'multiple') continue;
+    // Every port of each end's tile works the same way.
+    const edges =
+      r.status === 'multiple' && opts.union
+        ? (() => {
+            const u = solutionUnion(q, { nodeLimit: opts.nodeLimit ?? 200_000, perEdgeNodeLimit: 100_000, shouldAbort: opts.shouldAbort });
+            unchecked += u.unchecked.length ? 1 : 0;
+            return u.edges;
+          })()
+        : [...new Set(r.solutions.flat())];
+    const o: EndOption = { ports: [fixed !== undefined ? [a] : byCell.get(portCell(p, a))!, byCell.get(portCell(p, b))!], status: r.status, edges };
+    options.push(o);
+    opts.onFound?.(o);
+  }
+  return { options, unchecked };
 }

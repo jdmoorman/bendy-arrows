@@ -2,39 +2,36 @@ import { encodePuzzle } from './codec';
 import type { EditorView } from './editor';
 import { missingEnds } from './rules';
 import type { RatingMessage, RatingRequest } from './rating.worker';
-import { solutionUnionInBackground, solveInBackground, type SolverRun, type UnionRun } from './solver-client';
+import { endPlacementsInBackground, solutionUnionInBackground, solveInBackground, type EndsRun, type SolverRun, type UnionRun } from './solver-client';
 import type { SolveResult } from './solver';
-import { Storage } from './storage';
 
 /** Pause after the last edit before checking, so quick edits don't start many searches. */
 const DEBOUNCE_MS = 350;
 
 /**
  * Keeps the editor's puzzle checked for a solution and for uniqueness in the
- * background. The status chip also switches the solution overlay on and off:
- * the solution of a unique puzzle, or every line that some solution uses.
- * The choice is remembered, and the overlay follows the puzzle as it is edited.
+ * background. Under the board: whether it's unique (or has no or several
+ * solutions), and the solution overlay always shows: the solution of a unique
+ * puzzle, or every line that some solution uses.
  */
 export function attachUniquenessCheck(editor: EditorView): void {
-  const storage = new Storage();
-  const chip = document.createElement('button');
-  chip.className = 'btn validity';
-  editor.actions.append(chip);
 
   let run: SolverRun | null = null;
   let union: UnionRun | null = null;
+  let ends: EndsRun | null = null;
   let timer = 0;
   let last: SolveResult | null = null;
-  let showing = storage.loadShowSolution();
 
-  // Under the board, for a unique puzzle: how many hints a player alternating easy rules and
-  // hints would need, worked out in the background.
+  // Under the board: whether the puzzle is unique, and for a unique one how many hints a player
+  // alternating easy rules and hints would need, worked out in the background.
   const info = document.createElement('div');
-  info.className = 'rating-info hidden';
+  info.className = 'rating-info';
   info.setAttribute('role', 'status');
+  const state = document.createElement('span');
+  state.className = 'validity';
   const hints = document.createElement('span');
-  hints.className = 'hint-count';
-  info.append(hints);
+  hints.className = 'hint-count hidden';
+  info.append(state, hints);
   // Running locally: copy the puzzle as a line for src/levels.ts, once it's unique and rated.
   const copyBtn = document.createElement('button');
   copyBtn.type = 'button';
@@ -56,21 +53,22 @@ export function attachUniquenessCheck(editor: EditorView): void {
   const stopRating = () => {
     rater?.terminate();
     rater = null;
-    info.classList.add('hidden');
+    hints.classList.add('hidden');
+    copyBtn.classList.add('hidden');
   };
   const rate = () => {
     stopRating();
     if (last?.status !== 'unique') return;
     copyBtn.classList.add('hidden');
     hints.textContent = 'Counting hints…';
-    info.classList.remove('hidden');
+    hints.classList.remove('hidden');
     const worker = new Worker(new URL('./rating.worker.ts', import.meta.url), { type: 'module' });
     rater = worker;
     worker.onmessage = (ev: MessageEvent<RatingMessage>) => {
       if (rater !== worker) return;
       worker.terminate();
       rater = null;
-      if (!ev.data.rating.unique) return info.classList.add('hidden');
+      if (!ev.data.rating.unique) return hints.classList.add('hidden');
       const n = ev.data.rating.hints ?? 0;
       const count = n ? `${n} hint${n === 1 ? '' : 's'}` : 'No hints';
       hints.textContent = ev.data.rating.hintsStuck ? `${count}, then stuck` : count;
@@ -81,18 +79,15 @@ export function attachUniquenessCheck(editor: EditorView): void {
     worker.postMessage([encodePuzzle(editor.current)] satisfies RatingRequest);
   };
 
-  const setChip = (state: 'checking' | 'unique' | 'none' | 'multiple' | 'aborted', label: string) => {
-    chip.dataset.state = state;
-    // While checking, just the spinner: "Checking" beside it squeezed the Rules button on phones.
-    chip.innerHTML = state === 'checking' ? '<span class="spinner" aria-hidden="true"></span>' : `<span>${label}</span>`;
-    chip.setAttribute('aria-pressed', String(showing));
-    chip.setAttribute('aria-label', `${state === 'checking' ? 'Checking the puzzle' : label}. ${showing ? 'Hide' : 'Show'} the solution lines.`);
+  const setChip = (kind: 'checking' | 'unique' | 'none' | 'multiple' | 'aborted', label: string) => {
+    state.dataset.state = kind;
+    state.textContent = label;
   };
   const refreshChip = () => {
-    if (!last) return setChip('checking', 'Checking');
+    if (!last) return setChip('checking', 'Checking…');
     if (last.status === 'unique') setChip('unique', 'Unique');
     else if (last.status === 'none') setChip('none', 'No solution');
-    else if (last.status === 'multiple') setChip('multiple', 'Multiple');
+    else if (last.status === 'multiple') setChip('multiple', 'Multiple solutions');
     else setChip('aborted', 'Too big');
   };
 
@@ -101,7 +96,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
     union?.cancel();
     union = null;
     editor.suggestWall(null);
-    if (!showing || !last || (last.status !== 'unique' && last.status !== 'multiple')) return editor.showGhost(null);
+    if (!last || (last.status !== 'unique' && last.status !== 'multiple')) return editor.showGhost(null);
     // Show the solutions found so far at once, then every line any solution uses as it's found.
     editor.showGhost(last.solutions.flat());
     if (last.status !== 'multiple') return;
@@ -126,15 +121,52 @@ export function attachUniquenessCheck(editor: EditorView): void {
     );
   };
 
-  const start = async () => {
-    // Without ends the path could start and stop anywhere: no solution yet.
-    const missing = missingEnds(editor.current);
-    if (missing) {
-      last = { status: 'none', solutions: [], reason: missing, nodes: 0 };
-      refreshChip();
-      overlay();
-      return;
+  /**
+   * Short of ends: look for where they could go. Each frame spot that gives a solution gets a dot
+   * (green: only one solution; amber: several), and the line under the board counts them.
+   */
+  const findEnds = async () => {
+    const p = editor.current;
+    const missing = p.endpoints.length === 0 ? 'both ends' : 'the other end';
+    const marks = new Map<number, 'unique' | 'multiple'>();
+    // Every line some solution uses, whichever working placement it's for.
+    const lines = new Set<number>();
+    let pairs = 0;
+    let unique = 0;
+    const show = (done: boolean) => {
+      editor.showEndOptions(marks.size ? new Map(marks) : null);
+      const counts = `${pairs} placement${pairs === 1 ? '' : 's'} work${pairs === 1 ? 's' : ''}${unique ? ` (${unique} unique)` : ''}`;
+      if (!done) setChip('checking', pairs ? `Finding ends… ${counts}` : 'Finding ends…');
+      else if (pairs) setChip(unique ? 'unique' : 'multiple', `No ${missing === 'both ends' ? 'ends' : 'second end'}: ${counts}`);
+      else setChip('none', `No ${missing === 'both ends' ? 'ends' : 'second end'}: no placement has a solution`);
+    };
+    show(false);
+    const thisRun = endPlacementsInBackground(p, (o) => {
+      if (ends !== thisRun) return;
+      pairs++;
+      if (o.status === 'unique') unique++;
+      // Mark every new end's spot, the better verdict winning (one solution beats several).
+      for (const port of p.endpoints.length ? o.ports[1] : o.ports.flat()) if (marks.get(port) !== 'unique') marks.set(port, o.status);
+      for (const e of o.edges) lines.add(e);
+      editor.showGhost(lines);
+      show(false);
+    });
+    ends = thisRun;
+    try {
+      await thisRun.result;
+      if (ends !== thisRun) return;
+      ends = null;
+      show(true);
+    } catch (err) {
+      if (ends !== thisRun) return;
+      ends = null;
+      if ((err as Error).name !== 'AbortError') setChip('aborted', 'Error');
     }
+  };
+
+  const start = async () => {
+    // Short of ends: find where they could go instead.
+    if (missingEnds(editor.current)) return findEnds();
     const thisRun = solveInBackground(editor.current);
     run = thisRun;
     try {
@@ -158,6 +190,9 @@ export function attachUniquenessCheck(editor: EditorView): void {
     run = null;
     union?.cancel();
     union = null;
+    ends?.cancel();
+    ends = null;
+    editor.showEndOptions(null);
     last = null;
     editor.showGhost(null);
     editor.suggestWall(null);
@@ -167,30 +202,6 @@ export function attachUniquenessCheck(editor: EditorView): void {
     timer = window.setTimeout(start, DEBOUNCE_MS);
   });
 
-  chip.addEventListener('click', () => {
-    showing = !showing;
-    storage.saveShowSolution(showing);
-    refreshChip();
-    overlay();
-    if (!last) return editor.setMessage(showing ? 'Checking the puzzle; the solution will show when it is done.' : 'Solution lines hidden.');
-    if (!showing) return editor.setMessage(`Solution lines hidden. ${describe(last)}`, last.status === 'unique' ? 'success' : 'error');
-    if (last.status === 'unique') return editor.setMessage('Showing the unique solution. Tap Unique again to hide it.', 'success');
-    if (last.status === 'multiple') return editor.setMessage('More than one solution: showing every line that at least one of them uses.', 'error');
-    editor.setMessage(describe(last), 'error');
-  });
 
   refreshChip();
-}
-
-function describe(r: SolveResult): string {
-  switch (r.status) {
-    case 'unique':
-      return 'Unique solution — ready to play and share.';
-    case 'multiple':
-      return 'More than one solution. Add walls, black tiles or move the ends to narrow it down.';
-    case 'none':
-      return `No solution. ${r.reason}`;
-    case 'aborted':
-      return `Gave up after ${r.nodes.toLocaleString()} steps — this puzzle is too big to check fully.`;
-  }
 }

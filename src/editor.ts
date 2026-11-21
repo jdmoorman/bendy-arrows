@@ -71,6 +71,8 @@ export class EditorView {
   private history = new History<Puzzle>();
   private tool: Tool = 'tiles';
   private ghost: Set<number> | null = null;
+  /** For a puzzle short of ends: where an end would give a solution (from the uniqueness check). */
+  private endOptions: Map<number, 'unique' | 'multiple'> | null = null;
   private suggestedWall: number | null = null;
   private message = '';
   private messageKind: '' | 'success' | 'error' = '';
@@ -791,6 +793,12 @@ export class EditorView {
     this.render();
   }
 
+  /** Mark the frame spots where an end gives the puzzle a solution, or null to hide them. */
+  showEndOptions(options: Map<number, 'unique' | 'multiple'> | null): void {
+    this.endOptions = options;
+    this.render();
+  }
+
   /** Show a border where a wall would help, or null to hide it (the uniqueness chip decides). */
   suggestWall(edge: number | null): void {
     this.suggestedWall = edge;
@@ -970,6 +978,8 @@ export class EditorView {
       showBorderTargets: this.tool === 'walls',
       showPortTargets: this.tool === 'ends',
       ghost: this.ghost ?? undefined,
+      // Where ends could go: only while placing ends.
+      endOptions: this.tool === 'ends' ? (this.endOptions ?? undefined) : undefined,
       suggestWall: this.suggestedWall ?? undefined,
       removable: this.simplifyGoal && this.removable ? { ...this.removable, goal: this.simplifyGoal } : undefined,
       segments: logic ? this.logic.segments : undefined,

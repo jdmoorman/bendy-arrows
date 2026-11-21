@@ -236,3 +236,49 @@ describe('logic first', () => {
     expect(rateDifficulty(open)).toBe('easy');
   });
 });
+
+describe('endPlacements', async () => {
+  const { endPlacements } = await import('../src/solver');
+  const { createPuzzle, portCell, portEnd, portId } = await import('../src/model');
+  test('every placement it lists solves as it says, and every pair of tiles it leaves out has no solution', () => {
+    const p = createPuzzle(3, 3);
+    p.blocked.add(4);
+    const { options, unchecked } = endPlacements(p);
+    expect(unchecked).toBe(0);
+    const listed = new Set(options.map((o) => [portCell(p, o.ports[0][0]), portCell(p, o.ports[1][0])].sort().join()));
+    const frame = [0, 1, 2, 3, 5, 6, 7, 8];
+    for (const a of frame) {
+      for (const b of frame) {
+        if (a >= b) continue;
+        const portOf = (c: number) => [...Array(12).keys()].find((k) => portCell(p, k) === c)!;
+        const q = { ...p, endpoints: [portEnd(portOf(a)), portEnd(portOf(b))] };
+        const r = solve(q, { maxSolutions: 2 });
+        expect(listed.has(`${a},${b}`), `${a}-${b}`).toBe(r.status === 'unique' || r.status === 'multiple');
+        const o = options.find((x) => [portCell(p, x.ports[0][0]), portCell(p, x.ports[1][0])].sort().join() === `${a},${b}`);
+        if (o) expect(o.status).toBe(r.status);
+      }
+    }
+  });
+  test('with one end placed, only the other end moves', () => {
+    const p = createPuzzle(3, 3);
+    p.endpoints = [portEnd(portId(p, 'left', 0))];
+    const { options } = endPlacements(p);
+    expect(options.length).toBeGreaterThan(0);
+    for (const o of options) expect(o.ports[0]).toEqual([portId(p, 'left', 0)]);
+  });
+});
+
+describe('endPlacements with union', async () => {
+  const { endPlacements } = await import('../src/solver');
+  const { createPuzzle, portEnd } = await import('../src/model');
+  test('each placement lists every line some solution for it uses', () => {
+    const p = createPuzzle(3, 3);
+    const { options } = endPlacements(p, { union: true });
+    expect(options.some((o) => o.status === 'multiple')).toBe(true);
+    for (const o of options) {
+      const q = { ...p, endpoints: [portEnd(o.ports[0][0]), portEnd(o.ports[1][0])] };
+      const all = new Set(solve(q, { maxSolutions: 1000 }).solutions.flat());
+      expect([...o.edges].sort((a, b) => a - b)).toEqual([...all].sort((a, b) => a - b));
+    }
+  });
+});

@@ -33,6 +33,8 @@ export interface RenderOptions {
   showBorderTargets?: boolean;
   /** Draw faint markers on every frame border where an end could go. */
   showPortTargets?: boolean;
+  /** For a puzzle short of ends: frame spots where an end gives a solution (only one, or several). */
+  endOptions?: Map<number, 'unique' | 'multiple'>;
   /** Margin around the grid in SVG units (default PAD). */
   pad?: number;
   /** Tiles to shade in the highlight colour (e.g. the tile a hint is about). */
@@ -147,9 +149,19 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
     parts.push('<g class="targets">');
     const total = 2 * (p.w + p.h);
     for (let port = 0; port < total; port++) {
-      if (ports.includes(port) || p.blocked.has(portCell(p, port))) continue;
+      if (ports.includes(port) || p.blocked.has(portCell(p, port)) || o.endOptions?.has(port)) continue;
       const { x, y, d } = portPoint(port);
       parts.push(`<circle class="border-target" cx="${x + d[0] * 26}" cy="${y + d[1] * 26}" r="6"/>`);
+    }
+    parts.push('</g>');
+  }
+
+  if (o.endOptions?.size) {
+    parts.push('<g class="end-options">');
+    for (const [port, status] of o.endOptions) {
+      if (ports.includes(port)) continue;
+      const { x, y, d } = portPoint(port);
+      parts.push(`<circle class="end-option ${status}" cx="${x + d[0] * 26}" cy="${y + d[1] * 26}" r="12"/>`);
     }
     parts.push('</g>');
   }

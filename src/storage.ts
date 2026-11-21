@@ -258,15 +258,6 @@ export class Storage {
     this.write(PACK_FOLDED_KEY, [...names]);
   }
 
-  /** Whether the editor overlays the solution (or every line any solution uses). */
-  loadShowSolution(): boolean {
-    return this.read<unknown>(SHOW_SOLUTION_KEY, false) === true;
-  }
-
-  saveShowSolution(on: boolean): void {
-    this.write(SHOW_SOLUTION_KEY, on);
-  }
-
   /** Uniqueness and hint steps of saved puzzles, by code, worked out in the background. */
   loadRatings(): Record<string, Rating> {
     const r = this.read<unknown>(RATINGS_KEY, {});

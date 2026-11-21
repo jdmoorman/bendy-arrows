@@ -285,6 +285,18 @@ a.btn {
   stroke-width: 8;
 }
 
+.end-option {
+  stroke: var(--surface);
+  stroke-width: 3;
+}
+/* An end here gives exactly one solution. */
+.end-option.unique {
+  fill: var(--success);
+}
+/* An end here gives solutions, but more than one. */
+.end-option.multiple {
+  fill: rgb(217 119 6);
+}
 .border-target {
   fill: var(--text-muted);
   opacity: 0.35;
@@ -1107,37 +1119,21 @@ a.btn {
 }
 /* Editor's automatic solution check (and solution overlay switch). */
 .validity {
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 600;
   white-space: nowrap;
 }
-/* It sizes itself to its label ("No solution" is the longest); the Rules button gives way. */
-.logic-row .btn.validity {
-  flex: 0 0 auto;
-  padding: 0 10px;
-}
-@media (max-width: 360px) {
-  .logic-row .btn.validity {
-    padding: 0 6px;
-    font-size: 0.85rem;
-  }
-}
 .validity[data-state='checking'] {
   color: var(--text-muted);
+  font-weight: normal;
 }
 .validity[data-state='unique'] {
   color: var(--success);
-  border-color: var(--success);
 }
 .validity[data-state='none'],
-.validity[data-state='multiple'] {
+.validity[data-state='multiple'],
+.validity[data-state='aborted'] {
   color: var(--error);
-  border-color: var(--error);
-}
-/* Pressed: the solution lines are showing. */
-.validity[aria-pressed='true'] {
-  background: color-mix(in srgb, currentColor 14%, var(--surface-2));
-  box-shadow: inset 0 0 0 1px currentColor;
 }
 
 
