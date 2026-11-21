@@ -42,7 +42,7 @@ export interface LibRow {
  * Bump when the logic changes in a way that changes ratings: older ratings are shown until
  * the background worker has redone them.
  */
-export const RATING_VERSION = 3;
+export const RATING_VERSION = 4;
 
 /** A puzzle's difficulty and uniqueness, worked out in the background for saved puzzles. */
 export interface Rating {

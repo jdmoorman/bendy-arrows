@@ -34,10 +34,10 @@ test('old vs new balance hint', () => {
     if (!ds.length) continue;
     const marks = (d: Deduction) => d.segments.length + d.xs.length;
     const old = [...ds].sort(by((d) => d.cells!.length, marks))[0];
-    const nu = [...ds].sort(by((d) => d.exits!, (d) => d.cells!.length, marks))[0];
+    const nu = [...ds].sort(by((d) => d.exitTiles!, (d) => d.cells!.length, marks))[0];
     if (old === nu) { same++; continue; }
     differ++;
-    record(NAME, `== ${s.name}\n   old: ${old.cells!.length} tiles, ${old.exits} exits      new: ${nu.cells!.length} tiles, ${nu.exits} exits\n   old area:\n${grid(p, old.cells!)}\n   new area:\n${grid(p, nu.cells!)}`);
+    record(NAME, `== ${s.name}\n   old: ${old.cells!.length} tiles, ${old.exitTiles} tiles with exits      new: ${nu.cells!.length} tiles, ${nu.exitTiles} tiles with exits\n   old area:\n${grid(p, old.cells!)}\n   new area:\n${grid(p, nu.cells!)}`);
   }
   record(NAME, `\nSUMMARY: ${same} samples pick the same hint, ${differ} pick a different one`);
 }, 30 * 60 * 1000);

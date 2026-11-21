@@ -33,8 +33,8 @@ test('when', () => {
     const h = findHint(p, s);
     if (h.kind !== 'deduction') { record(NAME, `hint ${step}: none (${h.kind})`); break; }
     const d = h.deduction;
-    record(NAME, `hint ${step}: ${d.rule}${d.cells ? ` (${d.cells.length} tiles, ${d.exits ?? '?'} exits)` : ''}${d.segments.includes(edge) ? ' — DRAWS THE EDGE' : ''}; only-chains deductions here: ${onlyChains.length}${drawsEdge.length ? `, ${drawsEdge.length} of them draw the edge` : ''}`);
-    for (const x of drawsEdge.slice(0, 1)) record(NAME, `   chains area for the edge: ${x.cells!.length} tiles, ${x.exits} exits\n${grid(p, x.cells!)}`);
+    record(NAME, `hint ${step}: ${d.rule}${d.cells ? ` (${d.cells.length} tiles, ${d.exitTiles ?? '?'} tiles with exits)` : ''}${d.segments.includes(edge) ? ' — DRAWS THE EDGE' : ''}; only-chains deductions here: ${onlyChains.length}${drawsEdge.length ? `, ${drawsEdge.length} of them draw the edge` : ''}`);
+    for (const x of drawsEdge.slice(0, 1)) record(NAME, `   chains area for the edge: ${x.cells!.length} tiles, ${x.exitTiles} tiles with exits\n${grid(p, x.cells!)}`);
     if (d.segments.includes(edge)) record(NAME, `   the hint's area:\n${grid(p, d.cells ?? [])}`);
     s = applyStep(s, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
     if (s.segments.has(edge)) break;

@@ -28,7 +28,7 @@ test('sources', () => {
     const d = h.deduction;
     if (d.rule === 'balance') {
       const who = AREA_SOURCES.filter((src: AreaSource) => deductions(p, s, ['balance'], { areaSources: [src] }).some((x) => marks(x) === marks(d)));
-      record(NAME, `step ${step}: line ${d.segments.map((e) => nm(p, e)).join(', ')} — Step's area: ${box(p, d.cells!)}, ${d.exits} exits — found by: ${who.join(', ') || 'none alone'}`);
+      record(NAME, `step ${step}: line ${d.segments.map((e) => nm(p, e)).join(', ')} — Step's area: ${box(p, d.cells!)}, ${d.exitTiles} tiles with exits — found by: ${who.join(', ') || 'none alone'}`);
     } else record(NAME, `step ${step}: ${d.rule}`);
     s = applyStep(s, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
   }

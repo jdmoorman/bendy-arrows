@@ -123,8 +123,8 @@ export interface Deduction {
   why?: string;
   /** How big the application is, for picking the simplest hint, when there is no area. */
   size?: number;
-  /** Borders out of the area the path can still cross (open or already drawn), for picking the simplest hint. */
-  exits?: number;
+  /** Tiles of the area with a border out of it the path can still cross (open or already drawn), for picking the simplest hint. */
+  exitTiles?: number;
 }
 
 type Analysis =
@@ -564,9 +564,9 @@ export function strokeJourney(p: Puzzle, opts: LogicOptions = {}): { steps: Hint
 /** The deduction a hint would show: simplest rule first, then the simplest use of it. */
 function simplest(ds: Deduction[], order: RuleId[] = HINT_ORDER): Deduction | undefined {
   for (const rule of order) {
-    // Within a rule, the simplest: the fewest exits (Checkerboard balance), then the smallest
+    // Within a rule, the simplest: the fewest tiles with exits (checkerboard rules), then the smallest
     // area (or shortest piece), then the fewest marks, then top-left first.
-    const exits = (x: Deduction) => x.exits ?? 0;
+    const exits = (x: Deduction) => x.exitTiles ?? 0;
     const size = (x: Deduction) => x.cells?.length ?? x.size ?? 1;
     const marks = (x: Deduction) => x.segments.length + x.xs.length;
     const d = ds
@@ -981,9 +981,11 @@ function areaRules(
     const wOpen: number[] = [];
     const sLines: number[] = [];
     const wLines: number[] = [];
+    const exitTiles = new Set<number>();
     for (const t of area) {
       for (const e of adj[t]) {
         if (inArea.has(other(e, t))) continue;
+        exitTiles.add(t);
         if (state.segments.has(e)) shaded(t) ? (sDrawn++, sLines.push(e)) : (wDrawn++, wLines.push(e));
         else (shaded(t) ? sOpen : wOpen).push(e);
       }
@@ -1043,7 +1045,7 @@ function areaRules(
       rule,
       cell: Math.min(...area),
       cells: [...area],
-      exits: sDrawn + wDrawn + sOpen.length + wOpen.length,
+      exitTiles: exitTiles.size,
       segments: lines,
       xs,
       why: `On the checkerboard, the highlighted area has ${mix}. The path alternates colours${ends}, ${law}.${entry} So it must ${doing.join(' and ')}.`,
