@@ -1,7 +1,7 @@
 import { decodePuzzle, encodePuzzle } from './codec';
 import { MIN_PACK_LEVELS, PACK_SIZE_STEP, PACKS } from './levels';
 import type { PackRating, PacksMessage, PacksRequest } from './packs.worker';
-import { orientTail, pathKey, tailLeftLow, transformPuzzle } from './model';
+import { isOneShot, orientTail, pathKey, tailLeftLow, transformPuzzle } from './model';
 import { boardSize, padFor, renderBoard } from './render';
 import type { Storage } from './storage';
 import { ICONS } from './icons';
@@ -12,6 +12,17 @@ function shapeProblem(code: string): string {
   const p = decodePuzzle(code);
   return p.w > p.h ? 'wider than tall' : p.h > 2 * p.w ? 'too tall' : !tailLeftLow(p) ? 'tail not low on the left' : '';
 }
+
+/** A pack as edited: its name, kind and levels, and which saved pack it was (none for a new one). */
+interface EditPack {
+  name: string;
+  oneShot: boolean;
+  levels: string[];
+  from: number | null;
+}
+
+/** The packs as saved in src/levels.ts, to edit. */
+const savedPacks = (): EditPack[] => PACKS.map((p, i) => ({ name: p.name, oneShot: !!p.oneShot, levels: [...p.levels], from: i }));
 
 /** How long (ms) each step of a hint journey shows when hovering over a level: a hint longer. */
 const STEP_MS = 600;
@@ -28,7 +39,8 @@ const EDGE = 60;
 /**
  * The creator's pack organiser: every pack's levels as their solved boards, in play order.
  * Drag a level (on a touch screen, hold it first) to move it within its pack or into another;
- * tap one to edit it. Each pack's name can be edited too, puzzles from the
+ * tap one to edit it. Packs can be renamed, added, deleted and moved up or down (one-shot packs
+ * always after the classic ones), puzzles from the
  * Library added to the end of a pack, and levels removed. Save writes it all to src/levels.ts (through the local dev
  * server, the only place the organiser appears).
  */
@@ -41,10 +53,8 @@ export class PacksView {
   private status: HTMLElement;
   private saveBtn: HTMLButtonElement;
   private revertBtn: HTMLButtonElement;
-  /** Each pack's levels, in the order shown. */
-  private order: string[][] = PACKS.map((p) => [...p.levels]);
-  /** Each pack's name, as edited. */
-  private names: string[] = PACKS.map((p) => p.name);
+  /** The packs as edited, in order (classic packs, then one-shot packs). */
+  private packs: EditPack[] = savedPacks();
   /** Each level's solution once solved (none if it has none), and whether it's the only one. */
   private solutions = new Map<string, { lines: Set<number> | null; unique: boolean }>();
   /** Hint steps, worked out after the solutions (null if not unique). */
@@ -86,8 +96,7 @@ export class PacksView {
     this.revertBtn = this.el.querySelector('[data-act=revert]')!;
     this.saveBtn.addEventListener('click', () => void this.save());
     this.revertBtn.addEventListener('click', () => {
-      this.order = PACKS.map((p) => [...p.levels]);
-      this.names = PACKS.map((p) => p.name);
+      this.packs = savedPacks();
       this.draw();
     });
     // Once a level is picked up on a touch screen, a finger moving it mustn't scroll the page.
@@ -106,7 +115,7 @@ export class PacksView {
 
   /** Send levels not solved (or being solved) yet to the solver. */
   private solveNew() {
-    const todo = this.order.flat().filter((c) => !this.solutions.has(c) && !this.solving.has(c));
+    const todo = this.packs.flatMap((k) => k.levels).filter((c) => !this.solutions.has(c) && !this.solving.has(c));
     if (!todo.length) return;
     for (const c of todo) this.solving.add(c);
     if (!this.worker) {
@@ -131,17 +140,19 @@ export class PacksView {
   }
 
   private get changed(): boolean {
-    return PACKS.some((p, i) => this.order[i].join() !== p.levels.join() || this.names[i] !== p.name);
+    return this.packs.length !== PACKS.length || this.packs.some((k, i) => k.from !== i || k.name !== PACKS[i].name || k.levels.join() !== PACKS[i].levels.join());
   }
 
   /** What's wrong with the edited names or the levels, if anything. */
   private get problem(): string {
-    const names = this.names.map((n) => n.trim());
+    const names = this.packs.map((k) => k.name.trim());
     if (names.some((n) => !n)) return 'Every pack needs a name.';
     if (new Set(names).size !== names.length) return 'Two packs have the same name.';
-    const shape = this.order.flat().filter((c) => shapeProblem(c)).length;
+    const wrongKind = this.packs.reduce((n, k) => n + k.levels.filter((c) => isOneShot(decodePuzzle(c)) !== k.oneShot).length, 0);
+    if (wrongKind) return `${wrongKind === 1 ? 'A level is' : `${wrongKind} levels are`} in the wrong kind of pack (one-shot or classic).`;
+    const shape = this.packs.flatMap((k) => k.levels).filter((c) => shapeProblem(c)).length;
     if (shape) return `${shape === 1 ? 'A level is' : `${shape} levels are`} wider than tall, more than twice as tall as wide, or with a tail that could be turned onto the left edge or lower.`;
-    const notUnique = this.order.flat().filter((c) => this.solutions.get(c)?.unique === false).length;
+    const notUnique = this.packs.flatMap((k) => k.levels).filter((c) => this.solutions.get(c)?.unique === false).length;
     if (notUnique) return `${notUnique === 1 ? 'A level has' : `${notUnique} levels have`} more than one solution, or none.`;
     const repeats = this.repeats().size;
     if (repeats) return `${repeats === 1 ? 'A level has' : `${repeats} levels have`} the same solution path as an earlier one (turned or mirrored).`;
@@ -152,45 +163,100 @@ export class PacksView {
   private repeats(): Map<string, string> {
     const first = new Map<string, string>();
     const out = new Map<string, string>();
-    this.order.forEach((levels, pi) =>
-      levels.forEach((code, i) => {
+    this.packs.forEach((k) =>
+      k.levels.forEach((code, i) => {
         const lines = this.solutions.get(code)?.lines;
         if (!lines) return;
         const key = pathKey(decodePuzzle(code), lines);
         const earlier = first.get(key);
         if (earlier) out.set(code, earlier);
-        else first.set(key, `${this.names[pi]} ${i + 1}`);
+        else first.set(key, `${k.name} ${i + 1}`);
       }),
     );
     return out;
   }
 
+  /** Classic packs, then one-shot packs, each kind under its heading with a button for a new pack. */
   private draw() {
-    this.body.replaceChildren(
-      ...PACKS.map((_, pi) => {
-        const section = el('section', 'pack-section');
-        const name = el('input', 'pack-name-input');
-        name.value = this.names[pi];
-        name.setAttribute('aria-label', 'Pack name');
-        name.addEventListener('input', () => {
-          this.names[pi] = name.value;
-          this.update();
-        });
-        const count = el('span', 'pack-count');
-        const head = el('div', 'pack-head');
-        head.append(name, count);
-        const grid = el('div', 'pack-tiles');
-        grid.dataset.pack = String(pi);
-        for (const code of this.order[pi]) grid.append(this.tile(code));
-        // The end of each pack: a level-shaped outline to add one from the Library.
-        const add = el('button', 'pack-add', `${ICONS.plus}<span>Add level</span>`);
-        add.addEventListener('click', () => this.openAddSheet(pi));
-        grid.append(add);
-        section.append(head, grid);
-        return section;
-      }),
-    );
+    const groups = [false, true].map((oneShot) => {
+      const group = el('div', 'pack-group');
+      const title = el('h2', 'pack-group-title');
+      title.textContent = oneShot ? 'One-shot' : 'Classic';
+      group.append(title);
+      this.packs.forEach((k, pi) => {
+        if (k.oneShot === oneShot) group.append(this.packSection(pi));
+      });
+      const add = el('button', 'btn pack-new', `${ICONS.plus}<span>New ${oneShot ? 'one-shot' : 'classic'} pack</span>`);
+      add.addEventListener('click', () => this.newPack(oneShot));
+      group.append(add);
+      return group;
+    });
+    this.body.replaceChildren(...groups);
     this.update();
+  }
+
+  /** One pack: its name to edit, buttons to move it up or down (among its kind) or delete it, and its levels. */
+  private packSection(pi: number): HTMLElement {
+    const k = this.packs[pi];
+    const section = el('section', 'pack-section');
+    const name = el('input', 'pack-name-input');
+    name.value = k.name;
+    name.setAttribute('aria-label', 'Pack name');
+    name.addEventListener('input', () => {
+      k.name = name.value;
+      this.update();
+    });
+    const button = (cls: string, icon: string, label: string, enabled: boolean, run: () => void) => {
+      const b = el('button', `pack-tool ${cls}`, icon);
+      b.setAttribute('aria-label', label);
+      b.title = label;
+      b.disabled = !enabled;
+      b.addEventListener('click', run);
+      return b;
+    };
+    // Moving stays within the pack's kind: one-shot packs always come after the classic ones.
+    const sameKind = (j: number) => this.packs[j]?.oneShot === k.oneShot;
+    const move = (to: number) => () => {
+      [this.packs[pi], this.packs[to]] = [this.packs[to], this.packs[pi]];
+      this.draw();
+    };
+    const up = button('pack-up', ICONS.chevron, 'Move this pack up', sameKind(pi - 1), move(pi - 1));
+    const down = button('pack-down', ICONS.chevron, 'Move this pack down', sameKind(pi + 1), move(pi + 1));
+    const del = button('pack-delete', ICONS.clear, 'Delete this pack', true, () => this.deletePack(pi));
+    const count = el('span', 'pack-count');
+    const head = el('div', 'pack-head');
+    head.append(name, up, down, del, count);
+    const grid = el('div', 'pack-tiles');
+    grid.dataset.pack = String(pi);
+    for (const code of k.levels) grid.append(this.tile(code));
+    // The end of each pack: a level-shaped outline to add one from the Library.
+    const add = el('button', 'pack-add', `${ICONS.plus}<span>Add level</span>`);
+    add.addEventListener('click', () => this.openAddSheet(pi));
+    grid.append(add);
+    section.append(head, grid);
+    return section;
+  }
+
+  /** A new, empty pack at the end of its kind, its name ready to type over. */
+  private newPack(oneShot: boolean) {
+    const taken = new Set(this.packs.map((k) => k.name.trim()));
+    let name = 'New pack';
+    for (let n = 2; taken.has(name); n++) name = `New pack ${n}`;
+    const at = oneShot ? this.packs.length : this.packs.filter((k) => !k.oneShot).length;
+    this.packs.splice(at, 0, { name, oneShot, levels: [], from: null });
+    this.draw();
+    const input = this.body.querySelector<HTMLElement>(`.pack-tiles[data-pack="${at}"]`)?.closest('.pack-section')?.querySelector<HTMLInputElement>('.pack-name-input');
+    input?.scrollIntoView({ block: 'center' });
+    input?.select();
+  }
+
+  /** Take a pack away (asking first if it has levels: they leave src/levels.ts on Save). */
+  private deletePack(pi: number) {
+    const k = this.packs[pi];
+    const n = k.levels.length;
+    if (n && !confirm(`Delete the pack "${k.name}"? Its ${n} level${n === 1 ? '' : 's'} leave src/levels.ts when you save.`)) return;
+    this.packs.splice(pi, 1);
+    this.draw();
   }
 
   private tile(code: string): HTMLElement {
@@ -217,7 +283,7 @@ export class PacksView {
     remove.addEventListener('pointerdown', (ev) => ev.stopPropagation());
     remove.addEventListener('click', (ev) => {
       ev.stopPropagation();
-      this.order = this.order.map((levels) => levels.filter((c) => c !== code));
+      for (const k of this.packs) k.levels = k.levels.filter((c) => c !== code);
       t.remove();
       this.update();
     });
@@ -268,7 +334,8 @@ export class PacksView {
         const label = t.querySelector('.pack-tile-label')!;
         const code = t.dataset.code!;
         const repeat = repeats.get(code);
-        const bad = shapeProblem(code) || (this.solutions.get(code)?.unique === false ? 'not unique' : repeat ? `same path as ${repeat}` : '');
+        const kind = isOneShot(p) !== this.packs[pi].oneShot ? (isOneShot(p) ? 'one-shot' : 'not a one-shot') : '';
+        const bad = kind || shapeProblem(code) || (this.solutions.get(code)?.unique === false ? 'not unique' : repeat ? `same path as ${repeat}` : '');
         label.textContent = `${i + 1} · ${p.w}×${p.h}${bad ? ` · ${bad}` : ''}`;
         t.classList.toggle('bad', !!bad);
         const r = this.ratings.get(code);
@@ -277,8 +344,9 @@ export class PacksView {
           : r === null
             ? ''
             : 'counting hints…';
-        t.setAttribute('aria-label', `${this.names[pi]} ${i + 1}, ${p.w} by ${p.h}`);
-        t.classList.toggle('moved', PACKS[pi].levels[i] !== t.dataset.code);
+        t.setAttribute('aria-label', `${this.packs[pi].name} ${i + 1}, ${p.w} by ${p.h}`);
+        const from = this.packs[pi].from;
+        t.classList.toggle('moved', from === null || PACKS[from].levels[i] !== t.dataset.code);
         t.classList.toggle('added', !PACKS.some((k) => k.levels.includes(t.dataset.code!)));
       });
       const count = grid.parentElement!.querySelector('.pack-count')!;
@@ -304,7 +372,7 @@ export class PacksView {
 
   /** Pick a Library puzzle to add to the end of pack `pi`. */
   private openAddSheet(pi: number) {
-    const inPacks = new Set(this.order.flat());
+    const inPacks = new Set(this.packs.flatMap((k) => k.levels));
     const entries = this.storage
       .list()
       .map((e) => ({ e, code: this.asLevel(e.code, pi) }))
@@ -318,7 +386,7 @@ export class PacksView {
     const list = el('div', 'pack-add-list');
     const empty = el('p', 'pack-add-empty');
     body.append(search, list, empty);
-    const sheet = openSheet(`Add to ${this.names[pi]}`, body);
+    const sheet = openSheet(`Add to ${this.packs[pi].name}`, body);
     const show = () => {
       const q = search.value.trim().toLowerCase();
       const shown = entries.filter(({ e }) => !q || e.name.toLowerCase().includes(q) || (e.collection ?? '').toLowerCase().includes(q));
@@ -342,11 +410,11 @@ export class PacksView {
           text.append(name, meta);
           row.append(svg, text);
           row.addEventListener('click', () => {
-            this.order[pi].push(code);
+            this.packs[pi].levels.push(code);
             sheet.close();
             this.draw();
             this.solveNew();
-            toast(`Added ${e.name} to ${this.names[pi]}.`);
+            toast(`Added ${e.name} to ${this.packs[pi].name}.`);
             this.body.querySelector(`.pack-tiles[data-pack="${pi}"] .pack-add`)?.scrollIntoView({ block: 'nearest' });
           });
           return row;
@@ -367,7 +435,7 @@ export class PacksView {
       let p = decodePuzzle(code);
       if (p.w > p.h) p = transformPuzzle(p, 'rotateRight');
       p = orientTail(p);
-      if (PACKS[pi].oneShot) p.oneShot = true;
+      if (this.packs[pi].oneShot) p.oneShot = true;
       else delete p.oneShot;
       return encodePuzzle(p);
     } catch {
@@ -580,7 +648,9 @@ export class PacksView {
     }
     d.ghost.remove();
     d.tile.classList.remove('dragging');
-    this.order = [...this.body.querySelectorAll<HTMLElement>('.pack-tiles')].map((g) => [...g.querySelectorAll<HTMLElement>('.pack-tile')].map((t) => t.dataset.code!));
+    for (const g of this.body.querySelectorAll<HTMLElement>('.pack-tiles')) {
+      this.packs[Number(g.dataset.pack)].levels = [...g.querySelectorAll<HTMLElement>('.pack-tile')].map((t) => t.dataset.code!);
+    }
     this.update();
   }
 
@@ -588,7 +658,7 @@ export class PacksView {
 
   /** Saved levels taken out of every pack. */
   private get removed(): string[] {
-    const kept = new Set(this.order.flat());
+    const kept = new Set(this.packs.flatMap((k) => k.levels));
     return PACKS.flatMap((p) => p.levels).filter((c) => !kept.has(c));
   }
 
@@ -600,17 +670,16 @@ export class PacksView {
       const res = await fetch('/__packs', {
         method: 'POST',
         body: JSON.stringify({
-          packs: PACKS.map((p, i) => ({ name: p.name, newName: this.names[i].trim(), levels: this.order[i], was: p.levels })),
+          packs: this.packs.map((k) => ({ name: k.name.trim(), oneShot: k.oneShot, levels: k.levels })),
+          was: PACKS.map((p) => ({ name: p.name, oneShot: !!p.oneShot, levels: p.levels })),
         }),
       });
       const reply = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(reply.error ?? 'Saving failed.');
       // The packs in memory follow the file until Vite reloads the page with it.
-      PACKS.forEach((p, i) => {
-        p.levels = [...this.order[i]];
-        p.name = this.names[i] = this.names[i].trim();
-      });
-      this.update();
+      PACKS.splice(0, PACKS.length, ...this.packs.map((k) => ({ name: k.name.trim(), ...(k.oneShot ? { oneShot: true } : {}), levels: [...k.levels] })));
+      this.packs = savedPacks();
+      this.draw();
       toast('Saved the packs to src/levels.ts.');
     } catch (err) {
       toast(err instanceof Error ? err.message : String(err), 'error');

@@ -1593,6 +1593,56 @@ a.btn {
   width: 100%;
   height: 100%;
 }
+/* Packs tab: classic and one-shot packs under their headings, each with a button for a new pack. */
+.pack-group + .pack-group {
+  margin-top: 28px;
+}
+.pack-group-title {
+  margin: 0 0 4px;
+  font-size: 1.35rem;
+}
+.pack-new {
+  margin-top: 14px;
+}
+.pack-new svg {
+  width: 18px;
+  height: 18px;
+}
+/* Beside a pack's name: move it up or down, or delete it. */
+.pack-tool {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.pack-tool:hover:not(:disabled) {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.pack-tool:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.pack-tool.pack-delete:hover:not(:disabled) {
+  color: var(--error);
+}
+.pack-tool svg {
+  width: 18px;
+  height: 18px;
+}
+.pack-up svg {
+  transform: rotate(-90deg);
+}
+.pack-down svg {
+  transform: rotate(90deg);
+}
 /* A highlight a level can be marked with (toggled by the dot in its top-left corner, shown
    on hover and while on). */
 .pack-tile.marked {
