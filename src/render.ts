@@ -42,7 +42,7 @@ export interface RenderOptions {
   /** A border to suggest a wall on, drawn dashed on top. */
   suggestWall?: number;
   /** Walls and black tiles that could go without losing the unique solution, drawn in their own colour. */
-  removable?: { walls: Set<number>; blocked: Set<number> };
+  removable?: { walls: Set<number>; blocked: Set<number>; goal?: 'easy' | 'minimal' };
 }
 
 /** Margin to use for a puzzle: room for end arrows when it has (or may get) ends. */
@@ -111,7 +111,7 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
     const [r, c] = cellRC(p, i);
     const cls = p.blocked.has(i)
       ? o.removable?.blocked.has(i)
-        ? 'tile blocked removable'
+        ? `tile blocked removable ${o.removable.goal ?? ''}`
         : 'tile blocked'
       : o.errorCells?.has(i)
         ? 'tile error'
@@ -163,7 +163,7 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   parts.push(`<g class="walls" clip-path="url(#${clipId})">`);
   for (const e of p.walls) {
     const [x1, y1, x2, y2] = borderLine(e);
-    parts.push(line(x1, y1, x2, y2, o.removable?.walls.has(e) ? 'wall removable' : 'wall'));
+    parts.push(line(x1, y1, x2, y2, o.removable?.walls.has(e) ? `wall removable ${o.removable.goal ?? ''}` : 'wall'));
   }
   // Black tiles are outlined as if walled on every side, giving them rounded, bulging edges.
   for (const cell of p.blocked) {
@@ -172,7 +172,7 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
     const y0 = pad + r * CELL;
     const x1 = x0 + CELL;
     const y1 = y0 + CELL;
-    const cls = o.removable?.blocked.has(cell) ? 'wall removable' : 'wall';
+    const cls = o.removable?.blocked.has(cell) ? `wall removable ${o.removable.goal ?? ''}` : 'wall';
     parts.push(line(x0, y0, x1, y0, cls), line(x1, y0, x1, y1, cls), line(x1, y1, x0, y1, cls), line(x0, y1, x0, y0, cls));
   }
   parts.push('</g><g class="frame">');

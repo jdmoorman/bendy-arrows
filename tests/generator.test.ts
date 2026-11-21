@@ -77,3 +77,45 @@ describe('removableObstacles', async () => {
     expect(removableObstacles(createPuzzle(4, 4))).toBeNull();
   });
 });
+
+describe('Simplify goals', async () => {
+  const { createPuzzle, clonePuzzle } = await import('../src/model');
+  const { easyRulesSolve, goalFailure } = await import('../src/generator');
+  const { decodePuzzle } = await import('../src/codec');
+  const { PACKS } = await import('../src/levels');
+  const spare = () => generate({ w: 6, h: 6, difficulties: ['easy'], clues: 'mixed', minimal: false, seed: 11 }).puzzle;
+
+  test('easy: what is left is unique and solved by the easy rules, and fewer go than for minimal', () => {
+    const p = spare();
+    expect(goalFailure(p, 'easy')).toBeNull();
+    const q = simplifyPuzzle(p, 3, 'easy')!;
+    expect(easyRulesSolve(q)).toBe(true);
+    expect(solve(q, { maxSolutions: 2 }).status).toBe('unique');
+    expect(removableObstacles(q, 'easy')).toEqual({ walls: [], blocked: [] });
+    const easy = removableObstacles(p, 'easy')!;
+    const minimal = removableObstacles(p, 'minimal')!;
+    for (const w of easy.walls) expect(minimal.walls).toContain(w);
+    for (const b of easy.blocked) expect(minimal.blocked).toContain(b);
+  }, 60000);
+
+  test('minimal: unique, with nothing more to remove', () => {
+    const q = simplifyPuzzle(spare(), 5, 'minimal')!;
+    expect(solve(q, { maxSolutions: 2 }).status).toBe('unique');
+    expect(removableObstacles(q, 'minimal')).toEqual({ walls: [], blocked: [] });
+  }, 60000);
+
+  test('a puzzle the easy rules can’t solve fails the easy goal, and one without a single solution fails both', () => {
+    const hard = PACKS.flatMap((k) => k.levels).map(decodePuzzle).find((p) => !p.oneShot && !easyRulesSolve(p))!;
+    expect(goalFailure(hard, 'easy')).toBe('not easy');
+    expect(removableObstacles(hard, 'easy')).toBeNull();
+    expect(simplifyPuzzle(hard, 1, 'easy')).toBeNull();
+    expect(goalFailure(createPuzzle(4, 4), 'minimal')).toBe('not unique');
+  });
+
+  test('one-shots: the easy rules must draw the whole stroke', () => {
+    const p = PACKS.filter((k) => k.oneShot).flatMap((k) => k.levels).map(decodePuzzle).find((q) => easyRulesSolve(q))!;
+    const q = simplifyPuzzle(clonePuzzle(p), 2, 'easy')!;
+    expect(q.oneShot).toBe(true);
+    expect(easyRulesSolve(q)).toBe(true);
+  }, 60000);
+});

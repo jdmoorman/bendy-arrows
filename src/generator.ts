@@ -1,4 +1,4 @@
-import { ALL_RULES, applyStep, fastStep, type LogicOptions, type LogicState, type RuleId } from './logic';
+import { ADVANCED_RULES, ALL_RULES, applyStep, fastStep, runLogic, runStroke, type LogicOptions, type LogicState, type RuleId } from './logic';
 import {
   cellCount,
   cellRC,
@@ -7,6 +7,7 @@ import {
   edgeBetween,
   edgeCells,
   edgeCount,
+  isOneShot,
   neighbors,
   openCells,
   orientEnds,
@@ -371,43 +372,82 @@ function uniqueByTiles(p: Puzzle, rand: () => number): Puzzle | null {
 }
 
 /**
- * The editor's Simplify: take away, in random order, every obstacle the unique solution
- * doesn't need. Null if the puzzle doesn't have exactly one solution to begin with.
+ * What the editor's Simplify aims for: 'easy' keeps the puzzle unique and solved by the easy
+ * rules alone (every line forced, for a one-shot); 'minimal' only keeps it unique.
  */
-export function simplifyPuzzle(p: Puzzle, seed: number): Puzzle | null {
-  if (solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT }).status !== 'unique') return null;
-  const q = clonePuzzle(p);
-  minimise(q, seededRandom(seed));
-  return q;
+export type SimplifyGoal = 'easy' | 'minimal';
+/** Why a puzzle doesn't meet a Simplify goal. */
+export type GoalFailure = 'not unique' | 'not easy';
+
+/** The editor's Easy rules group (everything but the checkerboard rules), as hint counts use. */
+const EASY_GROUP = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
+const isUnique = (p: Puzzle) => solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT }).status === 'unique';
+/** Whether the easy rules alone solve the puzzle (draw the whole stroke, for a one-shot). */
+export function easyRulesSolve(p: Puzzle, opts: LogicOptions = {}): boolean {
+  return (isOneShot(p) ? runStroke(p, EASY_GROUP, undefined, opts) : runLogic(p, EASY_GROUP, undefined, opts)).solved;
+}
+
+/** Why the puzzle misses the goal, or null if it meets it. */
+export function goalFailure(p: Puzzle, goal: SimplifyGoal, opts: LogicOptions = {}): GoalFailure | null {
+  // The easy rules are the cheaper check, so they go first; they don't show uniqueness, though.
+  if (goal === 'easy' && !easyRulesSolve(p, opts)) return 'not easy';
+  return isUnique(p) ? null : 'not unique';
+}
+
+/** Whether the puzzle still meets the goal, taking for granted that it did before a black tile or wall went. */
+function stillMeets(p: Puzzle, goal: SimplifyGoal, opts: LogicOptions, tileWent: boolean): boolean {
+  return (!tileWent || openTilesOk(p)) && goalFailure(p, goal, opts) === null;
+}
+
+/** How long Simplify (minimal) spends trying other orders to take obstacles away in. */
+const MINIMAL_TRIES = 8;
+const MINIMAL_MS = 2000;
+
+/**
+ * The editor's Simplify: take away, in random order, every obstacle the goal doesn't need.
+ * For 'minimal', several orders are tried and the one leaving the fewest obstacles kept.
+ * Null if the puzzle doesn't meet the goal to begin with.
+ */
+export function simplifyPuzzle(p: Puzzle, seed: number, goal: SimplifyGoal = 'minimal', opts: LogicOptions = {}): Puzzle | null {
+  if (goalFailure(p, goal, opts)) return null;
+  const rand = seededRandom(seed);
+  const start = performance.now();
+  let best: Puzzle | null = null;
+  for (let i = 0; i < (goal === 'minimal' ? MINIMAL_TRIES : 1); i++) {
+    if (best && performance.now() - start > MINIMAL_MS) break;
+    const q = clonePuzzle(p);
+    minimise(q, rand, (r, tileWent) => stillMeets(r, goal, opts, tileWent));
+    if (!best || obstacleCount(q) < obstacleCount(best)) best = q;
+  }
+  return best;
 }
 
 /**
- * The obstacles the puzzle could lose one at a time and keep exactly one solution: each wall
- * and black tile, taken away on its own. (Taking several away together may not keep it unique.)
- * Null if the puzzle doesn't have exactly one solution to begin with.
+ * The obstacles the puzzle could lose one at a time and still meet the goal: each wall and
+ * black tile, taken away on its own. (Taking several away together may not.) Null if the
+ * puzzle doesn't meet the goal to begin with.
  */
-export function removableObstacles(p: Puzzle): { walls: number[]; blocked: number[] } | null {
-  if (solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT }).status !== 'unique') return null;
+export function removableObstacles(p: Puzzle, goal: SimplifyGoal = 'minimal', opts: LogicOptions = {}): { walls: number[]; blocked: number[] } | null {
+  if (goalFailure(p, goal, opts)) return null;
   const q = clonePuzzle(p);
   const out = { walls: [] as number[], blocked: [] as number[] };
   for (const [set, list, wall] of [[q.walls, out.walls, true], [q.blocked, out.blocked, false]] as const) {
     for (const id of [...set]) {
       set.delete(id);
-      if ((wall || openTilesOk(q)) && solve(q, { maxSolutions: 2, nodeLimit: NODE_LIMIT }).status === 'unique') list.push(id);
+      if (stillMeets(q, goal, opts, !wall)) list.push(id);
       set.add(id);
     }
   }
   return out;
 }
 
-/** Remove each clue that isn't needed for the solution to stay unique. */
-function minimise(p: Puzzle, rand: () => number): void {
+/** Remove each clue the puzzle doesn't need, in random order: `keep` says whether it still works without. */
+function minimise(p: Puzzle, rand: () => number, keep: (p: Puzzle, tileWent: boolean) => boolean = (q, tileWent) => (!tileWent || openTilesOk(q)) && isUnique(q)): void {
   const clues = [...[...p.walls].map((id) => ({ wall: true, id })), ...[...p.blocked].map((id) => ({ wall: false, id }))];
   for (const clue of shuffle(rand, clues)) {
     const set = clue.wall ? p.walls : p.blocked;
     set.delete(clue.id);
-    const stillUnique = (clue.wall || openTilesOk(p)) && solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT }).status === 'unique';
-    if (!stillUnique) set.add(clue.id);
+    if (!keep(p, !clue.wall)) set.add(clue.id);
   }
 }
 

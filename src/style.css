@@ -265,6 +265,13 @@ a.btn {
 .tile.blocked.removable {
   fill: rgb(217 119 6);
 }
+/* The Easy goal's: they could go and the easy rules still solve the puzzle. */
+.wall.removable.easy {
+  stroke: rgb(22 163 74);
+}
+.tile.blocked.removable.easy {
+  fill: rgb(22 163 74);
+}
 /* A wall the editor suggests adding. */
 .wall.suggest {
   stroke: var(--accent);
@@ -1809,4 +1816,37 @@ a.btn {
 .pack-add-empty {
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+/* The editor's Simplify row: a label, then per goal a highlight toggle and Remove all. */
+.simplify-row {
+  align-items: center;
+}
+.simplify-row > .row-label {
+  flex: 0 0 auto;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+.simplify-goal {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+.simplify-goal > .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 8px;
+}
+.simplify-goal > .btn.icon-only {
+  flex: 0 0 var(--tap);
+  padding: 0;
+}
+/* Remove all at work: a tap again cancels it. */
+.simplify-row .btn.busy {
+  animation: simplify-busy 1s ease-in-out infinite alternate;
+}
+@keyframes simplify-busy {
+  to {
+    opacity: 0.4;
+  }
 }

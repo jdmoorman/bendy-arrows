@@ -27,7 +27,8 @@ import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHi
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
-import { removableInBackground } from './generator-client';
+import { removableInBackground, simplifyInBackground, type Removable } from './generator-client';
+import type { GoalFailure, SimplifyGoal } from './generator';
 import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from './new-puzzle-ui';
 
 type Tool = 'tiles' | 'walls' | 'ends';
@@ -38,6 +39,12 @@ const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
   walls: 'Tap or drag along borders to add walls.',
   ends: 'Tap a dot on the frame to add the entrance, then the exit.',
+};
+
+/** Why Simplify can't start, by goal failure. */
+const GOAL_FAILURE: Record<GoalFailure, string> = {
+  'not unique': 'Not unique: Simplify works once the puzzle has exactly one solution.',
+  'not easy': 'Not easy yet: the easy rules alone don’t solve this puzzle.',
 };
 
 export class EditorView {
@@ -107,11 +114,16 @@ export class EditorView {
   private logicOpts: LogicOptions = loadLogicOptions(new Storage());
   private autoWorker: Worker | null = null;
   private oneShotBtn!: HTMLButtonElement;
-  /** Whether removable obstacles are shown, what they are (once worked out), and the search for them. */
-  private showRemovable = false;
-  private removable: { walls: Set<number>; blocked: Set<number> } | null = null;
+  /** Which Simplify goal's removable obstacles are shown, what they are (once worked out), and the search for them. */
+  private simplifyGoal: SimplifyGoal | null = null;
+  private removable: Removable | null = null;
   private removableRun: { cancel(): void } | null = null;
-  private removableBtn!: HTMLButtonElement;
+  /** A Remove all in progress, and for which goal. */
+  private simplifyRun: { goal: SimplifyGoal; cancel(): void } | null = null;
+  /** What Remove all just did, kept at the front of the highlight's message that follows it. */
+  private simplifyNote = '';
+  private goalBtns!: Record<SimplifyGoal, HTMLButtonElement>;
+  private removeAllBtns!: Record<SimplifyGoal, HTMLButtonElement>;
   /** Row-and-column editing: buttons around the board add and delete rows and columns. */
   private gridEdit = false;
   private gridBtn!: HTMLButtonElement;
@@ -139,7 +151,17 @@ export class EditorView {
           <button class="btn" data-turn="rotateRight" aria-label="Rotate right" title="Rotate right">${ICONS.rotateRight}</button>
           <button class="btn" data-turn="flipH" aria-label="Flip left–right" title="Flip left–right">${ICONS.flipH}</button>
           <button class="btn" data-turn="flipV" aria-label="Flip up–down" title="Flip up–down">${ICONS.flipV}</button>
-          <button class="btn" data-act="removable" aria-pressed="false" aria-label="Show removable obstacles" title="Show the walls and black tiles that could each go on its own, keeping the solution unique">${ICONS.sparkle}</button>
+        </div>
+        <div class="toolbar-row simplify-row">
+          <span class="row-label">Simplify</span>
+          <span class="simplify-goal">
+            <button class="btn" data-goal="easy" aria-pressed="false" title="Colour the walls and black tiles that could each go on its own, keeping the puzzle unique and solved by the easy rules alone">Easy</button>
+            <button class="btn icon-only" data-remove-all="easy" aria-label="Remove all (easy)" title="Remove every wall and black tile the easy rules don’t need">${ICONS.eraser}</button>
+          </span>
+          <span class="simplify-goal">
+            <button class="btn" data-goal="minimal" aria-pressed="false" title="Colour the walls and black tiles that could each go on its own, keeping the solution unique">Minimal</button>
+            <button class="btn icon-only" data-remove-all="minimal" aria-label="Remove all (minimal)" title="Remove every wall and black tile the unique solution doesn’t need">${ICONS.eraser}</button>
+          </span>
         </div>
         <div class="toolbar-row logic-row">
           <button class="btn" data-logic="rules" aria-label="Logic rules">${ICONS.list}<span>Rules</span></button>
@@ -186,11 +208,17 @@ export class EditorView {
         this.edit((p) => transformPuzzle(p, b.dataset.turn as Transform));
       });
     }
-    this.removableBtn = q<HTMLButtonElement>('[data-act=removable]');
-    this.removableBtn.addEventListener('click', () => {
-      this.showRemovable = !this.showRemovable;
-      this.checkRemovable();
-    });
+    // The Simplify row: per goal, a highlight toggle (one at a time) and Remove all.
+    const goals: SimplifyGoal[] = ['easy', 'minimal'];
+    this.goalBtns = { easy: q('[data-goal=easy]'), minimal: q('[data-goal=minimal]') };
+    this.removeAllBtns = { easy: q('[data-remove-all=easy]'), minimal: q('[data-remove-all=minimal]') };
+    for (const g of goals) {
+      this.goalBtns[g].addEventListener('click', () => {
+        this.simplifyGoal = this.simplifyGoal === g ? null : g;
+        this.checkRemovable();
+      });
+      this.removeAllBtns[g].addEventListener('click', () => this.removeAll(g));
+    }
     this.oneShotBtn = q<HTMLButtonElement>('[data-act=oneshot]');
     this.oneShotBtn.addEventListener('click', () => this.toggleOneShot());
     q<HTMLButtonElement>('[data-logic=step]').addEventListener('click', () => this.stepLogic());
@@ -267,6 +295,7 @@ export class EditorView {
   }
 
   load(p: Puzzle): void {
+    this.cancelSimplify();
     this.puzzle = clonePuzzle(p);
     this.marksStillFit = true;
     this.replaced = false;
@@ -275,7 +304,7 @@ export class EditorView {
     this.clearMessage();
     this.render();
     if (this.autoLogic) this.runAutoLogic();
-    if (this.showRemovable) this.checkRemovable();
+    if (this.simplifyGoal) this.checkRemovable();
     for (const fn of this.changeListeners) fn(this.puzzle);
   }
 
@@ -426,16 +455,17 @@ export class EditorView {
     this.render();
   }
 
-  /** Grid size, rotate, flip and simplify, in one sheet that stays open while you try things. */
   /**
-   * While shown, work out (in the background) which walls and black tiles could each go on its
-   * own with the solution staying unique, and colour them; again after every change.
+   * While a Simplify goal is shown, work out (in the background) which walls and black tiles
+   * could each go on their own with the puzzle still meeting it, and colour them; again after
+   * every change.
    */
   private checkRemovable() {
     this.removableRun?.cancel();
     this.removableRun = null;
     this.removable = null;
-    if (!this.showRemovable) {
+    const goal = this.simplifyGoal;
+    if (!goal) {
       this.render();
       return;
     }
@@ -445,23 +475,76 @@ export class EditorView {
       return;
     }
     this.render();
-    const run = removableInBackground(p);
+    const run = removableInBackground(p, goal, this.logicOpts);
     this.removableRun = run;
     run.result.then(
       (r) => {
         if (this.removableRun !== run) return;
         this.removableRun = null;
+        const note = this.simplifyNote;
+        this.simplifyNote = '';
+        if (typeof r === 'string') return this.setMessage(note + GOAL_FAILURE[r]);
         this.removable = r;
-        if (!r) return this.setMessage('Not unique: removable obstacles show once the puzzle has exactly one solution.');
         const n = r.walls.size + r.blocked.size;
-        this.setMessage(
-          n
-            ? `${n} of ${p.walls.size + p.blocked.size} obstacles (in amber) could each go on its own and keep the solution unique.`
-            : 'Every obstacle is needed: removing any one makes the solution not unique.',
-        );
+        const all = p.walls.size + p.blocked.size;
+        const found =
+          goal === 'easy'
+            ? n
+              ? `${n} of ${all} obstacles (in green) could each go on its own and the easy rules still solve the puzzle.`
+              : 'The easy rules need every obstacle: removing any one leaves them stuck or the solution not unique.'
+            : n
+              ? `${n} of ${all} obstacles (in amber) could each go on its own and keep the solution unique.`
+              : 'Every obstacle is needed: removing any one makes the solution not unique.';
+        this.setMessage(note + found);
       },
       () => {},
     );
+  }
+
+  /** Stop a Remove all: the puzzle it started from has changed. */
+  private cancelSimplify() {
+    this.simplifyNote = '';
+    this.simplifyRun?.cancel();
+    this.simplifyRun = null;
+  }
+
+  /** Take away every obstacle the goal doesn't need, in the background (one undoable step); again to cancel. */
+  private removeAll(goal: SimplifyGoal) {
+    const running = this.simplifyRun;
+    this.cancelSimplify();
+    if (running) {
+      this.render();
+      if (running.goal === goal) return this.setMessage('Simplify cancelled.');
+    }
+    const p = this.puzzle;
+    const before = p.walls.size + p.blocked.size;
+    if (!before) return this.setMessage('No walls or black tiles to remove.');
+    const run = simplifyInBackground(p, goal, this.logicOpts);
+    const handle = { goal, cancel: run.cancel };
+    this.simplifyRun = handle;
+    this.setMessage(goal === 'easy' ? 'Removing what the easy rules don’t need…' : 'Removing what the unique solution doesn’t need…');
+    run.result.then(
+      (q) => {
+        if (this.simplifyRun !== handle) return;
+        this.simplifyRun = null;
+        this.render();
+        if (typeof q === 'string') return this.setMessage(GOAL_FAILURE[q]);
+        const after = q.walls.size + q.blocked.size;
+        if (after === before) return this.setMessage('Nothing to remove: every obstacle is needed.');
+        const done = `Removed ${before - after} obstacle${before - after === 1 ? '' : 's'} (${before} → ${after}). `;
+        this.edit(() => q);
+        // A highlight shown is worked out again for the new puzzle: its message keeps this one.
+        if (this.removableRun) this.simplifyNote = done;
+        this.setMessage(done.trim(), 'success');
+      },
+      (err) => {
+        if (this.simplifyRun !== handle) return;
+        this.simplifyRun = null;
+        this.render();
+        if (!(err instanceof DOMException)) this.setMessage(err instanceof Error ? err.message : String(err));
+      },
+    );
+    this.render();
   }
 
   /**
@@ -728,11 +811,12 @@ export class EditorView {
   }
 
   private afterChange() {
+    this.cancelSimplify();
     this.resetLogic();
     this.clearMessage();
     this.render();
     if (this.autoLogic) this.runAutoLogic();
-    if (this.showRemovable) this.checkRemovable();
+    if (this.simplifyGoal) this.checkRemovable();
     for (const fn of this.changeListeners) fn(this.puzzle);
   }
 
@@ -847,7 +931,7 @@ export class EditorView {
       showPortTargets: this.tool === 'ends',
       ghost: this.ghost ?? undefined,
       suggestWall: this.suggestedWall ?? undefined,
-      removable: this.showRemovable ? (this.removable ?? undefined) : undefined,
+      removable: this.simplifyGoal && this.removable ? { ...this.removable, goal: this.simplifyGoal } : undefined,
       segments: logic ? this.logic.segments : undefined,
       xMarks: logic ? this.logic.xs : undefined,
       highlight: logic ? this.logicFresh : undefined,
@@ -856,7 +940,10 @@ export class EditorView {
     });
     this.oneShotBtn.setAttribute('aria-pressed', String(!!p.oneShot));
     this.gridBtn.setAttribute('aria-pressed', String(this.gridEdit));
-    this.removableBtn.setAttribute('aria-pressed', String(this.showRemovable));
+    for (const g of ['easy', 'minimal'] as const) {
+      this.goalBtns[g].setAttribute('aria-pressed', String(this.simplifyGoal === g));
+      this.removeAllBtns[g].classList.toggle('busy', this.simplifyRun?.goal === g);
+    }
     this.drawGridHandles();
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;
