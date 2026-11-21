@@ -4,8 +4,8 @@ import { hintJourney, strokeJourney, type JourneyFrame } from './logic';
 import { isOneShot } from './model';
 import { solve } from './solver';
 
-/** Puzzle codes to solve, in order. */
-export type PacksRequest = string[];
+/** Puzzle codes to solve, in order (and then rate, unless just solving). */
+export type PacksRequest = string[] | { codes: string[]; solveOnly: true };
 /**
  * One level's solution (its lines), or none if it has none, and whether it's the only one;
  * later, once every level is solved, its hint steps (null when it isn't unique), as in the Library.
@@ -25,8 +25,9 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 /** Solve each level in turn, posting each solution as soon as it's found; then rate them. */
 ctx.onmessage = (ev: MessageEvent<PacksRequest>) => {
+  const codes = Array.isArray(ev.data) ? ev.data : ev.data.codes;
   const unique = new Set<string>();
-  for (const code of ev.data) {
+  for (const code of codes) {
     let segments: number[] | null = null;
     let one = false;
     try {
@@ -39,7 +40,8 @@ ctx.onmessage = (ev: MessageEvent<PacksRequest>) => {
     if (one) unique.add(code);
     ctx.postMessage({ kind: 'solved', code, segments, unique: one } satisfies PacksMessage);
   }
-  for (const code of ev.data) {
+  if (!Array.isArray(ev.data)) return;
+  for (const code of codes) {
     let rating: PackRating | null = null;
     if (unique.has(code)) {
       const p = decodePuzzle(code);

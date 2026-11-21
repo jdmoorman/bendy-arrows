@@ -414,6 +414,31 @@ export class PacksView {
     const empty = el('p', 'pack-add-empty');
     body.append(search, list, empty);
     const sheet = openSheet(`Add to ${this.packs[pi].name}`, body);
+    // Each puzzle's solution on its board: solved in the background, the shown ones first.
+    const boards = new Map<string, SVGSVGElement[]>();
+    const drawBoard = (svg: SVGSVGElement, code: string) => {
+      const p = decodePuzzle(code);
+      const lines = this.solutions.get(code)?.lines;
+      renderBoard(svg, p, { pad: padFor(p), segments: lines ?? undefined, solved: !!lines });
+    };
+    let solver: Worker | null = null;
+    const asked = new Set<string>();
+    const solveShown = (codes: string[]) => {
+      const todo = codes.filter((c) => !this.solutions.has(c) && !asked.has(c));
+      if (!todo.length) return;
+      for (const c of todo) asked.add(c);
+      if (!solver) {
+        solver = new Worker(new URL('./packs.worker.ts', import.meta.url), { type: 'module' });
+        solver.onmessage = (ev: MessageEvent<PacksMessage>) => {
+          const m = ev.data;
+          if (m.kind !== 'solved') return;
+          this.solutions.set(m.code, { lines: m.segments ? new Set(m.segments) : null, unique: m.unique });
+          for (const svg of boards.get(m.code) ?? []) if (svg.isConnected) drawBoard(svg, m.code);
+        };
+      }
+      solver.postMessage({ codes: todo, solveOnly: true } satisfies PacksRequest);
+    };
+    sheet.dialog.addEventListener('close', () => solver?.terminate());
     const show = () => {
       const q = search.value.trim().toLowerCase();
       const shown = entries.filter(({ e }) => !q || e.name.toLowerCase().includes(q) || (e.collection ?? '').toLowerCase().includes(q));
@@ -422,13 +447,16 @@ export class PacksView {
           ? ''
           : 'Nothing in your Library matches.'
         : 'Nothing in your Library can be added: everything is more than twice as long one way as the other.';
+      const listed = shown.slice(0, 200);
+      boards.clear();
       list.replaceChildren(
-        ...shown.slice(0, 200).map(({ e, code, taken }) => {
+        ...listed.map(({ e, code, taken }) => {
           const p = decodePuzzle(code);
           const row = el('button', 'pack-add-row');
           const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
           svg.classList.add('board');
-          renderBoard(svg, p, { pad: padFor(p) });
+          drawBoard(svg, code);
+          boards.set(code, [...(boards.get(code) ?? []), svg]);
           const text = el('span', 'pack-add-text');
           const name = el('span', 'pack-add-name');
           name.textContent = e.name;
@@ -449,6 +477,7 @@ export class PacksView {
           return row;
         }),
       );
+      solveShown(listed.map((x) => x.code));
     };
     search.addEventListener('input', show);
     show();
