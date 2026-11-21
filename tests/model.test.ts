@@ -244,3 +244,19 @@ describe('insertLine and deleteLine', async () => {
     expect([...deleteLine(p, 'col', 0).blocked]).toEqual([1]);
   });
 });
+
+describe('levelKey', async () => {
+  const { levelKey, transformPuzzle: turn } = await import('../src/model');
+  test('the same for a level turned, mirrored, with its ends swapped or made a one-shot; different for another', () => {
+    const p = createPuzzle(4, 5);
+    p.blocked.add(6);
+    p.endpoints = [portEnd(portId(p, 'left', 4)), portEnd(portId(p, 'right', 1))];
+    const k = levelKey(p);
+    expect(levelKey(turn(p, 'rotateRight'))).toBe(k);
+    expect(levelKey(turn(p, 'flipV'))).toBe(k);
+    expect(levelKey({ ...p, endpoints: [...p.endpoints].reverse() })).toBe(k);
+    expect(levelKey({ ...p, oneShot: true })).toBe(k);
+    const q = { ...p, blocked: new Set([7]) };
+    expect(levelKey(q)).not.toBe(k);
+  });
+});

@@ -487,6 +487,19 @@ export function orientTail(p: Puzzle): Puzzle {
 }
 
 /**
+ * A key that's the same for two levels exactly when they're the same puzzle: turned or
+ * mirrored, with their corner arrows on either side or their ends swapped, one-shot or not.
+ */
+export function levelKey(p: Puzzle): string {
+  const one = (q: Puzzle) => {
+    const num = (xs: Iterable<number>) => [...xs].sort((x, y) => x - y).join(',');
+    const walls = [...q.walls].map((e) => edgeCells(q, e).join('-')).sort();
+    return `${q.w}x${q.h}|${num(q.blocked)}|${walls.join(',')}|${num(q.endpoints.map((e) => e.port))}`;
+  };
+  return endVariants(p).map(one).sort()[0];
+}
+
+/**
  * A key for a solution path's shape: the same for two paths exactly when one is the other
  * turned or mirrored (whatever obstacles and ends the puzzles have). `edges` are the path's lines.
  */

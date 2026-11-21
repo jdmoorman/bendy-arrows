@@ -1,7 +1,7 @@
 import { decodePuzzle, encodePuzzle } from './codec';
 import { MIN_PACK_LEVELS, PACK_SIZE_STEP, PACKS } from './levels';
 import type { PackRating, PacksMessage, PacksRequest } from './packs.worker';
-import { isOneShot, orientTail, pathKey, tailLeftLow, transformPuzzle } from './model';
+import { isOneShot, levelKey, orientTail, pathKey, tailLeftLow, transformPuzzle } from './model';
 import { boardSize, padFor, renderBoard } from './render';
 import type { Storage } from './storage';
 import { ICONS } from './icons';
@@ -395,11 +395,15 @@ export class PacksView {
 
   /** Pick a Library puzzle to add to the end of pack `pi`. */
   private openAddSheet(pi: number) {
-    const inPacks = new Set(this.packs.flatMap((k) => k.levels));
+    // A puzzle that's already a level somewhere (the same puzzle, turned, mirrored and so on)
+    // is listed but can't be added again.
+    const inPacks = new Map<string, string>();
+    for (const k of this.packs) for (const c of k.levels) inPacks.set(levelKey(decodePuzzle(c)), k.name);
     const entries = this.storage
       .list()
       .map((e) => ({ e, code: this.asLevel(e.code, pi) }))
-      .filter((x): x is { e: (typeof x)['e']; code: string } => !!x.code && !inPacks.has(x.code) && !shapeProblem(x.code))
+      .filter((x): x is { e: (typeof x)['e']; code: string } => !!x.code && !shapeProblem(x.code))
+      .map((x) => ({ ...x, taken: inPacks.get(levelKey(decodePuzzle(x.code))) }))
       .sort((a, b) => b.e.updated - a.e.updated);
     const body = el('div', 'pack-add-sheet');
     const search = el('input', 'text-input');
@@ -417,9 +421,9 @@ export class PacksView {
         ? shown.length
           ? ''
           : 'Nothing in your Library matches.'
-        : 'Nothing in your Library can be added: everything is already in a pack, or more than twice as long one way as the other.';
+        : 'Nothing in your Library can be added: everything is more than twice as long one way as the other.';
       list.replaceChildren(
-        ...shown.slice(0, 200).map(({ e, code }) => {
+        ...shown.slice(0, 200).map(({ e, code, taken }) => {
           const p = decodePuzzle(code);
           const row = el('button', 'pack-add-row');
           const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -429,9 +433,11 @@ export class PacksView {
           const name = el('span', 'pack-add-name');
           name.textContent = e.name;
           const meta = el('span', 'pack-add-meta');
-          meta.textContent = `${p.w}×${p.h}${e.collection ? ` · ${e.collection}` : ''}`;
+          meta.textContent = `${p.w}×${p.h}${e.collection ? ` · ${e.collection}` : ''}${taken ? ` · already in ${taken}` : ''}`;
           text.append(name, meta);
           row.append(svg, text);
+          row.disabled = !!taken;
+          if (taken) row.title = `This puzzle is already a level in ${taken}.`;
           row.addEventListener('click', () => {
             this.packs[pi].levels.push(code);
             sheet.close();
