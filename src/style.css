@@ -509,8 +509,9 @@ a.btn {
   align-items: stretch;
 }
 
-.actions-row > .btn:not(.primary) {
-  flex: 0 0 var(--tap);
+.actions-row > .btn {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .actions-row > .btn.primary {
@@ -1036,8 +1037,9 @@ a.btn {
   min-width: 0;
   padding: 0 8px;
 }
+/* Every logic control is an icon now: they share the row evenly, Play at the right end. */
 .logic-row .btn.icon-only {
-  flex: 0 0 var(--tap);
+  flex: 1 1 0;
   padding: 0;
 }
 
@@ -1055,9 +1057,6 @@ a.btn {
   .logic-row .btn {
     padding: 0 4px;
   }
-  .logic-row .btn.icon-only {
-    flex-basis: 36px;
-  }
 }
 
 /* The editing tools share one row on a phone: the four tools take what One-shot leaves. */
@@ -1071,6 +1070,10 @@ a.btn {
 .tool-row .segmented .seg-btn {
   min-width: 0;
   padding: 0 4px;
+}
+.tool-row > .btn.icon-only {
+  flex: 0 0 var(--tap);
+  padding: 0;
 }
 .tool-row > [data-act='oneshot'] {
   flex: 0 0 auto;
@@ -1237,16 +1240,6 @@ a.btn {
   display: none;
 }
 
-@media (max-width: 420px) {
-  .actions-row > .btn:not(.primary) {
-    flex: 0 1 var(--tap);
-    min-width: 34px;
-    padding: 0;
-  }
-  .actions-row > .btn.primary svg {
-    display: none;
-  }
-}
 
 /* Logic rules sheet: a link inside a switch's description, and the easy rules listed one by one. */
 .link-btn {
@@ -1855,5 +1848,61 @@ a.btn {
 @keyframes simplify-busy {
   to {
     opacity: 0.4;
+  }
+}
+
+/* The narrowest phones: the four tools, the grid button and One-shot squeeze into one row. */
+@media (max-width: 360px) {
+  .tool-row {
+    gap: 4px;
+  }
+  .tool-row .segmented {
+    padding: 2px;
+    gap: 1px;
+  }
+  .tool-row .segmented .seg-btn {
+    padding: 0 2px;
+    font-size: 0.8rem;
+  }
+  .tool-row > .btn.icon-only {
+    flex-basis: 36px;
+  }
+  .tool-row > [data-act='oneshot'] {
+    padding: 0 6px;
+    font-size: 0.8rem;
+  }
+  .simplify-row {
+    gap: 4px;
+  }
+  .simplify-goal > .btn:not(.icon-only) {
+    padding: 0 2px;
+    font-size: 0.8rem;
+  }
+}
+
+/*
+ * Turns and flips, while editing rows and columns: laid over the message just above the
+ * toolbar (always at least as tall as the row), so the board and the buttons stay put.
+ */
+.editor-view > .toolbar {
+  position: relative;
+}
+.editor-view .shape-row {
+  display: none;
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(100% + 8px);
+  width: auto;
+}
+.editor-view.grid-editing .shape-row {
+  display: flex;
+}
+.editor-view.grid-editing > .status {
+  visibility: hidden;
+}
+@media (min-width: 600px) and (orientation: landscape) {
+  .editor-view .shape-row {
+    left: 0;
   }
 }

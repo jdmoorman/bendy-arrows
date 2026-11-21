@@ -150,6 +150,13 @@ export class EditorView {
       <div class="board-wrap"><svg class="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Puzzle editor board"></svg><div class="grid-handles"></div></div>
       <p class="status" role="status" aria-live="polite"></p>
       <div class="toolbar">
+        <!-- Turns and flips: shown while editing rows and columns. -->
+        <div class="toolbar-row shape-row">
+          <button class="btn" data-turn="rotateLeft" aria-label="Rotate left" title="Rotate left">${ICONS.rotateLeft}</button>
+          <button class="btn" data-turn="rotateRight" aria-label="Rotate right" title="Rotate right">${ICONS.rotateRight}</button>
+          <button class="btn" data-turn="flipH" aria-label="Flip left–right" title="Flip left–right">${ICONS.flipH}</button>
+          <button class="btn" data-turn="flipV" aria-label="Flip up–down" title="Flip up–down">${ICONS.flipV}</button>
+        </div>
         <div class="toolbar-row tool-row">
           <div class="segmented" role="group" aria-label="Editing tool">
             <button class="seg-btn" data-tool="tiles">Tiles</button>
@@ -157,14 +164,8 @@ export class EditorView {
             <button class="seg-btn" data-tool="ends">Ends</button>
             <button class="seg-btn" data-tool="path" title="Draw lines you want the path to take; Fill then walls off every border no solution through them crosses">Draw</button>
           </div>
+          <button class="btn icon-only" data-act="grid" aria-pressed="false" aria-label="Edit rows and columns" title="Edit rows and columns: add or delete them around the board, turn or flip it">${ICONS.grid}</button>
           <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the entrance, and hints and logic follow it">One-shot</button>
-        </div>
-        <div class="toolbar-row shape-row">
-          <button class="btn" data-act="grid" aria-pressed="false" aria-label="Edit rows and columns" title="Edit rows and columns: add or delete them around the board">${ICONS.grid}</button>
-          <button class="btn" data-turn="rotateLeft" aria-label="Rotate left" title="Rotate left">${ICONS.rotateLeft}</button>
-          <button class="btn" data-turn="rotateRight" aria-label="Rotate right" title="Rotate right">${ICONS.rotateRight}</button>
-          <button class="btn" data-turn="flipH" aria-label="Flip left–right" title="Flip left–right">${ICONS.flipH}</button>
-          <button class="btn" data-turn="flipV" aria-label="Flip up–down" title="Flip up–down">${ICONS.flipV}</button>
         </div>
         <div class="toolbar-row simplify-row">
           <button class="btn icon-only" data-act="clear-plan" aria-label="Clear drawn lines" title="Clear the lines drawn with Draw">${ICONS.clear}</button>
@@ -179,7 +180,7 @@ export class EditorView {
           </span>
         </div>
         <div class="toolbar-row logic-row">
-          <button class="btn" data-logic="rules" aria-label="Logic rules">${ICONS.list}<span>Rules</span></button>
+          <button class="btn icon-only" data-logic="rules" aria-label="Logic rules" title="Logic rules">${ICONS.list}</button>
           <button class="btn icon-only" data-logic="reset" aria-label="Reset logic" title="Reset logic">${ICONS.rewind}</button>
           <button class="btn icon-only" data-logic="back" aria-label="Undo the last logic step" title="Undo the last logic step">${ICONS.stepBack}</button>
           <button class="btn icon-only" data-logic="step" aria-label="Logic step" title="Logic step">${ICONS.step}</button>
@@ -192,7 +193,7 @@ export class EditorView {
           <button class="btn" data-act="new" aria-label="New blank puzzle" title="New blank puzzle">${ICONS.plus}</button>
           <button class="btn" data-act="generate" aria-label="Generate a puzzle" title="Generate a puzzle">${ICONS.dice}</button>
           <button class="btn" data-act="save" aria-label="Save to the library" title="Save">${ICONS.save}</button>
-          <button class="btn primary" data-act="play">${ICONS.play}<span>Play</span></button>
+          <button class="btn primary" data-act="play" aria-label="Play" title="Play">${ICONS.play}</button>
         </div>
       </div>
       <div class="board-info"></div>`;
@@ -700,6 +701,9 @@ export class EditorView {
   private drawGridHandles() {
     this.handles.replaceChildren();
     this.handles.parentElement!.classList.toggle('grid-editing', this.gridEdit);
+    // Turns and flips show in place of the message while rows and columns are being edited.
+    // (Laid over the message's space, so nothing below or beside moves.)
+    this.el.classList.toggle('grid-editing', this.gridEdit);
     if (!this.gridEdit) return;
     const p = this.puzzle;
     const ctm = this.svg.getScreenCTM();
@@ -928,6 +932,8 @@ export class EditorView {
 
   private setTool(t: Tool) {
     this.tool = t;
+    // Picking a tool means rows and columns are done.
+    this.gridEdit = false;
     for (const k of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[k].setAttribute('aria-pressed', String(k === t));
     this.render();
   }
