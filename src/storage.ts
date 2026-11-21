@@ -244,8 +244,7 @@ export class Storage {
     this.write(SHOW_SOLUTION_KEY, on);
   }
 
-  /** Whether the editor's hint list sits on one line beside the difficulty (else a list under it). */
-  /** Difficulty and uniqueness of saved puzzles, by code, worked out in the background. */
+  /** Uniqueness and hint steps of saved puzzles, by code, worked out in the background. */
   loadRatings(): Record<string, Rating> {
     const r = this.read<unknown>(RATINGS_KEY, {});
     return r && typeof r === 'object' ? (r as Record<string, Rating>) : {};

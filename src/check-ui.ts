@@ -1,6 +1,5 @@
 import { encodePuzzle } from './codec';
 import type { EditorView } from './editor';
-import type { Difficulty } from './generator';
 import { missingEnds } from './rules';
 import type { RatingMessage, RatingRequest } from './rating.worker';
 import { solutionUnionInBackground, solveInBackground, type SolverRun, type UnionRun } from './solver-client';
@@ -28,16 +27,14 @@ export function attachUniquenessCheck(editor: EditorView): void {
   let last: SolveResult | null = null;
   let showing = storage.loadShowSolution();
 
-  // The difficulty of a unique puzzle, rated in the background, in a chip under the board, with
-  // how many hints a player alternating easy rules and hints would need beside it.
+  // Under the board, for a unique puzzle: how many hints a player alternating easy rules and
+  // hints would need, worked out in the background.
   const info = document.createElement('div');
-  info.className = 'difficulty hidden';
+  info.className = 'rating-info hidden';
   info.setAttribute('role', 'status');
-  const level = document.createElement('span');
-  level.className = 'difficulty-chip';
   const hints = document.createElement('span');
   hints.className = 'hint-count';
-  info.append(level, hints);
+  info.append(hints);
   // Running locally: copy the puzzle as a line for src/levels.ts, once it's unique and rated.
   const copyBtn = document.createElement('button');
   copyBtn.type = 'button';
@@ -56,7 +53,6 @@ export function attachUniquenessCheck(editor: EditorView): void {
   if (import.meta.env.DEV) info.append(copyBtn);
   editor.el.querySelector('.board-info')!.append(info);
   let rater: Worker | null = null;
-  const NAMES: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', veryhard: 'Very hard' };
   const stopRating = () => {
     rater?.terminate();
     rater = null;
@@ -66,10 +62,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
     stopRating();
     if (last?.status !== 'unique') return;
     copyBtn.classList.add('hidden');
-    level.textContent = 'Rating…';
-    level.dataset.level = '';
-    hints.textContent = '';
-    info.setAttribute('aria-label', 'Rating the difficulty');
+    hints.textContent = 'Counting hints…';
     info.classList.remove('hidden');
     const worker = new Worker(new URL('./rating.worker.ts', import.meta.url), { type: 'module' });
     rater = worker;
@@ -77,16 +70,12 @@ export function attachUniquenessCheck(editor: EditorView): void {
       if (rater !== worker) return;
       worker.terminate();
       rater = null;
-      const d = ev.data.rating.difficulty;
-      if (!d) return info.classList.add('hidden');
-      level.textContent = NAMES[d];
-      level.dataset.level = d;
+      if (!ev.data.rating.unique) return info.classList.add('hidden');
       const n = ev.data.rating.hints ?? 0;
       const count = n ? `${n} hint${n === 1 ? '' : 's'}` : 'No hints';
       hints.textContent = ev.data.rating.hintsStuck ? `${count}, then stuck` : count;
-      info.setAttribute('aria-label', `Difficulty: ${NAMES[d]}. ${hints.textContent}`);
       const p = editor.current;
-      entry = `      '${ev.data.code}', // ${NAMES[d]} ${p.w}×${p.h}`;
+      entry = `      '${ev.data.code}', // ${hints.textContent} ${p.w}×${p.h}`;
       copyBtn.classList.remove('hidden');
     };
     worker.postMessage([encodePuzzle(editor.current)] satisfies RatingRequest);

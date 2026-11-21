@@ -27,7 +27,8 @@ describe('library table', () => {
   storage.put({ id: 'm', name: 'My little path', code: encodePuzzle(mine), created: 5, updated: 5 });
   // Saved copies of the test corpus, rated as the corpus says (the worker does this in the app).
   SAMPLES.forEach((x, i) => storage.put({ id: `s${i}`, name: x.name, code: x.code, created: i, updated: i }));
-  const ratings = Object.fromEntries(SAMPLES.map((x) => [x.code, { difficulty: x.level, unique: true }]));
+  // Every sample is unique with a few hint steps, except the first, which has no unique solution.
+  const ratings = Object.fromEntries(SAMPLES.map((x, i) => [x.code, i ? { unique: true, hints: i % 4 } : { unique: false, hints: null }]));
   const rows = libraryRows(storage, ratings);
 
   test('lists saved puzzles and every level, with their facts', () => {
@@ -36,40 +37,43 @@ describe('library table', () => {
     const r = rows.find((x) => x.entry?.id === 'm')!;
     expect(r).toMatchObject({ name: 'My little path', collection: 'Yours', w: 3, h: 3, walls: 1, black: 0, obstacles: 1, status: 'New' });
     // Not rated yet.
-    expect(r.difficulty).toBeUndefined();
+    expect(r.hints).toBeUndefined();
+    expect(r.unique).toBeUndefined();
   });
 
-  test('a rating fills in difficulty and uniqueness', () => {
-    const rated = libraryRows(storage, { [encodePuzzle(mine)]: { difficulty: null, unique: false } });
+  test('a rating fills in hint steps and uniqueness', () => {
+    const rated = libraryRows(storage, { [encodePuzzle(mine)]: { unique: false, hints: null } });
     const r = rated.find((x) => x.entry?.id === 'm')!;
     const show = (key: string) => COLUMNS.find((c) => c.key === key)!.show!(r);
-    expect([show('difficulty'), show('unique')]).toEqual(['—', 'No']);
+    expect([show('hints'), show('unique')]).toEqual(['—', 'No']);
   });
 
   test('filters by choice values, number ranges and name', () => {
-    const easy = applyTable(rows, state({ filters: { difficulty: { values: ['Easy'] } } }));
-    expect(easy.length).toBeGreaterThan(0);
-    expect(easy.every((r) => r.difficulty === 'easy')).toBe(true);
+    const unique = applyTable(rows, state({ filters: { unique: { values: ['Yes'] } } }));
+    expect(unique.length).toBeGreaterThan(0);
+    expect(unique.every((r) => r.unique === true)).toBe(true);
     const sparse = applyTable(rows, state({ filters: { obstacles: { max: 1 }, w: { min: 8 } } }));
     expect(sparse.length).toBeGreaterThan(0);
     expect(sparse.every((r) => r.obstacles <= 1 && r.w >= 8)).toBe(true);
     expect(applyTable(rows, state({ search: 'LITTLE' })).map((r) => r.name)).toEqual(['My little path']);
-    // Rows without a value (an unrated difficulty) fail a filter on it.
-    expect(applyTable(rows, state({ filters: { difficulty: { values: ['Easy', 'Medium', 'Hard', 'Very hard'] } } })).some((r) => r.entry?.id === 'm')).toBe(false);
+    // Rows without a value (not rated yet) fail a filter on it.
+    expect(applyTable(rows, state({ filters: { hints: { min: 0 } } })).some((r) => r.entry?.id === 'm')).toBe(false);
   });
 
   test('sorts numbers, choices in their own order, and missing values last', () => {
-    const byObstacles = applyTable(rows, state({ sort: { key: 'obstacles', dir: -1 } })).map((r) => r.obstacles);
-    expect(byObstacles).toEqual([...byObstacles].sort((a, b) => b - a));
-    const levels = ['Easy', 'Medium', 'Hard', 'Very hard'];
     for (const dir of [1, -1] as const) {
-      const sorted = applyTable(rows, state({ sort: { key: 'difficulty', dir } }));
+      const sorted = applyTable(rows, state({ sort: { key: 'hints', dir } }));
       // Unrated (your new puzzle, and levels before the worker rates them) goes last either way.
-      const rated = sorted.filter((r) => r.difficulty);
+      const rated = sorted.filter((r) => typeof r.hints === 'number');
       expect(rated.length).toBeGreaterThan(0);
-      expect(sorted.slice(rated.length).every((r) => !r.difficulty)).toBe(true);
-      const ranks = rated.map((r) => levels.indexOf({ easy: 'Easy', medium: 'Medium', hard: 'Hard', veryhard: 'Very hard' }[r.difficulty!]));
-      expect(ranks).toEqual([...ranks].sort((a, b) => (a - b) * dir));
+      expect(sorted.slice(rated.length).every((r) => typeof r.hints !== 'number')).toBe(true);
+      const hints = rated.map((r) => r.hints!);
+      expect(hints).toEqual([...hints].sort((a, b) => (a - b) * dir));
+      const byUnique = applyTable(rows, state({ sort: { key: 'unique', dir } })).map((r) => r.unique);
+      const known = byUnique.filter((u) => u !== undefined);
+      expect(byUnique.slice(known.length).every((u) => u === undefined)).toBe(true);
+      // Yes before No, in the column's own order.
+      expect(known).toEqual([...known].sort((a, b) => (Number(b) - Number(a)) * dir));
     }
   });
 });

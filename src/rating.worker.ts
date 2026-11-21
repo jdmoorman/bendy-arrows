@@ -1,6 +1,5 @@
 /// <reference lib="webworker" />
 import { decodePuzzle } from './codec';
-import { rateDifficulty } from './generator';
 import { RATING_VERSION, type Rating } from './library-table';
 import { hintJourney, searchMetrics, strokeJourney } from './logic';
 import { isOneShot } from './model';
@@ -19,7 +18,7 @@ ctx.onmessage = (ev: MessageEvent<RatingRequest>) => {
     try {
       const p = decodePuzzle(code);
       const unique = solve(p, { maxSolutions: 2 }).status === 'unique';
-      rating = { v: RATING_VERSION, unique, difficulty: unique ? rateDifficulty(p) : null, hints: null, tightest: null, effort: null };
+      rating = { v: RATING_VERSION, unique, hints: null, tightest: null, effort: null };
       if (unique) {
         // A one-shot's hints are those for its stroke.
         const j = isOneShot(p) ? strokeJourney(p) : hintJourney(p);
@@ -30,7 +29,7 @@ ctx.onmessage = (ev: MessageEvent<RatingRequest>) => {
         rating.effort = Math.round(m.effort);
       }
     } catch {
-      rating = { v: RATING_VERSION, unique: false, difficulty: null, hints: null, tightest: null, effort: null };
+      rating = { v: RATING_VERSION, unique: false, hints: null, tightest: null, effort: null };
     }
     ctx.postMessage({ code, rating } satisfies RatingMessage);
   }

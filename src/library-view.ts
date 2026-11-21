@@ -64,8 +64,9 @@ export class LibraryView {
     const saved = storage.loadLibraryTable() ?? {};
     this.state = {
       search: typeof saved.search === 'string' ? saved.search : '',
-      // Drop filters saved with the old "All except" mode: read as Only they'd mean the opposite.
-      filters: Object.fromEntries(Object.entries(saved.filters && typeof saved.filters === 'object' ? saved.filters : {}).filter(([, f]) => !(f as { exclude?: boolean } | null)?.exclude)),
+      // Drop filters saved with the old "All except" mode (read as Only they'd mean the opposite)
+      // and filters on columns that are gone.
+      filters: Object.fromEntries(Object.entries(saved.filters && typeof saved.filters === 'object' ? saved.filters : {}).filter(([k, f]) => columnByKey(k) && !(f as { exclude?: boolean } | null)?.exclude)),
       sort: saved.sort && columnByKey(saved.sort.key) ? saved.sort : null,
       columns: Array.isArray(saved.columns) ? saved.columns.filter((k) => columnByKey(k)) : DEFAULT_TABLE_STATE.columns,
     };
@@ -463,7 +464,7 @@ export class LibraryView {
 
   // --- Background ratings ---------------------------------------------------
 
-  /** Work out the difficulty, uniqueness, hint steps and search metrics of puzzles that haven't been rated. */
+  /** Work out the uniqueness, hint steps and search metrics of puzzles that haven't been rated. */
   private rateMissing() {
     const codes = [...new Set(this.rows.filter((r) => this.ratings[r.code]?.v !== RATING_VERSION).map((r) => r.code))].filter((c) => !this.requested.has(c));
     if (!codes.length) return;
@@ -480,7 +481,6 @@ export class LibraryView {
           r.hintsStuck = rating.hintsStuck;
           r.tightest = rating.tightest;
           r.effort = rating.effort;
-          r.difficulty = rating.difficulty;
           r.unique = rating.unique;
         }
         this.queueRender();

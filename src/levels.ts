@@ -4,7 +4,7 @@
  *
  * To publish a level:
  *   1. Make it in the creator (create.html). The Unique chip must be green.
- *   2. Running locally, tap "Copy level entry" beside the difficulty chip, and paste the
+ *   2. Running locally, tap "Copy level entry" beside the hint count, and paste the
  *      line into a pack's `levels` below (or write the code by hand: everything after
  *      `#p=` in the puzzle's share link). Levels play in the order listed.
  *   3. `npm test` checks every pack: a name, a description, at least MIN_PACK_LEVELS

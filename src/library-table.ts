@@ -1,5 +1,4 @@
 import { decodePuzzle } from './codec';
-import type { Difficulty } from './generator';
 import { openCells, type Puzzle } from './model';
 import { levelName, PACKS } from './levels';
 import type { LibraryEntry, Storage } from './storage';
@@ -15,8 +14,6 @@ export interface LibRow {
   /** The saved entry, for your own puzzles. */
   entry?: LibraryEntry;
   collection: string;
-  /** Undefined while not rated yet; null if it can't be rated (no unique solution). */
-  difficulty?: Difficulty | null;
   /** Undefined while not checked yet. */
   unique?: boolean;
   /** Hints a player alternating easy rules and hints needs (undefined while not worked out, null if not unique). */
@@ -44,13 +41,12 @@ export interface LibRow {
  */
 export const RATING_VERSION = 5;
 
-/** A puzzle's difficulty and uniqueness, worked out in the background for saved puzzles. */
+/** A puzzle's uniqueness and hint steps, worked out in the background for saved puzzles. */
 export interface Rating {
   /** RATING_VERSION when it was worked out (missing before versions). */
   v?: number;
-  difficulty: Difficulty | null;
   unique: boolean;
-  /** Steps beyond the easy rules: the lines under the editor's difficulty chip (missing in old ratings). */
+  /** Steps beyond the easy rules: shown under the editor's board (missing in old ratings). */
   hints?: number | null;
   /** The hints ran out before the puzzle was solved. */
   hintsStuck?: boolean;
@@ -63,8 +59,6 @@ export const COLLECTIONS = {
   yours: 'Yours',
 };
 
-export const DIFFICULTY_NAMES: Record<Difficulty, string> = { easy: 'Easy', medium: 'Medium', hard: 'Hard', veryhard: 'Very hard' };
-const DIFFICULTY_ORDER: Difficulty[] = ['easy', 'medium', 'hard', 'veryhard'];
 
 function puzzleFacts(p: Puzzle) {
   return {
@@ -109,7 +103,7 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
       continue;
     }
     const r = ratings[e.code];
-    rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: e.collection ?? COLLECTIONS.yours, ...f, difficulty: r?.difficulty, unique: r?.unique, ...hintsOf(r), ...play(e.code, e), added: e.created });
+    rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: e.collection ?? COLLECTIONS.yours, ...f, unique: r?.unique, ...hintsOf(r), ...play(e.code, e), added: e.created });
   }
   // The official level packs, shipped to everyone: each pack is a collection.
   PACKS.forEach((pack, pi) =>
@@ -122,7 +116,7 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
       }
       const saved = storage.findByCode(code);
       const r = ratings[code];
-      rows.push({ key: `level:${pi}:${li}`, name: levelName({ pack: pi, level: li }), code, collection: pack.name, ...f, difficulty: r?.difficulty, unique: r?.unique, ...hintsOf(r), ...play(code, saved) });
+      rows.push({ key: `level:${pi}:${li}`, name: levelName({ pack: pi, level: li }), code, collection: pack.name, ...f, unique: r?.unique, ...hintsOf(r), ...play(code, saved) });
     }),
   );
   return rows;
@@ -149,14 +143,6 @@ const yesNo = (b: boolean | undefined) => (b === undefined ? null : b ? 'Yes' : 
 
 export const COLUMNS: Column[] = [
   { key: 'collection', label: 'Collection', kind: 'choice', value: (r) => r.collection, choices: [COLLECTIONS.yours, ...PACKS.map((p) => p.name)] },
-  {
-    key: 'difficulty',
-    label: 'Difficulty',
-    kind: 'choice',
-    value: (r) => (r.difficulty ? DIFFICULTY_NAMES[r.difficulty] : null),
-    show: (r) => (r.difficulty ? DIFFICULTY_NAMES[r.difficulty] : r.difficulty === null ? '—' : '…'),
-    choices: DIFFICULTY_ORDER.map((d) => DIFFICULTY_NAMES[d]),
-  },
   {
     key: 'hints',
     label: 'Hint steps',
@@ -205,7 +191,7 @@ export const COLUMNS: Column[] = [
 ];
 
 /** Columns shown until the player picks their own. */
-export const DEFAULT_COLUMNS = ['difficulty', 'hints', 'w', 'h', 'obstacles', 'symmetric', 'status'];
+export const DEFAULT_COLUMNS = ['hints', 'w', 'h', 'obstacles', 'symmetric', 'status'];
 
 /** A filter on one column: allowed values for a choice column, a range for a number column. */
 export type Filter = { values: string[] } | { min?: number; max?: number };
