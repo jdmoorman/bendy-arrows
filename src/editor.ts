@@ -27,7 +27,7 @@ import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHi
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
-import { removableInBackground, simplifyInBackground, type Removable } from './generator-client';
+import { fillInBackground, removableInBackground, simplifyInBackground, type Removable } from './generator-client';
 import type { GoalFailure, SimplifyGoal } from './generator';
 import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from './new-puzzle-ui';
 
@@ -118,12 +118,13 @@ export class EditorView {
   private simplifyGoal: SimplifyGoal | null = null;
   private removable: Removable | null = null;
   private removableRun: { cancel(): void } | null = null;
-  /** A Remove all in progress, and for which goal. */
-  private simplifyRun: { goal: SimplifyGoal; cancel(): void } | null = null;
+  /** A Remove all (for a goal) or Fill in progress. */
+  private simplifyRun: { goal: SimplifyGoal | 'fill'; cancel(): void } | null = null;
   /** What Remove all just did, kept at the front of the highlight's message that follows it. */
   private simplifyNote = '';
   private goalBtns!: Record<SimplifyGoal, HTMLButtonElement>;
   private removeAllBtns!: Record<SimplifyGoal, HTMLButtonElement>;
+  private fillBtn!: HTMLButtonElement;
   /** Row-and-column editing: buttons around the board add and delete rows and columns. */
   private gridEdit = false;
   private gridBtn!: HTMLButtonElement;
@@ -154,6 +155,7 @@ export class EditorView {
         </div>
         <div class="toolbar-row simplify-row">
           <span class="row-label">Simplify</span>
+          <button class="btn icon-only" data-act="fill" aria-label="Fill with walls" title="Fill: a wall on every border the unique solution doesn’t cross">${ICONS.fill}</button>
           <span class="simplify-goal">
             <button class="btn" data-goal="easy" aria-pressed="false" title="Colour the walls and black tiles that could each go on its own, keeping the puzzle unique and solved by the easy rules alone">Easy</button>
             <button class="btn icon-only" data-remove-all="easy" aria-label="Remove all (easy)" title="Remove every wall and black tile the easy rules don’t need">${ICONS.eraser}</button>
@@ -219,6 +221,8 @@ export class EditorView {
       });
       this.removeAllBtns[g].addEventListener('click', () => this.removeAll(g));
     }
+    this.fillBtn = q<HTMLButtonElement>('[data-act=fill]');
+    this.fillBtn.addEventListener('click', () => this.fill());
     this.oneShotBtn = q<HTMLButtonElement>('[data-act=oneshot]');
     this.oneShotBtn.addEventListener('click', () => this.toggleOneShot());
     q<HTMLButtonElement>('[data-logic=step]').addEventListener('click', () => this.stepLogic());
@@ -506,6 +510,42 @@ export class EditorView {
     this.simplifyNote = '';
     this.simplifyRun?.cancel();
     this.simplifyRun = null;
+  }
+
+  /** Wall off every border the unique solution doesn't cross (one undoable step); again to cancel. */
+  private fill() {
+    const running = this.simplifyRun;
+    this.cancelSimplify();
+    if (running) {
+      this.render();
+      if (running.goal === 'fill') return this.setMessage('Fill cancelled.');
+    }
+    const p = this.puzzle;
+    const run = fillInBackground(p);
+    const handle = { goal: 'fill' as const, cancel: run.cancel };
+    this.simplifyRun = handle;
+    this.setMessage('Walling off every border the solution doesn’t cross…');
+    run.result.then(
+      (q) => {
+        if (this.simplifyRun !== handle) return;
+        this.simplifyRun = null;
+        this.render();
+        if (!q) return this.setMessage(GOAL_FAILURE['not unique']);
+        const added = q.walls.size - p.walls.size;
+        if (!added) return this.setMessage('Nothing to fill: every border the solution doesn’t cross already has a wall.');
+        const done = `Added ${added} wall${added === 1 ? '' : 's'}. `;
+        this.edit(() => q);
+        if (this.removableRun) this.simplifyNote = done;
+        this.setMessage(done.trim(), 'success');
+      },
+      (err) => {
+        if (this.simplifyRun !== handle) return;
+        this.simplifyRun = null;
+        this.render();
+        if (!(err instanceof DOMException)) this.setMessage(err instanceof Error ? err.message : String(err));
+      },
+    );
+    this.render();
   }
 
   /** Take away every obstacle the goal doesn't need, in the background (one undoable step); again to cancel. */
@@ -944,6 +984,7 @@ export class EditorView {
       this.goalBtns[g].setAttribute('aria-pressed', String(this.simplifyGoal === g));
       this.removeAllBtns[g].classList.toggle('busy', this.simplifyRun?.goal === g);
     }
+    this.fillBtn.classList.toggle('busy', this.simplifyRun?.goal === 'fill');
     this.drawGridHandles();
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;

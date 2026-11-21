@@ -423,6 +423,23 @@ export function simplifyPuzzle(p: Puzzle, seed: number, goal: SimplifyGoal = 'mi
 }
 
 /**
+ * The editor's Fill: a wall on every border between open tiles that the unique solution doesn't
+ * cross. Null if the puzzle doesn't have exactly one solution.
+ */
+export function fillWalls(p: Puzzle): Puzzle | null {
+  const r = solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT });
+  if (r.status !== 'unique') return null;
+  const used = new Set(r.solutions[0]);
+  const q = clonePuzzle(p);
+  for (let e = 0; e < edgeCount(p); e++) {
+    if (used.has(e)) continue;
+    const [a, b] = edgeCells(p, e);
+    if (!p.blocked.has(a) && !p.blocked.has(b)) q.walls.add(e);
+  }
+  return q;
+}
+
+/**
  * The obstacles the puzzle could lose one at a time and still meet the goal: each wall and
  * black tile, taken away on its own. (Taking several away together may not.) Null if the
  * puzzle doesn't meet the goal to begin with.

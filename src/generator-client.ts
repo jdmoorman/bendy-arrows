@@ -18,7 +18,7 @@ export function generateInBackground(opts: GenOptions, onProgress?: (attempt: nu
     const m = ev.data;
     if (m.type === 'progress') return onProgress?.(m.attempt);
     worker.terminate();
-    if (m.type === 'removable' || m.type === 'simplified') settle.reject(new Error('Unexpected reply.'));
+    if (m.type === 'removable' || m.type === 'simplified' || m.type === 'filled') settle.reject(new Error('Unexpected reply.'));
     else if (m.type === 'done') settle.resolve({ puzzle: decodePuzzle(m.code), difficulty: m.difficulty });
     else settle.reject(new Error(m.message));
   };
@@ -73,6 +73,15 @@ export function removableInBackground(p: Puzzle, goal: SimplifyGoal, opts: Logic
     { removable: encodePuzzle(p), goal, opts },
     (m) => (m.type !== 'removable' ? undefined : 'failure' in m ? m.failure : { walls: new Set(m.walls), blocked: new Set(m.blocked) }),
     'Checking the obstacles failed.',
+  );
+}
+
+/** The puzzle with a wall on every border its unique solution doesn't cross (null: not unique), in a background worker. */
+export function fillInBackground(p: Puzzle): { result: Promise<Puzzle | null>; cancel(): void } {
+  return askWorker<Puzzle | null>(
+    { fill: encodePuzzle(p) },
+    (m) => (m.type !== 'filled' ? undefined : m.code ? decodePuzzle(m.code) : null),
+    'Filling failed.',
   );
 }
 

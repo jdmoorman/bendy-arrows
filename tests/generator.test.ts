@@ -119,3 +119,21 @@ describe('Simplify goals', async () => {
     expect(easyRulesSolve(q)).toBe(true);
   }, 60000);
 });
+
+describe('fillWalls', async () => {
+  const { fillWalls } = await import('../src/generator');
+  const { createPuzzle, edgeCount, edgeCells } = await import('../src/model');
+  test('walls every border between open tiles the solution doesn’t cross, keeping the same unique solution', () => {
+    const { puzzle } = generate({ w: 5, h: 5, difficulties: ['easy'], clues: 'mixed', minimal: true, seed: 3 });
+    const path = solve(puzzle, { maxSolutions: 2 }).solutions[0];
+    const q = fillWalls(puzzle)!;
+    const r = solve(q, { maxSolutions: 2 });
+    expect(r.status).toBe('unique');
+    expect(r.solutions[0]).toEqual(path);
+    for (let e = 0; e < edgeCount(q); e++) {
+      const open = edgeCells(q, e).every((c) => !q.blocked.has(c));
+      expect(q.walls.has(e), `border ${e}`).toBe(open && !path.includes(e));
+    }
+    expect(fillWalls(createPuzzle(4, 4))).toBeNull();
+  });
+});

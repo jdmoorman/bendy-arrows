@@ -1841,7 +1841,11 @@ a.btn {
   flex: 0 0 var(--tap);
   padding: 0;
 }
-/* Remove all at work: a tap again cancels it. */
+.simplify-row > .btn.icon-only {
+  flex: 0 0 var(--tap);
+  padding: 0;
+}
+/* Remove all or Fill at work: a tap again cancels it. */
 .simplify-row .btn.busy {
   animation: simplify-busy 1s ease-in-out infinite alternate;
 }

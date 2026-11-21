@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { decodePuzzle, encodePuzzle } from './codec';
-import { generate, goalFailure, removableObstacles, simplifyPuzzle, type Difficulty, type GenOptions, type GoalFailure, type SimplifyGoal } from './generator';
+import { fillWalls, generate, goalFailure, removableObstacles, simplifyPuzzle, type Difficulty, type GenOptions, type GoalFailure, type SimplifyGoal } from './generator';
 import type { LogicOptions } from './logic';
 
 export type GeneratorMessage =
@@ -10,22 +10,30 @@ export type GeneratorMessage =
   | { type: 'removable'; failure: GoalFailure }
   | { type: 'simplified'; code: string }
   | { type: 'simplified'; failure: GoalFailure }
+  | { type: 'filled'; code: string | null }
   | { type: 'error'; message: string };
 
 /**
  * Generate a puzzle; find the obstacles a puzzle (its code) could lose one at a time and still
- * meet a Simplify goal; or take away every obstacle the goal doesn't need.
+ * meet a Simplify goal; take away every obstacle the goal doesn't need; or wall off every
+ * border the unique solution doesn't cross.
  */
 export type GeneratorRequest =
   | GenOptions
   | { removable: string; goal: SimplifyGoal; opts: LogicOptions }
-  | { simplify: string; goal: SimplifyGoal; seed: number; opts: LogicOptions };
+  | { simplify: string; goal: SimplifyGoal; seed: number; opts: LogicOptions }
+  | { fill: string };
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 ctx.onmessage = (ev: MessageEvent<GeneratorRequest>) => {
   try {
     const d = ev.data;
+    if ('fill' in d) {
+      const q = fillWalls(decodePuzzle(d.fill));
+      ctx.postMessage({ type: 'filled', code: q && encodePuzzle(q) } satisfies GeneratorMessage);
+      return;
+    }
     if ('removable' in d || 'simplify' in d) {
       const p = decodePuzzle('removable' in d ? d.removable : d.simplify);
       const failure = goalFailure(p, d.goal, d.opts);

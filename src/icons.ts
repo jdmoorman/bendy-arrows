@@ -35,6 +35,7 @@ export const ICONS = {
   bulb: svg('<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/>'),
   chevron: svg('<path d="m9 6 6 6-6 6"/>'),
   grid: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>'),
+  fill: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v12M15 9v12M3 9h6M15 15h6"/>'),
   eraser: svg('<path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/>'),
   arrowUp: svg('<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>'),
   arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
