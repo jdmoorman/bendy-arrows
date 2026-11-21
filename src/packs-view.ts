@@ -23,13 +23,13 @@ const EDGE = 60;
 /**
  * The creator's pack organiser: every pack's levels as their solved boards, in play order.
  * Drag a level (on a touch screen, hold it first) to move it within its pack or into another;
- * tap one to play it. Each pack's name and description can be edited too, puzzles from the
+ * tap one to edit it. Each pack's name and description can be edited too, puzzles from the
  * Library added to the end of a pack, and levels removed. Save writes it all to src/levels.ts (through the local dev
  * server, the only place the organiser appears).
  */
 export class PacksView {
   readonly el: HTMLElement;
-  /** Open a level (tapped, not dragged). */
+  /** Open a level in the editor (tapped, not dragged). */
   onOpen?: (code: string) => void;
 
   private body: HTMLElement;
@@ -236,7 +236,7 @@ export class PacksView {
       ? problem
       : changed
         ? `Unsaved changes${this.removed.length ? ` (${this.removed.length} level${this.removed.length === 1 ? '' : 's'} removed)` : ''}. Save writes them to src/levels.ts.`
-        : 'Drag a level to move it (hold it first on a touch screen). Tap to play it. Edit names and descriptions in place.';
+        : 'Drag a level to move it (hold it first on a touch screen). Click to edit it. Edit names and descriptions in place.';
   }
 
   /** Pick a Library puzzle to add to the end of pack `pi`. */
@@ -433,7 +433,7 @@ export class PacksView {
     clearTimeout(d.timer);
     cancelAnimationFrame(this.scrollFrame);
     if (!d.ghost) {
-      // A tap (not a drag): play the level.
+      // A tap (not a drag): open the level in the editor.
       if (up) this.onOpen?.(d.tile.dataset.code!);
       return;
     }

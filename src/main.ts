@@ -51,7 +51,7 @@ const packs = import.meta.env.DEV ? new PacksView(storage) : null;
 views.append(play.el, editor.el, library.el);
 if (packs) {
   views.append(packs.el);
-  packs.onOpen = (code) => loadPuzzle(decodePuzzle(code));
+  packs.onOpen = (code) => loadPuzzle(decodePuzzle(code), {}, 'edit');
 }
 play.setAutoCheck(settings.autoCheck);
 
