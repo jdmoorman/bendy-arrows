@@ -52,6 +52,8 @@ export class PacksView {
   private ratings = new Map<string, PackRating | null>();
   /** Levels sent to the solver and not back yet. */
   private solving = new Set<string>();
+  /** Highlighted levels, kept in this browser: for marking benchmarks while ordering. */
+  private marks: Set<string>;
   /** The tile whose hint journey is playing (while the mouse is over it), and its next step. */
   private playing: { tile: HTMLElement; timer: number; off: () => void } | null = null;
   private worker: Worker | null = null;
@@ -70,6 +72,7 @@ export class PacksView {
   private scrollFrame = 0;
 
   constructor(private storage: Storage) {
+    this.marks = storage.loadPackMarks();
     this.el = el('section', 'view packs-view hidden');
     this.el.innerHTML = `
       <div class="packs-top">
@@ -230,8 +233,27 @@ export class PacksView {
       this.update();
     });
     t.append(remove);
+    // A highlight to toggle, for marking benchmarks while ordering.
+    const mark = el('button', 'pack-tile-mark');
+    mark.setAttribute('aria-label', 'Highlight');
+    mark.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+    mark.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.marks.has(code) ? this.marks.delete(code) : this.marks.add(code);
+      this.storage.savePackMarks(this.marks);
+      this.showMark(t);
+    });
+    t.append(mark);
+    this.showMark(t);
     this.drawTile(t);
     return t;
+  }
+
+  /** A tile's highlight, as toggled. */
+  private showMark(t: HTMLElement) {
+    const on = this.marks.has(t.dataset.code!);
+    t.classList.toggle('marked', on);
+    t.querySelector('.pack-tile-mark')!.setAttribute('aria-pressed', String(on));
   }
 
   /** A tile's board: solved once its solution is known, plain until then. */

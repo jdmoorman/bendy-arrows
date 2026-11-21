@@ -45,6 +45,7 @@ const TABLE_KEY = 'bendyarrows.libtable.v1';
 const RATINGS_KEY = 'bendyarrows.ratings.v1';
 const SHOW_SOLUTION_KEY = 'bendyarrows.showsolution.v1';
 const PLAYER_KEY = 'bendyarrows.player.v1';
+const PACK_MARKS_KEY = 'bendyarrows.packmarks.v1';
 
 /** Per-device display preferences. */
 export interface Settings {
@@ -234,6 +235,16 @@ export class Storage {
 
   saveLibraryTable(state: TableState): void {
     this.write(TABLE_KEY, state);
+  }
+
+  /** The Packs tab's highlighted levels, by code. */
+  loadPackMarks(): Set<string> {
+    const m = this.read<unknown>(PACK_MARKS_KEY, []);
+    return new Set(Array.isArray(m) ? m.filter((x): x is string => typeof x === 'string') : []);
+  }
+
+  savePackMarks(marks: Set<string>): void {
+    this.write(PACK_MARKS_KEY, [...marks]);
   }
 
   /** Whether the editor overlays the solution (or every line any solution uses). */

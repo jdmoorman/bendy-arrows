@@ -1581,6 +1581,34 @@ a.btn {
   width: 100%;
   height: 100%;
 }
+/* A highlight a level can be marked with (toggled by the dot in its top-left corner, shown
+   on hover and while on). */
+.pack-tile.marked {
+  background: rgb(245 158 11 / 0.22);
+  border-color: rgb(217 119 6);
+}
+.pack-tile-mark {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 2px solid rgb(217 119 6);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0;
+}
+.pack-tile-mark[aria-pressed='true'] {
+  background: rgb(217 119 6);
+  opacity: 1;
+}
+.pack-tile:hover .pack-tile-mark,
+.pack-tile:focus-visible .pack-tile-mark,
+.pack-tile:has(:focus-visible) .pack-tile-mark {
+  opacity: 1;
+}
 /* Only shown on the tile under the mouse (the Packs tab is used from a computer). */
 .pack-tile-remove {
   position: absolute;
@@ -1598,8 +1626,10 @@ a.btn {
   cursor: pointer;
   opacity: 0;
 }
+/* (Keyboard focus shows them too; a click's focus doesn't, so they hide once the mouse leaves.) */
 .pack-tile:hover .pack-tile-remove,
-.pack-tile:focus-within .pack-tile-remove {
+.pack-tile:focus-visible .pack-tile-remove,
+.pack-tile:has(:focus-visible) .pack-tile-remove {
   opacity: 1;
 }
 .pack-tile-remove:hover {
