@@ -358,7 +358,6 @@ const frameOf = (kind: 'easy' | 'hint', s: LogicState, d?: Deduction): JourneyFr
   ...(d ? { rule: d.rule, focus: d.cells ?? [d.cell] } : {}),
 });
 
-
 /**
  * What solving is like for a player who applies the easy rules until they get stuck, then
  * asks for a hint, and repeats: the hints they'd need, in order, and whether that finishes
@@ -516,18 +515,63 @@ export function strokeFrom(p: Puzzle, segments: Set<number>): { tiles: number[];
 
 /**
  * One-shot mode's hint: the simplest deduction (with `rules`) that forces the stroke's next
- * line out of `head`, from the stroke alone (its lines, no X marks).
+ * line out of `head`, from the stroke and the X marks `xs` (no lines off the stroke). Where no
+ * rule draws that line yet, the hint is an X-mark move that leads to it: with the simplest
+ * rules first (then one more rule at a time), rule out borders until a rule draws the line, and
+ * give the first X marks that line relies on, as in "No early finish rules out going up" (and
+ * a follow-up hint: "so Continue goes right"). An easy rule's X marks beat a harder rule's line.
  */
-export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opts: LogicOptions = {}, rules: Iterable<RuleId> = HINT_ORDER): Hint {
-  const state: LogicState = { segments: stroke, xs: new Set() };
+export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opts: LogicOptions = {}, rules: Iterable<RuleId> = HINT_ORDER, xs: Set<number> = new Set()): Hint {
+  const base: LogicState = { segments: stroke, xs };
   const allowed = new Set(rules);
   const order = HINT_ORDER_ALL.filter((r) => allowed.has(r));
-  const an = analyse(p, state, new Set(order), opts);
-  if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
-  if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
+  const all = analyse(p, base, new Set(order), opts);
+  if (all.kind === 'contradiction') return { kind: 'mistake', cell: all.cell, cells: all.cells, text: all.hint };
+  if (all.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
   const next = (d: Deduction) => d.segments.find((e) => !stroke.has(e) && edgeCells(p, e).includes(head));
-  const d = simplest(an.deductions.filter((x) => next(x) !== undefined), order);
+  // The simplest rules first: with each, a line straight away, or else after X marks.
+  let found: Deduction | undefined;
+  // The X-mark deductions of each round, in order.
+  let crossed: Deduction[][] = [];
+  for (let k = 1; !found && k <= order.length; k++) {
+    const use = new Set(order.slice(0, k));
+    let state = base;
+    crossed = [];
+    for (let round = 0; !found && round <= edgeCount(p); round++) {
+      const an = round === 0 && k === order.length ? all : analyse(p, state, use, opts);
+      if (an.kind !== 'open') break;
+      found = simplest(an.deductions.filter((x) => next(x) !== undefined), order);
+      if (found) break;
+      const fresh = an.deductions.filter((x) => x.xs.some((e) => !state.xs.has(e)));
+      if (!fresh.length) break;
+      crossed.push(fresh);
+      state = { segments: stroke, xs: new Set([...state.xs, ...fresh.flatMap((x) => x.xs)]) };
+    }
+  }
+  const d = found;
   if (!d) return { kind: 'none', text: 'The rules can’t tell where the stroke goes next from here.' };
+  if (crossed.length) {
+    // X marks first: the line relies on those on the borders of the tiles it's about (its
+    // area, or its tile) or beside the head, and they on others in turn. Each X is put down by
+    // the simplest deduction of the earliest round that found it; the hint is the first of them.
+    const roundOf = new Map<number, number>();
+    crossed.forEach((ds, i) => ds.forEach((x) => x.xs.forEach((e) => roundOf.has(e) || roundOf.set(e, i))));
+    const touching = (x: Deduction) => [...(x.cells ?? [x.cell]), x === d ? head : x.cell].flatMap((c) => cellEdges(p, c));
+    const used = new Set<Deduction>();
+    const todo = touching(d);
+    const seen = new Set<number>();
+    while (todo.length) {
+      const e = todo.pop()!;
+      if (seen.has(e) || !roundOf.has(e)) continue;
+      seen.add(e);
+      const by = simplest(crossed[roundOf.get(e)!].filter((x) => x.xs.includes(e)), order)!;
+      if (used.has(by)) continue;
+      used.add(by);
+      for (const f of touching(by)) if (!by.xs.includes(f)) todo.push(f);
+    }
+    const first = simplest(crossed[0].filter((x) => used.has(x)), order) ?? simplest(crossed[0], order)!;
+    return { kind: 'deduction', deduction: { ...first, segments: [], xs: first.xs.filter((e) => !xs.has(e)) }, text: explain(p, base, first) };
+  }
   // Show only the lines that carry the stroke on, one after another from its tip (a corner's
   // two lines, say); the rule may force others elsewhere too.
   const chain = [next(d)!];
@@ -538,7 +582,7 @@ export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opt
     chain.push(e);
     tip = edgeCells(p, e).find((c) => c !== tip)!;
   }
-  return { kind: 'deduction', deduction: { ...d, segments: chain, xs: [] }, text: explain(p, state, d) };
+  return { kind: 'deduction', deduction: { ...d, segments: chain, xs: [] }, text: explain(p, base, d) };
 }
 
 /**
@@ -548,12 +592,15 @@ export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opt
 export function runStroke(p: Puzzle, rules: Iterable<RuleId>, start: LogicState = { segments: new Set(), xs: new Set() }, opts: LogicOptions = {}): LogicRun {
   const chosen = [...rules];
   let { tiles, lines } = strokeFrom(p, start.segments);
-  for (let rounds = 0; rounds <= edgeCount(p); rounds++) {
-    const state = { segments: lines, xs: new Set<number>() };
-    const h = findStrokeHint(p, lines, tiles[tiles.length - 1], opts, chosen);
+  let xs = new Set(start.xs);
+  // Each round adds a line or an X.
+  for (let rounds = 0; rounds <= 2 * edgeCount(p); rounds++) {
+    const state = { segments: lines, xs };
+    const h = findStrokeHint(p, lines, tiles[tiles.length - 1], opts, chosen, xs);
     if (h.kind === 'solved') return { state, rounds, solved: true };
     if (h.kind === 'mistake') return { state, rounds, solved: false, contradiction: { cell: h.cell, cells: h.cells, reason: 'The stroke can’t be finished.', hint: h.text } };
     if (h.kind !== 'deduction') return { state, rounds, solved: false };
+    if (h.deduction.xs.length) xs = new Set([...xs, ...h.deduction.xs]);
     ({ tiles, lines } = strokeFrom(p, new Set([...lines, ...h.deduction.segments])));
   }
   return { state: { segments: lines, xs: new Set() }, rounds: edgeCount(p), solved: false };
@@ -567,20 +614,20 @@ export function strokeJourney(p: Puzzle, opts: LogicOptions = {}, watch?: Journe
   const easy = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
   const steps: HintStep[] = [];
   let state: LogicState = { segments: new Set(), xs: new Set() };
-  for (let i = 0; i <= edgeCount(p); i++) {
+  for (let i = 0; i <= 2 * edgeCount(p); i++) {
     const run = runStroke(p, easy, state, opts);
-    if (watch && run.state.segments.size > state.segments.size) watch(frameOf('easy', run.state));
+    if (watch && run.state.segments.size + run.state.xs.size > state.segments.size + state.xs.size) watch(frameOf('easy', run.state));
     state = run.state;
     if (run.solved) return { steps, outcome: 'solved' };
     if (run.contradiction) return { steps, outcome: 'stuck' };
     const { tiles, lines } = strokeFrom(p, state.segments);
-    const h = findStrokeHint(p, lines, tiles[tiles.length - 1], opts);
+    const h = findStrokeHint(p, lines, tiles[tiles.length - 1], opts, HINT_ORDER, state.xs);
     if (h.kind === 'solved') return { steps, outcome: 'solved' };
     if (h.kind !== 'deduction') return { steps, outcome: 'stuck' };
     const d = h.deduction;
     const areaRule = d.rule === 'balance' || d.rule === 'imbalance' || d.rule === 'bottlenecks';
     steps.push(areaRule && d.cells ? { rule: d.rule, area: d.cells.length } : { rule: d.rule });
-    state = { segments: new Set([...lines, ...d.segments]), xs: new Set() };
+    state = { segments: new Set([...lines, ...d.segments]), xs: new Set([...state.xs, ...d.xs]) };
     watch?.(frameOf('hint', state, d));
   }
   return { steps, outcome: 'stuck' };
@@ -986,7 +1033,8 @@ function areaRules(
   const wantSatisfied = use.has('chains') && colours.size > 0;
   const satisfied: { cells: number[]; lines: number[] }[] = [];
   const balance = (area: number[]): Contradiction | null => {
-    if (area.length < 2 || area.length >= cells.length || area.length > balanceMaxArea) return null;
+    // Areas of half the grid or more are too big to take in at a glance: never used.
+    if (area.length < 2 || area.length >= cells.length || area.length > balanceMaxArea || 2 * area.length >= p.w * p.h) return null;
     let diff = 0;
     for (const c of area) diff += shaded(c) ? 1 : -1;
     // Balanced areas (as many shaded tiles as white) and unbalanced ones are separate rules.

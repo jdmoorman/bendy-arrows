@@ -431,9 +431,9 @@ export class PlayView {
       }
     }
     if (this.strokeMode) {
-      // The next line of the stroke, from the stroke alone.
+      // The next line of the stroke (or X marks that lead to it), from the stroke and the X marks.
       const { tiles, lines } = strokeFrom(this.puzzle, this.segments);
-      this.shownHint = findStrokeHint(this.puzzle, lines, tiles[tiles.length - 1]);
+      this.shownHint = findStrokeHint(this.puzzle, lines, tiles[tiles.length - 1], {}, undefined, this.xMarks);
     } else {
       this.shownHint = findHint(this.puzzle, { segments: this.segments, xs: this.xMarks });
     }

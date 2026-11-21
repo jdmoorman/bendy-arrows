@@ -268,7 +268,7 @@ export class EditorView {
     // one-shot, the next lines of the stroke from the entrance).
     const stroke = isOneShot(p) ? strokeFrom(p, this.logic.segments) : null;
     const hint = stroke
-      ? findStrokeHint(p, stroke.lines, stroke.tiles[stroke.tiles.length - 1], this.logicOpts, this.logicRules)
+      ? findStrokeHint(p, stroke.lines, stroke.tiles[stroke.tiles.length - 1], this.logicOpts, this.logicRules, this.logic.xs)
       : findHint(p, this.logic, this.logicRules, this.logicOpts);
     this.logicFresh = new Set();
     this.logicFocus = new Set();
@@ -290,7 +290,7 @@ export class EditorView {
     }
     const d = hint.deduction;
     this.logicHistory.push({ logic: this.logic, steps: this.logicSteps });
-    this.logic = applyStep(stroke ? { segments: stroke.lines, xs: new Set() } : this.logic, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
+    this.logic = applyStep(stroke ? { segments: stroke.lines, xs: this.logic.xs } : this.logic, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
     this.logicFresh = new Set([...d.segments, ...d.xs]);
     this.logicFocus = new Set(d.cells ?? [d.cell]);
     this.logicSteps++;

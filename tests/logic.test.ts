@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { ALL_RULES, applyStep, BASIC_RULES, deductions, logicStep, type LogicState, type RuleId } from '../src/logic';
+import { ALL_RULES, applyStep, BASIC_RULES, deductions, logicStep, strokeFrom, type LogicState, type RuleId } from '../src/logic';
 import { createPuzzle, edgeBetween, edgeCount, endpointCells, isUsableEdge, portEnd, portId, type Puzzle } from '../src/model';
 import { solve } from '../src/solver';
 import { endsBottomRight, pathEdges } from './helpers';
@@ -444,6 +444,24 @@ describe('searchMetrics', async () => {
 
 describe('findStrokeHint', async () => {
   const { findStrokeHint } = await import('../src/logic');
+  test('an X mark from an easy rule can lead to the next line: a No early finish hint, then Continue', () => {
+    // 6×6, tail at row 5 on the left, head just above it; the tile below the tail is black.
+    // Going up would join the ends early, so the only way on is right.
+    const p = decodePuzzle('Bil7VRR8ig');
+    const st = strokeFrom(p, new Set());
+    const h = findStrokeHint(p, st.lines, st.tiles[0]);
+    expect(h.kind).toBe('deduction');
+    if (h.kind !== 'deduction') return;
+    expect(h.deduction.rule).toBe('noFinish');
+    expect(h.deduction.segments).toEqual([]);
+    expect(h.deduction.xs.length).toBe(1);
+    const h2 = findStrokeHint(p, st.lines, st.tiles[0], {}, undefined, new Set(h.deduction.xs));
+    expect(h2.kind).toBe('deduction');
+    if (h2.kind !== 'deduction') return;
+    expect(h2.deduction.rule).toBe('continue');
+    const [a, b] = edgeCells(p, h2.deduction.segments[0]);
+    expect(b - a).toBe(1); // to the right
+  });
   const { decodePuzzle } = await import('../src/codec');
   const { edgeCells, openCells, portCell } = await import('../src/model');
   const { checkSolution } = await import('../src/rules');
@@ -498,7 +516,7 @@ describe('one-shot logic', async () => {
   });
 
   test('One-Shot: hard levels need hints for the stroke, and the hints finish it', () => {
-    for (const p of pack('One-Shot: hard').slice(0, 3)) {
+    for (const p of pack('One-Shot: hard')) {
       expect(runStroke(p, easy).solved).toBe(false);
       const j = strokeJourney(p);
       expect(j.outcome).toBe('solved');
