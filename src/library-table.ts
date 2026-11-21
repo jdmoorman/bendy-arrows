@@ -1,5 +1,5 @@
-import { decodePuzzle } from './codec';
-import { openCells, type Puzzle } from './model';
+import { decodePuzzle, encodePuzzle } from './codec';
+import { endVariants, openCells, type Puzzle } from './model';
 import { levelName, PACKS } from './levels';
 import type { LibraryEntry, Storage } from './storage';
 import { symmetryOf } from './symmetry';
@@ -13,7 +13,10 @@ export interface LibRow {
   puzzle: Puzzle;
   /** The saved entry, for your own puzzles. */
   entry?: LibraryEntry;
+  /** Where the puzzle came from (Yours, an imported set, or the level packs): it never changes. */
   collection: string;
+  /** The level pack it's a level of, if any: a saved puzzle gains one when added to a pack and loses it when taken out. */
+  pack?: string;
   /** Undefined while not checked yet. */
   unique?: boolean;
   /** Hints a player alternating easy rules and hints needs (undefined while not worked out, null if not unique). */
@@ -55,8 +58,13 @@ export interface Rating {
   effort?: number | null;
 }
 
+/** The Pack column's value for a puzzle in no pack. */
+export const NO_PACK = 'None';
+
 export const COLLECTIONS = {
   yours: 'Yours',
+  /** The official levels themselves (the Pack column tells which pack). */
+  levels: 'Level packs',
 };
 
 
@@ -95,6 +103,21 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
       status: (solved ? 'Solved' : saved?.progress?.segments.length ? 'In progress' : 'New') as LibRow['status'],
     };
   };
+  // A saved puzzle that became a pack level (turned, mirrored, its corner arrows moved or made a
+  // one-shot on the way, as the Packs tab does) shows that pack in the Pack column.
+  const packOf = new Map<string, string>();
+  for (const pack of PACKS) {
+    for (const code of pack.levels) {
+      try {
+        for (const q of endVariants(decodePuzzle(code))) {
+          packOf.set(encodePuzzle(q), pack.name);
+          packOf.set(encodePuzzle({ ...q, oneShot: undefined }), pack.name);
+        }
+      } catch {
+        /* an unreadable level is skipped below too */
+      }
+    }
+  }
   for (const e of storage.list()) {
     let f;
     try {
@@ -103,9 +126,9 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
       continue;
     }
     const r = ratings[e.code];
-    rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: e.collection ?? COLLECTIONS.yours, ...f, unique: r?.unique, ...hintsOf(r), ...play(e.code, e), added: e.created });
+    rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: e.collection ?? COLLECTIONS.yours, pack: packOf.get(e.code), ...f, unique: r?.unique, ...hintsOf(r), ...play(e.code, e), added: e.created });
   }
-  // The official level packs, shipped to everyone: each pack is a collection.
+  // The official level packs, shipped to everyone: one collection, each level with its pack.
   PACKS.forEach((pack, pi) =>
     pack.levels.forEach((code, li) => {
       let f;
@@ -116,7 +139,7 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
       }
       const saved = storage.findByCode(code);
       const r = ratings[code];
-      rows.push({ key: `level:${pi}:${li}`, name: levelName({ pack: pi, level: li }), code, collection: pack.name, ...f, unique: r?.unique, ...hintsOf(r), ...play(code, saved) });
+      rows.push({ key: `level:${pi}:${li}`, name: levelName({ pack: pi, level: li }), code, collection: COLLECTIONS.levels, pack: pack.name, ...f, unique: r?.unique, ...hintsOf(r), ...play(code, saved) });
     }),
   );
   return rows;
@@ -142,7 +165,16 @@ export interface Column {
 const yesNo = (b: boolean | undefined) => (b === undefined ? null : b ? 'Yes' : 'No');
 
 export const COLUMNS: Column[] = [
-  { key: 'collection', label: 'Collection', kind: 'choice', value: (r) => r.collection, choices: [COLLECTIONS.yours, ...PACKS.map((p) => p.name)] },
+  { key: 'collection', label: 'Collection', kind: 'choice', value: (r) => r.collection, choices: [COLLECTIONS.yours, COLLECTIONS.levels] },
+  {
+    key: 'pack',
+    label: 'Pack',
+    kind: 'choice',
+    // "None" (no pack) is a value too, so the filter can keep puzzles outside the packs.
+    value: (r) => r.pack ?? NO_PACK,
+    show: (r) => r.pack ?? '—',
+    choices: [NO_PACK, ...PACKS.map((p) => p.name)],
+  },
   {
     key: 'hints',
     label: 'Hint steps',

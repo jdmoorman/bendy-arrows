@@ -808,6 +808,20 @@ a.btn {
   color: var(--accent);
 }
 /* The column's filter, beside its name: faint until a filter is on. */
+/* Import: name the collection the file's puzzles go into. */
+.lib-import .field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lib-import-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.lib-import-note.error {
+  color: var(--error);
+}
 .lib-filter-btn {
   appearance: none;
   border: 0;

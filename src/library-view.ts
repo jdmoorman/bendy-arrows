@@ -1,6 +1,8 @@
+import { PACKS } from './levels';
 import { decodePuzzle } from './codec';
 import { ICONS } from './icons';
 import {
+  COLLECTIONS,
   applyTable,
   choicesFor,
   COLUMNS,
@@ -70,6 +72,16 @@ export class LibraryView {
       sort: saved.sort && columnByKey(saved.sort.key) ? saved.sort : null,
       columns: Array.isArray(saved.columns) ? saved.columns.filter((k) => columnByKey(k)) : DEFAULT_TABLE_STATE.columns,
     };
+    // Packs used to be collections of their own: a Collection filter naming packs becomes
+    // Level packs, with those packs chosen in the Pack filter.
+    const cf = this.state.filters.collection;
+    if (cf && 'values' in cf) {
+      const packs = cf.values.filter((v) => PACKS.some((p) => p.name === v));
+      if (packs.length) {
+        this.state.filters.collection = { values: [...new Set([...cf.values.filter((v) => !packs.includes(v)), COLLECTIONS.levels])] };
+        this.state.filters.pack = { values: packs };
+      }
+    }
     this.ratings = storage.loadRatings();
 
     this.el = el('div', 'view library-view hidden');
@@ -88,7 +100,9 @@ export class LibraryView {
       this.changed();
     });
     this.filterBtn = el('button', 'btn', '');
-    this.filterBtn.addEventListener('click', () => this.openFilters(this.hiddenColumns(), 'Filters for hidden columns'));
+    // Columns are filtered from their headers. A filter left on a column that's since been hidden
+    // still applies, so this button (shown only then) lists those filters to change or clear.
+    this.filterBtn.addEventListener('click', () => this.openFilters(this.hiddenFiltered(), 'Filters on hidden columns'));
     controls.append(this.search, this.filterBtn);
     this.count = el('p', 'lib-count');
     // One toggle per column, in a row that scrolls sideways, just above the table.
@@ -120,8 +134,8 @@ export class LibraryView {
     file.addEventListener('change', async () => {
       const f = file.files?.[0];
       file.value = '';
-      // The puzzles become a set named after the file, to filter by in the Collection column.
-      if (f) this.importText(await f.text(), f.name.replace(/\.[^.]*$/, '').trim() || 'Imported');
+      // The puzzles become a collection, named by you (the file's name to start with).
+      if (f) this.openImportSheet(await f.text(), f.name.replace(/\.[^.]*$/, '').trim() || 'Imported');
     });
     const imp = el('button', 'btn', `${ICONS.library}<span>Import</span>`);
     imp.title = 'Add the puzzles from a text file of links';
@@ -130,41 +144,78 @@ export class LibraryView {
     return row;
   }
 
+  /** Ask what to call the collection the file's puzzles go into, then import them. */
+  private openImportSheet(text: string, suggested: string) {
+    const { puzzles, bad } = parseImport(text);
+    if (!puzzles.length) {
+      toast(bad ? `No puzzles found: ${bad} line${bad === 1 ? '' : 's'} not understood.` : 'No puzzles found in that file.', 'error');
+      return;
+    }
+    const body = el('form', 'sheet-stack lib-import');
+    const label = el('label', 'field-label', 'Collection name');
+    const name = el('input', 'text-input') as HTMLInputElement;
+    name.value = suggested;
+    name.required = true;
+    name.setAttribute('aria-label', 'Collection name');
+    // An existing collection's name adds the puzzles to it.
+    const sets = [...new Set(this.storage.list().flatMap((e) => (e.collection ? [e.collection] : [])))].sort((a, b) => a.localeCompare(b));
+    const list = el('datalist');
+    list.id = `import-sets-${Date.now()}`;
+    for (const s of sets) list.append(Object.assign(el('option'), { value: s }));
+    name.setAttribute('list', list.id);
+    label.append(name, list);
+    const note = el('p', 'lib-import-note', `${puzzles.length} puzzle${puzzles.length === 1 ? '' : 's'} to import${sets.length ? '; use an existing collection’s name to add them to it' : ''}.`);
+    const go = el('button', 'btn primary', '<span>Import</span>');
+    go.type = 'submit';
+    const check = () => {
+      const n = name.value.trim();
+      const reserved = n === COLLECTIONS.yours || n === COLLECTIONS.levels;
+      go.disabled = !n || reserved;
+      note.classList.toggle('error', reserved);
+      if (reserved) note.textContent = `“${n}” is taken: pick another name.`;
+      else note.textContent = `${puzzles.length} puzzle${puzzles.length === 1 ? '' : 's'} to import${sets.includes(n) ? `, added to the collection “${n}”` : sets.length ? '; use an existing collection’s name to add them to it' : ''}.`;
+    };
+    name.addEventListener('input', check);
+    check();
+    body.append(label, note, go);
+    const sheet = openSheet('Import puzzles', body);
+    body.addEventListener('submit', (ev) => {
+      ev.preventDefault();
+      if (go.disabled) return;
+      sheet.close();
+      this.importText(text, name.value.trim());
+    });
+    name.focus();
+    name.select();
+  }
+
+  /**
+   * Add the puzzles to the collection, as new copies even if you have them elsewhere (you may
+   * have lost track of those); only a puzzle the collection already holds is skipped.
+   */
   private importText(text: string, collection: string) {
     const { puzzles, bad } = parseImport(text);
-    const have = new Map<string, LibraryEntry[]>();
-    for (const e of this.storage.list()) have.set(e.code, [...(have.get(e.code) ?? []), e]);
+    const inSet = new Set(this.storage.list().filter((e) => e.collection === collection).map((e) => e.code));
     let added = 0;
-    let tagged = 0;
     let failed = false;
     const now = Date.now();
     for (const { code, name } of puzzles) {
-      const copies = have.get(code);
-      if (copies) {
-        // Already saved: it joins the set too, unless it came in with another one, or the set
-        // already has it (a copy saved as new from the set's puzzle stays out).
-        const loose = copies.find((e) => !e.collection);
-        if (loose && !copies.some((e) => e.collection === collection) && this.storage.put({ ...loose, collection })) {
-          have.set(code, [...copies.filter((e) => e !== loose), { ...loose, collection }]);
-          tagged++;
-        }
-        continue;
-      }
+      if (inSet.has(code)) continue;
       const entry: LibraryEntry = { id: newId(), name: name ?? defaultName(decodePuzzle(code)), code, created: now + added, updated: now + added, collection };
-      have.set(code, [entry]);
       if (!this.storage.put(entry)) {
         failed = true;
         break;
       }
+      inSet.add(code);
       added++;
     }
     const skipped = puzzles.length - added;
     const parts = [`Imported ${added} puzzle${added === 1 ? '' : 's'}`];
-    if (skipped && !failed) parts.push(`${skipped} already saved${tagged ? ` (${tagged} added to the set)` : ''}`);
+    if (skipped && !failed) parts.push(`${skipped} already in this collection`);
     if (bad) parts.push(`${bad} line${bad === 1 ? '' : 's'} not understood`);
     if (failed) parts.push('storage is full');
-    toast(`${parts.join(', ')}.${added || tagged ? ` Collection: “${collection}”.` : ''}`, failed || (!added && bad > 0) ? 'error' : '');
-    if (added || tagged) {
+    toast(`${parts.join(', ')}.${added ? ` Collection: “${collection}”.` : ''}`, failed || (!added && bad > 0) ? 'error' : '');
+    if (added) {
       // A Collection filter that leaves the set out would hide what was just imported: add it.
       const f = this.state.filters.collection;
       if (f && 'values' in f && f.values.length && !f.values.includes(collection)) {
@@ -193,6 +244,11 @@ export class LibraryView {
     return COLUMNS.filter((c) => !this.state.columns.includes(c.key));
   }
 
+  /** Hidden columns that still have a filter on. */
+  private hiddenFiltered(): Column[] {
+    return this.hiddenColumns().filter((c) => filterActive(this.state.filters[c.key]));
+  }
+
   private visibleColumns(): Column[] {
     return COLUMNS.filter((c) => this.state.columns.includes(c.key));
   }
@@ -201,12 +257,11 @@ export class LibraryView {
     const shown = applyTable(this.rows, this.state);
     const active = Object.values(this.state.filters).filter(filterActive).length;
     // The Filters button holds the filters of hidden columns (shown ones filter from their header).
-    const hiddenCols = this.hiddenColumns();
-    const hiddenActive = hiddenCols.filter((c) => filterActive(this.state.filters[c.key])).length;
-    this.filterBtn.innerHTML = `<span>Filters${hiddenActive ? ` (${hiddenActive})` : ''}</span>`;
-    this.filterBtn.title = 'Filters for columns that are hidden';
+    const hiddenActive = this.hiddenFiltered().length;
+    this.filterBtn.innerHTML = `<span>Hidden filters (${hiddenActive})</span>`;
+    this.filterBtn.title = 'Filters still on columns that are hidden';
     this.filterBtn.classList.toggle('active', hiddenActive > 0);
-    this.filterBtn.hidden = hiddenCols.length === 0;
+    this.filterBtn.classList.toggle('hidden', hiddenActive === 0);
     const narrowed = active > 0 || this.state.search.trim() !== '';
     this.count.replaceChildren(`${shown.length === this.rows.length ? 'All' : `${shown.length} of`} ${this.rows.length} puzzles`);
     if (narrowed) {
@@ -222,7 +277,8 @@ export class LibraryView {
       if (shown.length) {
         const exp = el('button', 'link-btn', `Export ${shown.length} shown`);
         exp.addEventListener('click', () => {
-          const sets = [...new Set(shown.map((r) => r.collection))];
+          // Named after the one pack or collection shown, if there's just one.
+          const sets = [...new Set(shown.map((r) => r.pack ?? r.collection))];
           const base = sets.length === 1 ? sets[0].replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase() : 'bendy-arrows-pack';
           downloadText(`${base || 'bendy-arrows-pack'}-${dateKey()}.txt`, packText(shown, location.href));
           toast(`Exported ${shown.length} puzzle${shown.length === 1 ? '' : 's'}.`);
@@ -365,7 +421,7 @@ export class LibraryView {
         draw();
       });
       body.append(clear);
-      if (!columns.length) body.append(el('p', 'field-label', 'Every column is showing: filter from the column headers.'));
+      if (!columns.length) body.append(el('p', 'field-label', 'No filters left on hidden columns: filter from the column headers.'));
       for (const c of columns) {
         const field = el('div', 'lib-filter');
         if (columns.length > 1) field.append(el('p', 'field-label', c.label));
