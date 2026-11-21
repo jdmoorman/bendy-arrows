@@ -26,6 +26,8 @@ export interface LevelPack {
 
 /** Every pack has at least this many levels. */
 export const MIN_PACK_LEVELS = 10;
+/** A soft target: a pack's size is best a multiple of this (the Packs tab nudges, nothing enforces it). */
+export const PACK_SIZE_STEP = 5;
 
 export const PACKS: LevelPack[] = [
   {

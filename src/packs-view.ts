@@ -1,7 +1,7 @@
 import { decodePuzzle, encodePuzzle } from './codec';
-import { MIN_PACK_LEVELS, PACKS } from './levels';
-import type { PacksMessage, PacksRequest } from './packs.worker';
-import { pathKey, transformPuzzle } from './model';
+import { MIN_PACK_LEVELS, PACK_SIZE_STEP, PACKS } from './levels';
+import type { PackRating, PacksMessage, PacksRequest } from './packs.worker';
+import { orientTail, pathKey, tailLeftLow, transformPuzzle } from './model';
 import { padFor, renderBoard } from './render';
 import type { Storage } from './storage';
 import { ICONS } from './icons';
@@ -10,7 +10,7 @@ import { el, openSheet, toast } from './ui';
 /** Why a level's shape can't be a level (phones are held upright), or '' if it's fine. */
 function shapeProblem(code: string): string {
   const p = decodePuzzle(code);
-  return p.w > p.h ? 'wider than tall' : p.h > 2 * p.w ? 'too tall' : '';
+  return p.w > p.h ? 'wider than tall' : p.h > 2 * p.w ? 'too tall' : !tailLeftLow(p) ? 'tail not low on the left' : '';
 }
 
 /** Hold this long (ms) on a touch screen before a level picks up, so a swipe still scrolls. */
@@ -43,6 +43,8 @@ export class PacksView {
   private descriptions: string[] = PACKS.map((p) => p.description);
   /** Each level's solution once solved (none if it has none), and whether it's the only one. */
   private solutions = new Map<string, { lines: Set<number> | null; unique: boolean }>();
+  /** Hint steps, worked out after the solutions (null if not unique). */
+  private ratings = new Map<string, PackRating | null>();
   /** Levels sent to the solver and not back yet. */
   private solving = new Set<string>();
   private worker: Worker | null = null;
@@ -102,9 +104,13 @@ export class PacksView {
     if (!this.worker) {
       this.worker = new Worker(new URL('./packs.worker.ts', import.meta.url), { type: 'module' });
       this.worker.onmessage = (ev: MessageEvent<PacksMessage>) => {
-        const { code, segments, unique } = ev.data;
-        this.solving.delete(code);
-        this.solutions.set(code, { lines: segments ? new Set(segments) : null, unique });
+        const m = ev.data;
+        const code = m.code;
+        if (m.kind === 'solved') this.solutions.set(code, { lines: m.segments ? new Set(m.segments) : null, unique: m.unique });
+        else {
+          this.solving.delete(code);
+          this.ratings.set(code, m.rating);
+        }
         for (const t of this.body.querySelectorAll<HTMLElement>(`.pack-tile[data-code="${code}"]`)) this.drawTile(t);
         this.update();
         if (!this.solving.size) {
@@ -127,7 +133,7 @@ export class PacksView {
     if (new Set(names).size !== names.length) return 'Two packs have the same name.';
     if (this.descriptions.some((d) => !d.trim())) return 'Every pack needs a description.';
     const shape = this.order.flat().filter((c) => shapeProblem(c)).length;
-    if (shape) return `${shape === 1 ? 'A level is' : `${shape} levels are`} wider than tall or more than twice as tall as wide.`;
+    if (shape) return `${shape === 1 ? 'A level is' : `${shape} levels are`} wider than tall, more than twice as tall as wide, or with a tail that could be turned onto the left edge or lower.`;
     const notUnique = this.order.flat().filter((c) => this.solutions.get(c)?.unique === false).length;
     if (notUnique) return `${notUnique === 1 ? 'A level has' : `${notUnique} levels have`} more than one solution, or none.`;
     const repeats = this.repeats().size;
@@ -199,7 +205,7 @@ export class PacksView {
         this.onOpen?.(code);
       }
     });
-    t.append(document.createElementNS('http://www.w3.org/2000/svg', 'svg'), el('span', 'pack-tile-label'));
+    t.append(document.createElementNS('http://www.w3.org/2000/svg', 'svg'), el('span', 'pack-tile-label'), el('span', 'pack-tile-rating'));
     // Any level can be taken out of its pack (a saved one leaves src/levels.ts on Save).
     const remove = el('button', 'pack-tile-remove', ICONS.close);
     remove.setAttribute('aria-label', 'Remove this level');
@@ -241,14 +247,24 @@ export class PacksView {
         const bad = shapeProblem(code) || (this.solutions.get(code)?.unique === false ? 'not unique' : repeat ? `same path as ${repeat}` : '');
         label.textContent = `${i + 1} · ${p.w}×${p.h}${bad ? ` · ${bad}` : ''}`;
         t.classList.toggle('bad', !!bad);
+        const r = this.ratings.get(code);
+        t.querySelector('.pack-tile-rating')!.textContent = r
+          ? `${r.hints}${r.stuck ? '+' : ''} hint${r.hints === 1 && !r.stuck ? '' : 's'}`
+          : r === null
+            ? ''
+            : 'counting hints…';
         t.setAttribute('aria-label', `${this.names[pi]} ${i + 1}, ${p.w} by ${p.h}`);
         t.classList.toggle('moved', PACKS[pi].levels[i] !== t.dataset.code);
         t.classList.toggle('added', !PACKS.some((k) => k.levels.includes(t.dataset.code!)));
       });
       const count = grid.parentElement!.querySelector('.pack-count')!;
       const n = tiles.length;
-      count.textContent = `${n} level${n === 1 ? '' : 's'}${n < MIN_PACK_LEVELS ? ` · needs ${MIN_PACK_LEVELS}` : ''}`;
+      // Packs aim for a multiple of PACK_SIZE_STEP levels (a soft target: Save still works).
+      const lo = n - (n % PACK_SIZE_STEP);
+      const aim = n % PACK_SIZE_STEP ? ` · aim for ${[lo, lo + PACK_SIZE_STEP].filter((x) => x >= MIN_PACK_LEVELS).join(' or ')}` : '';
+      count.textContent = `${n} level${n === 1 ? '' : 's'}${n < MIN_PACK_LEVELS ? ` · needs ${MIN_PACK_LEVELS}` : aim}`;
       count.classList.toggle('short', n < MIN_PACK_LEVELS);
+      count.classList.toggle('off-target', n >= MIN_PACK_LEVELS && !!aim);
     }
     const changed = this.changed;
     const problem = this.problem;
@@ -318,13 +334,15 @@ export class PacksView {
   }
 
   /**
-   * A Library puzzle as a level of pack `pi`: turned upright if it's wider than tall, and a
+   * A Library puzzle as a level of pack `pi`: turned upright if it's wider than tall, then
+   * turned or mirrored so its tail is low on the left, and a
    * one-shot exactly when the pack is a One-Shot pack. None if it can't be read.
    */
   private asLevel(code: string, pi: number): string | null {
     try {
       let p = decodePuzzle(code);
       if (p.w > p.h) p = transformPuzzle(p, 'rotateRight');
+      p = orientTail(p);
       if (this.names[pi].startsWith('One-Shot') || PACKS[pi].name.startsWith('One-Shot')) p.oneShot = true;
       else delete p.oneShot;
       return encodePuzzle(p);

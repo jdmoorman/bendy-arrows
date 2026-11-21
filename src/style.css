@@ -1385,6 +1385,9 @@ a.btn {
 .pack-count.short {
   color: var(--error);
 }
+.pack-count.off-target {
+  color: var(--hint-edge);
+}
 .pack-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
@@ -1427,6 +1430,14 @@ a.btn {
   font-size: 0.75rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
+}
+/* Hint steps, under the label. */
+.pack-tile-rating {
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  min-height: 1.2em;
 }
 .pack-tile.moved {
   border-color: var(--accent);
