@@ -371,14 +371,14 @@ export class PacksView {
   /**
    * A Library puzzle as a level of pack `pi`: turned upright if it's wider than tall, then
    * turned or mirrored so its tail is low on the left, and a
-   * one-shot exactly when the pack is named for one-shots. None if it can't be read.
+   * one-shot exactly when the pack is a one-shot pack. None if it can't be read.
    */
   private asLevel(code: string, pi: number): string | null {
     try {
       let p = decodePuzzle(code);
       if (p.w > p.h) p = transformPuzzle(p, 'rotateRight');
       p = orientTail(p);
-      if (/one-shot/i.test(this.names[pi]) || /one-shot/i.test(PACKS[pi].name)) p.oneShot = true;
+      if (PACKS[pi].oneShot) p.oneShot = true;
       else delete p.oneShot;
       return encodePuzzle(p);
     } catch {

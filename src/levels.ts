@@ -22,6 +22,8 @@ export interface LevelPack {
   description: string;
   /** Share codes, in play order. */
   levels: string[];
+  /** Every level is a one-shot (and only such packs hold one-shots). */
+  oneShot?: boolean;
 }
 
 /** Every pack has at least this many levels. */
@@ -48,6 +50,7 @@ export const PACKS: LevelPack[] = [
   },
   {
     name: 'One-Shot Minis',
+    oneShot: true,
     description: 'Try to solve each one in one go, from tail to head, without lifting a finger.',
     levels: [
       'BhC7orA',
@@ -64,6 +67,7 @@ export const PACKS: LevelPack[] = [
   },
   {
     name: 'One-Shot Midis',
+    oneShot: true,
     description: 'Try to solve each one in one go, from tail to head, without lifting a finger.',
     levels: [
       'BiF2Ij7BgA',
@@ -85,6 +89,7 @@ export const PACKS: LevelPack[] = [
   },
   {
     name: 'Tricky One-Shots',
+    oneShot: true,
     description: '.',
     levels: [
       'Bil7XZ_fG7sQ',
@@ -101,9 +106,9 @@ export const PACKS: LevelPack[] = [
       'BjG8kYv9Jk7ojCg',
       'Bin8pYz-YM4s0YRY',
       'BjH9lQrKcxqMIA',
+      'Bim72YnrCIDPG4A',
       'Bjn_LQyLjqgVFwA',
       'BiH2kYn8qhORC4A',
-      'Bim72YnrCIDPG4A',
       'BiH7lYr8TTVGMGA',
       'Bim3JYj-15mJIA',
       'BjH-YQrPEUAB0A',
