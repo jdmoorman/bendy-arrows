@@ -6,6 +6,7 @@ import { attachBoardInput } from './input';
 import { cellEdges, edgeBetween, isOneShot, isUsableEdge, type Puzzle } from './model';
 import { padFor, renderBoard } from './render';
 import { canPlace, checkSolution } from './rules';
+import { toast } from './ui';
 
 export interface Progress {
   segments: number[];
@@ -63,6 +64,8 @@ export class PlayView {
   private startedOnSegment = false;
   /** One-shot mode: the drag has started from a tile of the stroke (and cut it back to there). */
   private strokeDrag: 'none' | 'pending' | 'drawing' = 'none';
+  /** This gesture already said why it can't draw there (one-shot mode), so it says it once. */
+  private strokeWarned = false;
 
   constructor() {
     this.el = document.createElement('section');
@@ -110,6 +113,7 @@ export class PlayView {
         this.dragMode = 'draw';
         this.startedOnSegment = false;
         this.strokeDrag = 'none';
+        this.strokeWarned = false;
       },
       onGestureEnd: () => this.commit(),
       onPathStart: (cell, edge) => {
@@ -227,7 +231,7 @@ export class PlayView {
    * into itself.
    */
   private strokeStep(from: number, to: number): boolean {
-    if (this.strokeDrag === 'none') return false;
+    if (this.strokeDrag === 'none') return this.strokeWarning();
     const s = this.strokeCells();
     if (this.strokeDrag === 'pending') {
       const i = s.indexOf(from);
@@ -236,13 +240,22 @@ export class PlayView {
       s.length = i + 1;
       this.strokeDrag = 'drawing';
     }
-    if (s[s.length - 1] !== from) return false;
+    if (s[s.length - 1] !== from) return this.strokeWarning();
     if (s.length > 1 && to === s[s.length - 2]) {
       this.cutStroke(s, s.length - 2);
       return true;
     }
     if (s.includes(to)) return false;
     return this.step(from, to);
+  }
+
+  /** A drag that can't draw in a one-shot (not from the stroke's tip): say how to draw, once per gesture. */
+  private strokeWarning(): false {
+    if (!this.strokeWarned) {
+      this.strokeWarned = true;
+      toast('This is a one-shot level: draw from the tail to the head in one stroke, carrying on from the end of your line.');
+    }
+    return false;
   }
 
   /** Whether mistakes are highlighted as the player draws. */
