@@ -15,12 +15,13 @@ import {
   endsEqual,
   isOneShot,
   type End,
-  resizePuzzle,
+  deleteLine,
+  insertLine,
   transformPuzzle,
   type Transform,
   type Puzzle,
 } from './model';
-import { padFor, renderBoard } from './render';
+import { CELL, padFor, renderBoard } from './render';
 import { missingEnds } from './rules';
 import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, findStrokeHint, IMBALANCE_RULE, RULES, runLogic, runStroke, strokeFrom, type AreaSource, type LogicOptions, type LogicState, type RuleId, type RuleInfo } from './logic';
 import type { LogicReply, LogicRequest } from './logic.worker';
@@ -106,13 +107,17 @@ export class EditorView {
   private logicOpts: LogicOptions = loadLogicOptions(new Storage());
   private autoWorker: Worker | null = null;
   private oneShotBtn!: HTMLButtonElement;
+  /** Row-and-column editing: buttons around the board add and delete rows and columns. */
+  private gridEdit = false;
+  private gridBtn!: HTMLButtonElement;
+  private handles!: HTMLElement;
   private autoId = 0;
 
   constructor() {
     this.el = document.createElement('section');
     this.el.className = 'view editor-view';
     this.el.innerHTML = `
-      <div class="board-wrap"><svg class="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Puzzle editor board"></svg></div>
+      <div class="board-wrap"><svg class="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Puzzle editor board"></svg><div class="grid-handles"></div></div>
       <p class="status" role="status" aria-live="polite"></p>
       <div class="toolbar">
         <div class="toolbar-row tool-row">
@@ -123,9 +128,17 @@ export class EditorView {
           </div>
           <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the entrance, and hints and logic follow it">One-shot</button>
         </div>
+        <div class="toolbar-row shape-row">
+          <button class="btn" data-act="grid" aria-pressed="false" aria-label="Edit rows and columns" title="Edit rows and columns: add or delete them around the board">${ICONS.grid}</button>
+          <button class="btn" data-turn="rotateLeft" aria-label="Rotate left" title="Rotate left">${ICONS.rotateLeft}</button>
+          <button class="btn" data-turn="rotateRight" aria-label="Rotate right" title="Rotate right">${ICONS.rotateRight}</button>
+          <button class="btn" data-turn="flipH" aria-label="Flip left–right" title="Flip left–right">${ICONS.flipH}</button>
+          <button class="btn" data-turn="flipV" aria-label="Flip up–down" title="Flip up–down">${ICONS.flipV}</button>
+          <button class="btn" data-act="simplify" aria-label="Simplify" title="Simplify: remove obstacles the unique solution doesn’t need, in random order">${ICONS.sparkle}</button>
+        </div>
         <div class="toolbar-row logic-row">
           <button class="btn" data-logic="rules" aria-label="Logic rules">${ICONS.list}<span>Rules</span></button>
-          <button class="btn icon-only" data-logic="reset" aria-label="Reset logic" title="Reset logic">${ICONS.rotateLeft}</button>
+          <button class="btn icon-only" data-logic="reset" aria-label="Reset logic" title="Reset logic">${ICONS.rewind}</button>
           <button class="btn icon-only" data-logic="back" aria-label="Undo the last logic step" title="Undo the last logic step">${ICONS.stepBack}</button>
           <button class="btn icon-only" data-logic="step" aria-label="Logic step" title="Logic step">${ICONS.step}</button>
           <button class="btn icon-only" data-logic="fast" aria-label="Apply easy rules until stuck" title="Apply easy rules until stuck">${ICONS.fastForward}</button>
@@ -137,7 +150,6 @@ export class EditorView {
           <button class="btn" data-act="new" aria-label="New blank puzzle" title="New blank puzzle">${ICONS.plus}</button>
           <button class="btn" data-act="generate" aria-label="Generate a puzzle" title="Generate a puzzle">${ICONS.dice}</button>
           <button class="btn" data-act="save" aria-label="Save to the library" title="Save">${ICONS.save}</button>
-          <button class="btn" data-act="transform" aria-label="Size, rotate, flip and simplify" title="Size, rotate, flip and simplify">${ICONS.transform}</button>
           <button class="btn primary" data-act="play">${ICONS.play}<span>Play</span></button>
         </div>
       </div>
@@ -155,7 +167,22 @@ export class EditorView {
     };
 
     for (const t of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[t].addEventListener('click', () => this.setTool(t));
-    q<HTMLButtonElement>('[data-act=transform]').addEventListener('click', () => this.openTransformSheet());
+    // The shape row: rows and columns, turns and flips, and Simplify.
+    this.gridBtn = q<HTMLButtonElement>('[data-act=grid]');
+    this.gridBtn.addEventListener('click', () => {
+      this.gridEdit = !this.gridEdit;
+      this.render();
+    });
+    this.handles = q<HTMLElement>('.grid-handles');
+    new ResizeObserver(() => this.drawGridHandles()).observe(q<HTMLElement>('.board-wrap'));
+    for (const b of this.el.querySelectorAll<HTMLButtonElement>('[data-turn]')) {
+      b.addEventListener('click', () => {
+        this.marksStillFit = false;
+        this.edit((p) => transformPuzzle(p, b.dataset.turn as Transform));
+      });
+    }
+    const simplify = q<HTMLButtonElement>('[data-act=simplify]');
+    simplify.addEventListener('click', () => void this.simplify(simplify));
     this.oneShotBtn = q<HTMLButtonElement>('[data-act=oneshot]');
     this.oneShotBtn.addEventListener('click', () => this.toggleOneShot());
     q<HTMLButtonElement>('[data-logic=step]').addEventListener('click', () => this.stepLogic());
@@ -391,90 +418,81 @@ export class EditorView {
   }
 
   /** Grid size, rotate, flip and simplify, in one sheet that stays open while you try things. */
-  private openTransformSheet() {
-    const body = document.createElement('div');
-    body.className = 'sheet-stack transform-sheet';
-    const sizeOptions = Array.from({ length: MAX_SIZE - MIN_SIZE + 1 }, (_, i) => `<option>${i + MIN_SIZE}</option>`).join('');
-    const size = document.createElement('label');
-    size.className = 'size-picker';
-    size.innerHTML = `<select aria-label="Width">${sizeOptions}</select><span aria-hidden="true">×</span><select aria-label="Height">${sizeOptions}</select>`;
-    const [w, h] = size.querySelectorAll('select');
-    const sync = () => {
-      w.value = String(this.puzzle.w);
-      h.value = String(this.puzzle.h);
-    };
-    sync();
-    const resize = () => {
+  /** Simplify: take away the obstacles the unique solution doesn't need, in random order. */
+  private async simplify(button: HTMLButtonElement) {
+    const before = this.puzzle;
+    const code = encodePuzzle(before);
+    const count = before.walls.size + before.blocked.size;
+    button.disabled = true;
+    this.setMessage('Simplifying…');
+    try {
+      const q = await simplifyInBackground(before).result;
+      // Edited in the meantime: the result is for a puzzle that's gone.
+      if (encodePuzzle(this.puzzle) !== code) return;
+      if (!q) {
+        this.setMessage('Simplify needs a puzzle with exactly one solution.', 'error');
+        return;
+      }
+      const removed = count - (q.walls.size + q.blocked.size);
+      if (!removed) {
+        this.setMessage('Every obstacle is needed: nothing to remove.');
+        return;
+      }
       this.marksStillFit = false;
-      this.edit((p) => resizePuzzle(p, +w.value, +h.value));
-    };
-    w.addEventListener('change', resize);
-    h.addEventListener('change', resize);
-    const label = document.createElement('p');
-    label.className = 'field-label';
-    label.textContent = 'Size (width × height)';
-    body.append(label, size);
+      this.edit(() => q);
+      this.setMessage(`Simplified: removed ${removed} of ${count} obstacles.`, 'success');
+    } catch (err) {
+      this.setMessage(err instanceof Error ? err.message : String(err), 'error');
+    } finally {
+      button.disabled = false;
+    }
+  }
 
-    const turns: [Transform, string, string][] = [
-      ['rotateLeft', ICONS.rotateLeft, 'Rotate left'],
-      ['rotateRight', ICONS.rotateRight, 'Rotate right'],
-      ['flipH', ICONS.flipH, 'Flip left–right'],
-      ['flipV', ICONS.flipV, 'Flip up–down'],
-    ];
-    const grid = document.createElement('div');
-    grid.className = 'transform-grid';
-    for (const [t, icon, text] of turns) {
+  /**
+   * In row-and-column editing, buttons around the board: a − beside each row (left) and above
+   * each column (top) deletes it, and a + at each gap between rows (right) or columns (bottom),
+   * edges included, inserts an empty one there. The board itself is off limits meanwhile.
+   */
+  private drawGridHandles() {
+    this.handles.replaceChildren();
+    this.handles.parentElement!.classList.toggle('grid-editing', this.gridEdit);
+    if (!this.gridEdit) return;
+    const p = this.puzzle;
+    const ctm = this.svg.getScreenCTM();
+    if (!ctm) return;
+    const box = this.handles.getBoundingClientRect();
+    const pad = Number(this.svg.dataset.pad ?? 0);
+    const at = (gx: number, gy: number): [number, number] => {
+      const q = new DOMPoint(pad + gx * CELL, pad + gy * CELL).matrixTransform(ctm);
+      return [q.x - box.left, q.y - box.top];
+    };
+    const [x0, y0] = at(0, 0);
+    const [x1, y1] = at(p.w, p.h);
+    const cell = (x1 - x0) / p.w;
+    // − buttons halfway across the margin; + buttons further out, so the two at the
+    // bottom-right corner don't overlap.
+    const padPx = (pad / CELL) * cell;
+    const gap = padPx / 2;
+    const out = padPx * 0.78;
+    const button = (text: string, label: string, x: number, y: number, enabled: boolean, run: () => void) => {
       const b = document.createElement('button');
-      b.className = 'btn';
-      b.innerHTML = `${icon}<span>${text}</span>`;
+      b.className = `grid-handle ${text === '+' ? 'add' : 'remove'}`;
+      b.innerHTML = text === '+' ? ICONS.plus : ICONS.minus;
+      b.setAttribute('aria-label', label);
+      b.title = label;
+      b.disabled = !enabled;
+      b.style.left = `${x}px`;
+      b.style.top = `${y}px`;
       b.addEventListener('click', () => {
         this.marksStillFit = false;
-        this.edit((p) => transformPuzzle(p, t));
-        sync(); // a quarter turn swaps width and height
+        this.edit(run as () => Puzzle);
       });
-      grid.append(b);
-    }
-    body.append(grid);
-
-    // Simplify: take away the obstacles the unique solution doesn't need, in random order.
-    const simplify = document.createElement('button');
-    simplify.className = 'btn';
-    simplify.innerHTML = '<span>Simplify</span>';
-    simplify.title = 'Remove obstacles the unique solution doesn’t need, in random order';
-    simplify.addEventListener('click', async () => {
-      const before = this.puzzle;
-      const code = encodePuzzle(before);
-      const count = before.walls.size + before.blocked.size;
-      simplify.disabled = true;
-      simplify.querySelector('span')!.textContent = 'Simplifying…';
-      try {
-        const q = await simplifyInBackground(before).result;
-        // Edited in the meantime: the result is for a puzzle that's gone.
-        if (encodePuzzle(this.puzzle) !== code) return;
-        if (!q) {
-          this.setMessage('Simplify needs a puzzle with exactly one solution.', 'error');
-          return;
-        }
-        const removed = count - (q.walls.size + q.blocked.size);
-        if (!removed) {
-          this.setMessage('Every obstacle is needed: nothing to remove.');
-          return;
-        }
-        this.marksStillFit = false;
-        this.edit(() => q);
-        this.setMessage(`Simplified: removed ${removed} of ${count} obstacles.`, 'success');
-      } catch (err) {
-        this.setMessage(err instanceof Error ? err.message : String(err), 'error');
-      } finally {
-        simplify.disabled = false;
-        simplify.querySelector('span')!.textContent = 'Simplify';
-      }
-    });
-    const simplifyLabel = document.createElement('p');
-    simplifyLabel.className = 'field-label';
-    simplifyLabel.textContent = 'Remove obstacles the solution doesn’t need';
-    body.append(simplifyLabel, simplify);
-    openSheet('Size, rotate, flip and simplify', body);
+      this.handles.append(b);
+    };
+    for (let r = 0; r < p.h; r++) button('−', `Delete row ${r + 1}`, x0 - gap, y0 + (r + 0.5) * cell, p.h > MIN_SIZE, () => deleteLine(this.puzzle, 'row', r));
+    for (let r = 0; r <= p.h; r++) button('+', r === 0 ? 'Add a row at the top' : r === p.h ? 'Add a row at the bottom' : `Add a row between rows ${r} and ${r + 1}`, x1 + out, y0 + r * cell, p.h < MAX_SIZE, () => insertLine(this.puzzle, 'row', r));
+    for (let c = 0; c < p.w; c++) button('−', `Delete column ${c + 1}`, x0 + (c + 0.5) * cell, y0 - gap, p.w > MIN_SIZE, () => deleteLine(this.puzzle, 'col', c));
+    for (let c = 0; c <= p.w; c++) button('+', c === 0 ? 'Add a column on the left' : c === p.w ? 'Add a column on the right' : `Add a column between columns ${c} and ${c + 1}`, x0 + c * cell, y1 + out, p.w < MAX_SIZE, () => insertLine(this.puzzle, 'col', c));
   }
 
   /** The groups in the Rules sheet (easy rules, Checkerboard balance's areas) listed one by one. */
@@ -819,6 +837,8 @@ export class EditorView {
       errorCells: logic && this.logicBad.length ? new Set(this.logicBad) : undefined,
     });
     this.oneShotBtn.setAttribute('aria-pressed', String(!!p.oneShot));
+    this.gridBtn.setAttribute('aria-pressed', String(this.gridEdit));
+    this.drawGridHandles();
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;
     this.logicBackBtn.disabled = !this.logicHistory.length;

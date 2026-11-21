@@ -207,3 +207,40 @@ describe('pathKey', async () => {
     expect(pathKey(b, snake)).not.toBe(pathKey(b, other));
   });
 });
+
+describe('insertLine and deleteLine', async () => {
+  const { insertLine, deleteLine, edgeBetween: between, portSide: side } = await import('../src/model');
+  test('deleting a row closes up the grid, keeping what was on the other rows', () => {
+    const p = createPuzzle(3, 4);
+    p.blocked.add(1 * 3 + 1); // row 1
+    p.blocked.add(3 * 3 + 2); // row 3
+    p.walls.add(between(p, 0, 1)); // row 0
+    p.walls.add(between(p, 2 * 3 + 0, 3 * 3 + 0)); // between rows 2 and 3
+    p.endpoints = [portEnd(portId(p, 'left', 2)), portEnd(portId(p, 'top', 1))];
+    const q = deleteLine(p, 'row', 1);
+    expect([q.w, q.h]).toEqual([3, 3]);
+    expect([...q.blocked]).toEqual([2 * 3 + 2]);
+    expect(q.walls.has(between(q, 0, 1))).toBe(true);
+    expect(q.walls.has(between(q, 1 * 3, 2 * 3))).toBe(true);
+    expect(q.endpoints.map((e) => side(q, e.port))).toEqual([['left', 1], ['top', 1]]);
+  });
+  test('deleting the row an end is on drops that end; inserting a row splits a wall away', () => {
+    const p = createPuzzle(3, 3);
+    p.endpoints = [portEnd(portId(p, 'left', 1)), portEnd(portId(p, 'right', 2))];
+    p.walls.add(between(p, 0, 3));
+    expect(deleteLine(p, 'row', 1).endpoints.length).toBe(1);
+    const q = insertLine(p, 'row', 1);
+    expect([q.w, q.h]).toEqual([3, 4]);
+    expect(q.walls.size).toBe(0);
+    expect(q.endpoints.map((e) => side(q, e.port))).toEqual([['left', 2], ['right', 3]]);
+  });
+  test('columns work the same way, at either edge too', () => {
+    const p = createPuzzle(3, 3);
+    p.blocked.add(2);
+    const q = insertLine(p, 'col', 0);
+    expect([q.w, q.h, ...q.blocked]).toEqual([4, 3, 3]);
+    const r = insertLine(p, 'col', 3);
+    expect([r.w, ...r.blocked]).toEqual([4, 2]);
+    expect([...deleteLine(p, 'col', 0).blocked]).toEqual([1]);
+  });
+});

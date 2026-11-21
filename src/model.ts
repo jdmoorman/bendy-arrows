@@ -212,6 +212,51 @@ export function isUsableEdge(p: Puzzle, e: number): boolean {
 }
 
 /**
+ * A puzzle with its rows and columns rearranged: row i of the result is old row `rows[i]`
+ * (or a new, empty row where that is -1), and likewise for `cols`. Black tiles on kept lines
+ * stay; a wall stays when both its tiles are kept and still next to each other; an end stays
+ * on its side of the frame when its row (or column) is kept.
+ */
+export function remapGrid(p: Puzzle, rows: number[], cols: number[]): Puzzle {
+  const out = createPuzzle(cols.length, rows.length);
+  const at = (cell: number): [number, number] => {
+    const [r, c] = cellRC(p, cell);
+    return [rows.indexOf(r), cols.indexOf(c)];
+  };
+  for (const cell of p.blocked) {
+    const [r, c] = at(cell);
+    if (r >= 0 && c >= 0) out.blocked.add(r * out.w + c);
+  }
+  for (const e of p.walls) {
+    const [[ra, ca], [rb, cb]] = edgeCells(p, e).map(at);
+    if (ra < 0 || ca < 0 || rb < 0 || cb < 0 || Math.abs(ra - rb) + Math.abs(ca - cb) !== 1) continue;
+    out.walls.add(edgeBetween(out, ra * out.w + ca, rb * out.w + cb));
+  }
+  out.endpoints = [];
+  for (const end of p.endpoints) {
+    const [side, i] = portSide(p, end.port);
+    const j = side === 'top' || side === 'bottom' ? cols.indexOf(i) : rows.indexOf(i);
+    if (j >= 0) out.endpoints.push({ ...end, port: portId(out, side, j) });
+  }
+  if (p.oneShot) out.oneShot = true;
+  return out;
+}
+
+/** A new, empty row (or column) inserted before line `at` (0 to the count: at the end). */
+export function insertLine(p: Puzzle, axis: 'row' | 'col', at: number): Puzzle {
+  const keep = (n: number) => Array.from({ length: n }, (_, i) => i);
+  const grow = (n: number) => [...keep(at), -1, ...keep(n).slice(at)];
+  return axis === 'row' ? remapGrid(p, grow(p.h), keep(p.w)) : remapGrid(p, keep(p.h), grow(p.w));
+}
+
+/** Row (or column) `at` taken out, the lines either side closing up. */
+export function deleteLine(p: Puzzle, axis: 'row' | 'col', at: number): Puzzle {
+  const keep = (n: number) => Array.from({ length: n }, (_, i) => i);
+  const less = (n: number) => keep(n).filter((i) => i !== at);
+  return axis === 'row' ? remapGrid(p, less(p.h), keep(p.w)) : remapGrid(p, keep(p.h), less(p.w));
+}
+
+/**
  * Resize a puzzle, keeping features whose cells still exist.
  * The grid is anchored at the top-left corner.
  */

@@ -63,6 +63,8 @@ export class PacksView {
   private solving = new Set<string>();
   /** Highlighted levels, kept in this browser: for marking benchmarks while ordering. */
   private marks: Set<string>;
+  /** Packs folded away (by name), kept in this browser. */
+  private folded: Set<string>;
   /** The tile whose hint journey is playing (while the mouse is over it), and its next step. */
   private playing: { tile: HTMLElement; timer: number; off: () => void } | null = null;
   private worker: Worker | null = null;
@@ -82,6 +84,7 @@ export class PacksView {
 
   constructor(private storage: Storage) {
     this.marks = storage.loadPackMarks();
+    this.folded = storage.loadPacksFolded();
     this.el = el('section', 'view packs-view hidden');
     this.el.innerHTML = `
       <div class="packs-top">
@@ -199,10 +202,30 @@ export class PacksView {
   private packSection(pi: number): HTMLElement {
     const k = this.packs[pi];
     const section = el('section', 'pack-section');
+    // Folding a pack hides its levels (remembered by name).
+    const fold = el('button', 'pack-tool pack-fold', ICONS.chevron);
+    const setFolded = (on: boolean) => {
+      section.classList.toggle('folded', on);
+      fold.setAttribute('aria-expanded', String(!on));
+      fold.setAttribute('aria-label', on ? 'Show this pack’s levels' : 'Hide this pack’s levels');
+      fold.title = fold.getAttribute('aria-label')!;
+    };
+    setFolded(this.folded.has(k.name));
+    fold.addEventListener('click', () => {
+      const on = !section.classList.contains('folded');
+      on ? this.folded.add(k.name) : this.folded.delete(k.name);
+      this.storage.savePacksFolded(this.folded);
+      setFolded(on);
+    });
     const name = el('input', 'pack-name-input');
     name.value = k.name;
     name.setAttribute('aria-label', 'Pack name');
     name.addEventListener('input', () => {
+      // A folded pack stays folded under its new name.
+      if (this.folded.delete(k.name)) {
+        this.folded.add(name.value);
+        this.storage.savePacksFolded(this.folded);
+      }
       k.name = name.value;
       this.update();
     });
@@ -220,12 +243,12 @@ export class PacksView {
       [this.packs[pi], this.packs[to]] = [this.packs[to], this.packs[pi]];
       this.draw();
     };
-    const up = button('pack-up', ICONS.chevron, 'Move this pack up', sameKind(pi - 1), move(pi - 1));
-    const down = button('pack-down', ICONS.chevron, 'Move this pack down', sameKind(pi + 1), move(pi + 1));
+    const up = button('pack-up', ICONS.arrowUp, 'Move this pack up', sameKind(pi - 1), move(pi - 1));
+    const down = button('pack-down', ICONS.arrowDown, 'Move this pack down', sameKind(pi + 1), move(pi + 1));
     const del = button('pack-delete', ICONS.clear, 'Delete this pack', true, () => this.deletePack(pi));
     const count = el('span', 'pack-count');
     const head = el('div', 'pack-head');
-    head.append(name, up, down, del, count);
+    head.append(fold, name, up, down, del, count);
     const grid = el('div', 'pack-tiles');
     grid.dataset.pack = String(pi);
     for (const code of k.levels) grid.append(this.tile(code));

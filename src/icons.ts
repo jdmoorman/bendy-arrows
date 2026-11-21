@@ -30,8 +30,13 @@ export const ICONS = {
   list: svg('<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2"/>'),
   step: svg('<path d="M5 5v14l9-7z"/><path d="M18 5v14"/>'),
   fastForward: svg('<path d="M3 5v14l8-7z"/><path d="M12 5v14l8-7z"/>'),
+  rewind: svg('<path d="M21 5v14l-8-7z"/><path d="M12 5v14l-8-7z"/>'),
   stepBack: svg('<path d="M19 5v14l-9-7z"/><path d="M6 5v14"/>'),
   bulb: svg('<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/>'),
   chevron: svg('<path d="m9 6 6 6-6 6"/>'),
+  grid: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>'),
+  sparkle: svg('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M6 18l2.5-2.5M15.5 8.5 18 6"/>'),
+  arrowUp: svg('<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>'),
+  arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
   close: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
 };

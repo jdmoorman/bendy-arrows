@@ -161,6 +161,46 @@ a.btn {
   overflow: hidden;
 }
 
+/* Row-and-column editing in the editor: + and − buttons around the board, which is off limits meanwhile. */
+.grid-handles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+.board-wrap.grid-editing .board {
+  pointer-events: none;
+}
+.grid-handle {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.15);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.grid-handle svg {
+  width: 16px;
+  height: 16px;
+}
+.grid-handle.add {
+  color: var(--accent);
+}
+.grid-handle.remove {
+  color: var(--error);
+}
+.grid-handle:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
 .board {
   position: absolute;
   top: 4px;
@@ -1202,17 +1242,6 @@ a.btn {
   transform: translateX(10px);
 }
 
-/* Size, rotate and flip sheet. */
-.transform-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--gap);
-}
-.transform-sheet .size-picker {
-  flex: none;
-  min-height: var(--tap);
-}
-
 /* An X on a border the path needs (shown by Hint). */
 .xmark.error {
   stroke: var(--error);
@@ -1637,11 +1666,16 @@ a.btn {
   width: 18px;
   height: 18px;
 }
-.pack-up svg {
-  transform: rotate(-90deg);
-}
-.pack-down svg {
+/* A pack's fold button points down while open, right while folded; folded, its levels hide. */
+.pack-fold svg {
   transform: rotate(90deg);
+  transition: transform 0.15s;
+}
+.pack-section.folded .pack-fold svg {
+  transform: none;
+}
+.pack-section.folded .pack-tiles {
+  display: none;
 }
 /* A highlight a level can be marked with (toggled by the dot in its top-left corner, shown
    on hover and while on). */

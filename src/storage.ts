@@ -46,6 +46,7 @@ const RATINGS_KEY = 'bendyarrows.ratings.v1';
 const SHOW_SOLUTION_KEY = 'bendyarrows.showsolution.v1';
 const PLAYER_KEY = 'bendyarrows.player.v1';
 const PACK_MARKS_KEY = 'bendyarrows.packmarks.v1';
+const PACK_FOLDED_KEY = 'bendyarrows.packfolded.v1';
 
 /** Per-device display preferences. */
 export interface Settings {
@@ -245,6 +246,16 @@ export class Storage {
 
   savePackMarks(marks: Set<string>): void {
     this.write(PACK_MARKS_KEY, [...marks]);
+  }
+
+  /** The Packs tab's folded packs, by name. */
+  loadPacksFolded(): Set<string> {
+    const m = this.read<unknown>(PACK_FOLDED_KEY, []);
+    return new Set(Array.isArray(m) ? m.filter((x): x is string => typeof x === 'string') : []);
+  }
+
+  savePacksFolded(names: Set<string>): void {
+    this.write(PACK_FOLDED_KEY, [...names]);
   }
 
   /** Whether the editor overlays the solution (or every line any solution uses). */
