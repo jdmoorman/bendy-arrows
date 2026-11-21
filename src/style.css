@@ -1253,12 +1253,42 @@ a.btn {
   padding: 4px 12px 24px;
   gap: 20px;
 }
+/* A kind of level (classic or one-shot): a heading and a short explanation above its packs. */
+.level-kind {
+  max-width: 560px;
+  width: 100%;
+  margin: 12px auto 0;
+  padding: 14px 16px;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.level-kind:first-child {
+  margin-top: 0;
+}
+.level-kind-title {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+}
+.level-kind-text {
+  margin: 0;
+  line-height: 1.45;
+}
+.level-kind-text + .level-kind-text {
+  margin-top: 8px;
+}
 .pack {
   display: block;
   max-width: 560px;
   width: 100%;
   margin: 0 auto;
   container-type: inline-size;
+  box-sizing: border-box;
+}
+/* Packs sit indented under their kind's heading. */
+.level-kind ~ .pack {
+  padding-left: 16px;
 }
 .pack-head {
   display: flex;
@@ -1307,11 +1337,6 @@ a.btn {
   font-size: 0.8rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
-}
-.pack-desc {
-  margin: 0 0 10px;
-  color: var(--text-muted);
-  line-height: 1.4;
 }
 /* Rows of 5 levels, or 10 where ten tap-sized buttons fit across. */
 .level-grid {

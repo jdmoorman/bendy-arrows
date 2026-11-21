@@ -127,7 +127,28 @@ play.solvedAction = () => {
   return next ? { label: 'Next level', run: () => openLevel(next) } : { label: 'All levels', run: () => setTab('levels') };
 };
 
-/** The packs, each with its levels as numbered buttons: solved ones ticked, the current one marked. */
+/** The two kinds of level, each introduced above its packs. */
+const KINDS = {
+  classic: {
+    title: 'Classic',
+    intro: [
+      'Draw one path that comes in at the tail arrow, visits every tile exactly once, and leaves at the head arrow. Walls and black tiles block the way.',
+      'Drag between tiles to draw lines, and tap a border to mark it with an X where the path can’t go. Work on any part of the board, in any order.',
+    ],
+  },
+  oneShot: {
+    title: 'One-shot',
+    intro: [
+      'The same puzzle, with one more rule: draw the whole path in a single stroke. Start at the tail and keep going from the end of your line, all the way to the head.',
+      'You can’t jump ahead and draw somewhere else, so read the board before each move. Drag back along your line to undo it, and mark borders with an X as usual.',
+    ],
+  },
+};
+
+/**
+ * The packs, grouped by kind (classic, then one-shot) under a heading that explains it; each
+ * pack with its levels as numbered buttons: solved ones ticked, the current one marked.
+ */
 function drawLevels() {
   const packs = PACKS.map((pack, pi) => {
     // Each pack folds away (tap its heading); the choice is remembered per pack.
@@ -140,13 +161,11 @@ function drawLevels() {
     });
     const solved = pack.levels.filter((c) => storage.isSolved(c)).length;
     const head = el('summary', 'pack-head');
-    const name = el('h2', 'pack-name');
+    const name = el('h3', 'pack-name');
     head.append(el('span', 'pack-chevron', ICONS.chevron));
     name.textContent = pack.name;
     const count = el('span', 'pack-count', `${solved} of ${pack.levels.length} solved`);
     head.append(name, count);
-    const desc = el('p', 'pack-desc');
-    desc.textContent = pack.description;
     const grid = el('div', 'level-grid');
     pack.levels.forEach((code, li) => {
       // A real link, so the browser offers Open in new tab (right-click, long press, Cmd-click).
@@ -167,10 +186,23 @@ function drawLevels() {
       });
       grid.append(b);
     });
-    section.append(head, desc, grid);
+    section.append(head, grid);
     return section;
   });
-  levels.replaceChildren(...packs);
+  // A heading and explanation before each run of packs of one kind.
+  const out: HTMLElement[] = [];
+  PACKS.forEach((pack, pi) => {
+    if (pi === 0 || !!PACKS[pi - 1].oneShot !== !!pack.oneShot) {
+      const kind = pack.oneShot ? KINDS.oneShot : KINDS.classic;
+      const intro = el('section', 'level-kind');
+      const title = el('h2', 'level-kind-title');
+      title.textContent = kind.title;
+      intro.append(title, ...kind.intro.map((t) => Object.assign(el('p', 'level-kind-text'), { textContent: t })));
+      out.push(intro);
+    }
+    out.push(packs[pi]);
+  });
+  levels.replaceChildren(...out);
 }
 
 for (const b of app.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
