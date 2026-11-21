@@ -447,6 +447,8 @@ function movePlaces(ds: Deduction[], state: LogicState): number {
 
 /** Simplest rules first: the order hints are chosen in. */
 export const HINT_ORDER: RuleId[] = ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'noSeal', 'bottlenecks', 'balance'];
+/** HINT_ORDER with Checkerboard imbalance last, used only when it is passed in explicitly. */
+const HINT_ORDER_ALL: RuleId[] = [...HINT_ORDER, 'imbalance'];
 
 const TOO_MANY = 'Something is off: the highlighted tile has more lines than the path can use there.';
 const TOO_FEW = 'Something is off: the highlighted tile has too few ways in or out left — check the X marks around it.';
@@ -463,7 +465,7 @@ export type Hint =
  */
 export function findHint(p: Puzzle, state: LogicState, rules: Iterable<RuleId> = HINT_ORDER, opts: LogicOptions = {}): Hint {
   const allowed = new Set(rules);
-  const order = HINT_ORDER.filter((r) => allowed.has(r));
+  const order = HINT_ORDER_ALL.filter((r) => allowed.has(r));
   const an = analyse(p, state, new Set(order), opts);
   if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
   if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
@@ -496,11 +498,12 @@ export function strokeFrom(p: Puzzle, segments: Set<number>): { tiles: number[];
 export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opts: LogicOptions = {}, rules: Iterable<RuleId> = HINT_ORDER): Hint {
   const state: LogicState = { segments: stroke, xs: new Set() };
   const allowed = new Set(rules);
-  const an = analyse(p, state, new Set(HINT_ORDER.filter((r) => allowed.has(r))), opts);
+  const order = HINT_ORDER_ALL.filter((r) => allowed.has(r));
+  const an = analyse(p, state, new Set(order), opts);
   if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
   if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
   const next = (d: Deduction) => d.segments.find((e) => !stroke.has(e) && edgeCells(p, e).includes(head));
-  const d = simplest(an.deductions.filter((x) => next(x) !== undefined), HINT_ORDER.filter((r) => allowed.has(r)));
+  const d = simplest(an.deductions.filter((x) => next(x) !== undefined), order);
   if (!d) return { kind: 'none', text: 'The rules can’t tell where the stroke goes next from here.' };
   // Show only the lines that carry the stroke on, one after another from its tip (a corner's
   // two lines, say); the rule may force others elsewhere too.

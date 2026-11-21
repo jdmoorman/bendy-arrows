@@ -22,7 +22,7 @@ import {
 } from './model';
 import { padFor, renderBoard } from './render';
 import { missingEnds } from './rules';
-import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, findStrokeHint, RULES, runLogic, runStroke, strokeFrom, type AreaSource, type LogicOptions, type LogicState, type RuleId } from './logic';
+import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, findStrokeHint, IMBALANCE_RULE, RULES, runLogic, runStroke, strokeFrom, type AreaSource, type LogicOptions, type LogicState, type RuleId, type RuleInfo } from './logic';
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
@@ -31,7 +31,6 @@ import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from 
 
 type Tool = 'tiles' | 'walls' | 'ends';
 
-/** Rules listed on their own in the Rules sheet; the rest are grouped as the easy rules. */
 
 const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends' };
 const TOOL_HINT: Record<Tool, string> = {
@@ -295,7 +294,7 @@ export class EditorView {
     this.logicFresh = new Set([...d.segments, ...d.xs]);
     this.logicFocus = new Set(d.cells ?? [d.cell]);
     this.logicSteps++;
-    const label = RULES.find((r) => r.id === d.rule)?.label ?? d.rule;
+    const label = [...RULES, IMBALANCE_RULE].find((r) => r.id === d.rule)?.label ?? d.rule;
     this.logicNote = `Step ${this.logicSteps} · ${label}`;
     this.render();
   }
@@ -470,8 +469,8 @@ export class EditorView {
     openSheet('Size, rotate, flip and simplify', body);
   }
 
-  /** Whether the easy rules are listed one by one in the Rules sheet. */
-  private easyRulesExpanded = false;
+  /** The rule groups (easy, checkerboard) listed one by one in the Rules sheet. */
+  private expandedRuleGroups = new Set<string>();
 
   private openRulesSheet() {
     const body = document.createElement('div');
@@ -479,7 +478,7 @@ export class EditorView {
     const save = () => {
       this.storage.saveLogicRules({
         enabled: [...this.logicRules],
-        known: ALL_RULES,
+        known: [...ALL_RULES, IMBALANCE_RULE.id],
         auto: this.autoLogic,
         // Saved as the ones switched off, so a newly added kind of area starts on.
         areaSourcesOff: AREA_SOURCES.filter((x) => !(this.logicOpts.areaSources ?? AREA_SOURCES).includes(x)),
@@ -520,56 +519,52 @@ export class EditorView {
       });
       body.append(document.createElement('hr'));
       body.lastElementChild!.className = 'sheet-sep';
-      const easy = RULES.filter((r) => !ADVANCED_RULES.includes(r.id));
-      const advanced = RULES.filter((r) => ADVANCED_RULES.includes(r.id));
-
-      const onCount = easy.filter((r) => this.logicRules.has(r.id)).length;
-      const hint = document.createElement('span');
-      hint.textContent = `${easy.map((r) => r.label).join(', ')}. `;
-      const toggle = document.createElement('button');
-      toggle.type = 'button';
-      toggle.className = 'link-btn';
-      toggle.textContent = this.easyRulesExpanded ? 'Group them again' : 'Choose them one by one';
-      toggle.addEventListener('click', (ev) => {
-        ev.preventDefault(); // don't flip the switch this link sits in
-        this.easyRulesExpanded = !this.easyRulesExpanded;
-        render();
-      });
-      hint.append(toggle);
-      const group = switchRow('Easy rules', hint, onCount === easy.length, (on) => {
-        for (const r of easy) on ? this.logicRules.add(r.id) : this.logicRules.delete(r.id);
-        save();
-        render();
-      });
-      group.indeterminate = onCount > 0 && onCount < easy.length;
-
-      if (this.easyRulesExpanded) {
-        for (const r of easy) {
-          switchRow(
-            r.label,
-            r.hint,
-            this.logicRules.has(r.id),
-            (on) => {
-              on ? this.logicRules.add(r.id) : this.logicRules.delete(r.id);
-              save();
-              render();
-            },
-            'sub-rule',
-          );
-        }
-      }
-      for (const r of advanced) {
-        switchRow(r.label, r.hint, this.logicRules.has(r.id), (on) => {
-          on ? this.logicRules.add(r.id) : this.logicRules.delete(r.id);
-          save();
+      // Rules shown as one switch, with a link to choose them one by one.
+      const group = (key: string, label: string, rules: RuleInfo[]) => {
+        const onCount = rules.filter((r) => this.logicRules.has(r.id)).length;
+        const open = this.expandedRuleGroups.has(key);
+        const hint = document.createElement('span');
+        hint.textContent = `${rules.map((r) => r.label).join(', ')}. `;
+        const toggle = document.createElement('button');
+        toggle.type = 'button';
+        toggle.className = 'link-btn';
+        toggle.textContent = open ? 'Group them again' : 'Choose them one by one';
+        toggle.addEventListener('click', (ev) => {
+          ev.preventDefault(); // don't flip the switch this link sits in
+          open ? this.expandedRuleGroups.delete(key) : this.expandedRuleGroups.add(key);
+          render();
         });
-      }
-      // Where Checkerboard balance looks for areas.
+        hint.append(toggle);
+        const all = switchRow(label, hint, onCount === rules.length, (on) => {
+          for (const r of rules) on ? this.logicRules.add(r.id) : this.logicRules.delete(r.id);
+          save();
+          render();
+        });
+        all.indeterminate = onCount > 0 && onCount < rules.length;
+        if (open) for (const r of rules) rule(r, 'sub-rule');
+      };
+      const rule = (r: RuleInfo, cls = '') =>
+        switchRow(
+          r.label,
+          r.hint,
+          this.logicRules.has(r.id),
+          (on) => {
+            on ? this.logicRules.add(r.id) : this.logicRules.delete(r.id);
+            save();
+            render();
+          },
+          cls,
+        );
+      const checkerboard = [...RULES.filter((r) => r.id === 'balance'), IMBALANCE_RULE];
+      group('easy', 'Easy rules', RULES.filter((r) => !ADVANCED_RULES.includes(r.id)));
+      for (const r of RULES.filter((r) => ADVANCED_RULES.includes(r.id) && !checkerboard.includes(r))) rule(r);
+      group('checkerboard', 'Checkerboard', checkerboard);
+      // Where the checkerboard rules look for areas.
       body.append(document.createElement('hr'));
       body.lastElementChild!.className = 'sheet-sep';
       const heading = document.createElement('p');
       heading.className = 'field-label';
-      heading.textContent = 'Areas Checkerboard balance looks at';
+      heading.textContent = 'Areas the checkerboard rules look at';
       body.append(heading);
       const sources = new Set(this.logicOpts.areaSources ?? AREA_SOURCES);
       for (const src of AREA_SOURCES) {
@@ -826,5 +821,7 @@ function loadRuleChoice(storage: Storage): Set<RuleId> {
   if (!saved) return new Set(ALL_RULES);
   const known = new Set<string>(saved.known ?? BASIC_RULES);
   const on = new Set<string>(saved.enabled);
-  return new Set(ALL_RULES.filter((r) => on.has(r) || !known.has(r)));
+  // Checkerboard imbalance is off unless chosen.
+  const chosen = ALL_RULES.filter((r) => on.has(r) || !known.has(r));
+  return new Set(on.has(IMBALANCE_RULE.id) ? [...chosen, IMBALANCE_RULE.id] : chosen);
 }
