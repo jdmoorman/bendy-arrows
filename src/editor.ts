@@ -469,7 +469,7 @@ export class EditorView {
     openSheet('Size, rotate, flip and simplify', body);
   }
 
-  /** The rule groups (easy, checkerboard) listed one by one in the Rules sheet. */
+  /** The groups in the Rules sheet (easy rules, Checkerboard balance's areas) listed one by one. */
   private expandedRuleGroups = new Set<string>();
 
   private openRulesSheet() {
@@ -519,12 +519,13 @@ export class EditorView {
       });
       body.append(document.createElement('hr'));
       body.lastElementChild!.className = 'sheet-sep';
-      // Rules shown as one switch, with a link to choose them one by one.
-      const group = (key: string, label: string, rules: RuleInfo[]) => {
-        const onCount = rules.filter((r) => this.logicRules.has(r.id)).length;
+      // A switch for several choices at once, with a link to choose them one by one.
+      type Choice = { label: string; hint: string; on: boolean; set: (on: boolean) => void };
+      const group = (key: string, label: string, summary: string, items: Choice[], main?: Choice) => {
+        const onCount = items.filter((x) => x.on).length;
         const open = this.expandedRuleGroups.has(key);
         const hint = document.createElement('span');
-        hint.textContent = `${rules.map((r) => r.label).join(', ')}. `;
+        hint.textContent = `${summary} `;
         const toggle = document.createElement('button');
         toggle.type = 'button';
         toggle.className = 'link-btn';
@@ -535,48 +536,69 @@ export class EditorView {
           render();
         });
         hint.append(toggle);
-        const all = switchRow(label, hint, onCount === rules.length, (on) => {
-          for (const r of rules) on ? this.logicRules.add(r.id) : this.logicRules.delete(r.id);
+        // With a main choice (a rule and its options), the switch is that rule: on with every
+        // option when switched on, part on when some options are off.
+        const isOn = main ? main.on : onCount === items.length;
+        const all = switchRow(label, hint, isOn && onCount === items.length, (on) => {
+          main?.set(on);
+          if (on || !main) for (const x of items) x.set(on);
           save();
           render();
         });
-        all.indeterminate = onCount > 0 && onCount < rules.length;
-        if (open) for (const r of rules) rule(r, 'sub-rule');
+        all.indeterminate = main ? main.on && onCount < items.length : onCount > 0 && onCount < items.length;
+        if (open) {
+          for (const x of items) {
+            switchRow(
+              x.label,
+              x.hint,
+              x.on,
+              (on) => {
+                x.set(on);
+                save();
+                render();
+              },
+              'sub-rule',
+            );
+          }
+        }
       };
-      const rule = (r: RuleInfo, cls = '') =>
-        switchRow(
-          r.label,
-          r.hint,
-          this.logicRules.has(r.id),
-          (on) => {
-            on ? this.logicRules.add(r.id) : this.logicRules.delete(r.id);
-            save();
-            render();
-          },
-          cls,
-        );
-      const checkerboard = [...RULES.filter((r) => r.id === 'balance'), IMBALANCE_RULE];
-      group('easy', 'Easy rules', RULES.filter((r) => !ADVANCED_RULES.includes(r.id)));
-      for (const r of RULES.filter((r) => ADVANCED_RULES.includes(r.id) && !checkerboard.includes(r))) rule(r);
-      group('checkerboard', 'Checkerboard', checkerboard);
-      // Where the checkerboard rules look for areas.
-      body.append(document.createElement('hr'));
-      body.lastElementChild!.className = 'sheet-sep';
-      const heading = document.createElement('p');
-      heading.className = 'field-label';
-      heading.textContent = 'Areas the checkerboard rules look at';
-      body.append(heading);
-      const sources = new Set(this.logicOpts.areaSources ?? AREA_SOURCES);
-      for (const src of AREA_SOURCES) {
-        const [label, hint] = AREA_SOURCE_TEXT[src];
-        switchRow(label, hint, sources.has(src), (on) => {
-          on ? sources.add(src) : sources.delete(src);
-          const list = AREA_SOURCES.filter((x) => sources.has(x));
-          this.logicOpts = { ...this.logicOpts, areaSources: list.length === AREA_SOURCES.length ? undefined : list };
+      const ruleChoice = (r: RuleInfo): Choice => ({
+        label: r.label,
+        hint: r.hint,
+        on: this.logicRules.has(r.id),
+        set: (on) => (on ? this.logicRules.add(r.id) : this.logicRules.delete(r.id)),
+      });
+      const easy = RULES.filter((r) => !ADVANCED_RULES.includes(r.id));
+      group('easy', 'Easy rules', `${easy.map((r) => r.label).join(', ')}.`, easy.map(ruleChoice));
+      for (const r of RULES.filter((r) => ADVANCED_RULES.includes(r.id) && r.id !== 'balance')) {
+        const c = ruleChoice(r);
+        switchRow(c.label, c.hint, c.on, (on) => {
+          c.set(on);
           save();
           render();
         });
       }
+      // Checkerboard balance, with the kinds of areas it looks at (Checkerboard imbalance,
+      // below, looks at the same ones).
+      const sources = new Set(this.logicOpts.areaSources ?? AREA_SOURCES);
+      const areas: Choice[] = AREA_SOURCES.map((src) => ({
+        label: AREA_SOURCE_TEXT[src][0],
+        hint: AREA_SOURCE_TEXT[src][1],
+        on: sources.has(src),
+        set: (on) => {
+          on ? sources.add(src) : sources.delete(src);
+          const list = AREA_SOURCES.filter((x) => sources.has(x));
+          this.logicOpts = { ...this.logicOpts, areaSources: list.length === AREA_SOURCES.length ? undefined : list };
+        },
+      }));
+      const balance = RULES.find((r) => r.id === 'balance')!;
+      group('balance', balance.label, `${balance.hint} Areas: ${AREA_SOURCES.map((x) => AREA_SOURCE_TEXT[x][0].toLowerCase()).join(', ')}.`, areas, ruleChoice(balance));
+      const im = ruleChoice(IMBALANCE_RULE);
+      switchRow(im.label, `${im.hint} Uses the same areas as Checkerboard balance.`, im.on, (on) => {
+        im.set(on);
+        save();
+        render();
+      });
     };
     render();
     openSheet('Logic rules', body);
