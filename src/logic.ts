@@ -330,7 +330,7 @@ export function runLogic(p: Puzzle, rules: Iterable<RuleId>, start: LogicState =
 }
 
 /** The rules outside the editor's "Easy rules" group. */
-export const ADVANCED_RULES: RuleId[] = ['bottlenecks', 'balance', 'imbalance'];
+export const ADVANCED_RULES: RuleId[] = ['balance', 'imbalance'];
 
 /** One hint a player needed: its rule, and for area rules how many tiles the area had. */
 export interface HintStep {

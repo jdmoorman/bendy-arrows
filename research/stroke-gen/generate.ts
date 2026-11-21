@@ -5,7 +5,7 @@ import { createPuzzle, edgeBetween, edgeCells, edgeCount, isUsableEdge, type Puz
 import { singleStroke } from '../single-stroke/search';
 import { record } from '../out';
 
-/** The editor's "Easy rules": everything but Bottlenecks and Checkerboard balance. */
+/** The editor's "Easy rules": everything but the checkerboard rules. */
 const EASY: RuleId[] = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
 
 /** Where the stroke is: its lines so far and the tile at its end. */

@@ -6,7 +6,7 @@ import { ADVANCED_RULES, ALL_RULES, deductions, searchMetrics, type RuleId } fro
 import { edgeBetween, edgeCells, neighbors, openCells, portCell, transformPuzzle, type Puzzle } from '../../src/model';
 import { outPath, record } from '../out';
 
-/** The editor's "Easy rules": everything but Bottlenecks and Checkerboard balance. */
+/** The editor's "Easy rules": everything but the checkerboard rules. */
 const EASY: RuleId[] = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
 
 export interface Stroke {
