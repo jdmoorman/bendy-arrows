@@ -10,7 +10,8 @@ export type GeneratorMessage =
   | { type: 'removable'; failure: GoalFailure }
   | { type: 'simplified'; code: string }
   | { type: 'simplified'; failure: GoalFailure }
-  | { type: 'filled'; code: string | null }
+  | { type: 'filled'; code: string; status: 'unique' | 'multiple'; unchecked: number }
+  | { type: 'filled'; failure: 'none' | 'aborted' }
   | { type: 'error'; message: string };
 
 /**
@@ -22,7 +23,7 @@ export type GeneratorRequest =
   | GenOptions
   | { removable: string; goal: SimplifyGoal; opts: LogicOptions }
   | { simplify: string; goal: SimplifyGoal; seed: number; opts: LogicOptions }
-  | { fill: string };
+  | { fill: string; drawn: number[] };
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -30,8 +31,8 @@ ctx.onmessage = (ev: MessageEvent<GeneratorRequest>) => {
   try {
     const d = ev.data;
     if ('fill' in d) {
-      const q = fillWalls(decodePuzzle(d.fill));
-      ctx.postMessage({ type: 'filled', code: q && encodePuzzle(q) } satisfies GeneratorMessage);
+      const q = fillWalls(decodePuzzle(d.fill), d.drawn);
+      ctx.postMessage((typeof q === 'string' ? { type: 'filled', failure: q } : { type: 'filled', code: encodePuzzle(q.puzzle), status: q.status, unchecked: q.unchecked }) satisfies GeneratorMessage);
       return;
     }
     if ('removable' in d || 'simplify' in d) {

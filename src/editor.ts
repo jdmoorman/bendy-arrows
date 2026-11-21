@@ -20,6 +20,10 @@ import {
   transformPuzzle,
   type Transform,
   type Puzzle,
+  edgeBetween,
+  isUsableEdge,
+  neighbors,
+  edgeCount,
 } from './model';
 import { CELL, padFor, renderBoard } from './render';
 import { missingEnds } from './rules';
@@ -31,14 +35,15 @@ import { fillInBackground, removableInBackground, simplifyInBackground, type Rem
 import type { GoalFailure, SimplifyGoal } from './generator';
 import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from './new-puzzle-ui';
 
-type Tool = 'tiles' | 'walls' | 'ends';
+type Tool = 'tiles' | 'walls' | 'ends' | 'path';
 
 
-const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends' };
+const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends: 'ends', path: 'path' };
 const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
   walls: 'Tap or drag along borders to add walls.',
   ends: 'Tap a dot on the frame to add the entrance, then the exit.',
+  path: 'Drag to draw the lines you want the path to take; drag along them to erase. Fill then walls off every border no solution through them crosses.',
 };
 
 /** Why Simplify can't start, by goal failure. */
@@ -127,6 +132,11 @@ export class EditorView {
   private goalBtns!: Record<SimplifyGoal, HTMLButtonElement>;
   private removeAllBtns!: Record<SimplifyGoal, HTMLButtonElement>;
   private fillBtn!: HTMLButtonElement;
+  private clearPlanBtn!: HTMLButtonElement;
+  /** The wanted path's lines: kept when switching tools, and turned, mirrored or reshaped with the board. */
+  private plan = new Set<number>();
+  /** A Draw drag only draws or only erases, decided where it starts (as when playing). */
+  private planMode: 'draw' | 'erase' | 'undecided' = 'draw';
   /** Row-and-column editing: buttons around the board add and delete rows and columns. */
   private gridEdit = false;
   private gridBtn!: HTMLButtonElement;
@@ -145,6 +155,7 @@ export class EditorView {
             <button class="seg-btn" data-tool="tiles">Tiles</button>
             <button class="seg-btn" data-tool="walls">Walls</button>
             <button class="seg-btn" data-tool="ends">Ends</button>
+            <button class="seg-btn" data-tool="path" title="Draw lines you want the path to take; Fill then walls off every border no solution through them crosses">Draw</button>
           </div>
           <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the entrance, and hints and logic follow it">One-shot</button>
         </div>
@@ -156,7 +167,7 @@ export class EditorView {
           <button class="btn" data-turn="flipV" aria-label="Flip up–down" title="Flip up–down">${ICONS.flipV}</button>
         </div>
         <div class="toolbar-row simplify-row">
-          <span class="row-label">Simplify</span>
+          <button class="btn icon-only" data-act="clear-plan" aria-label="Clear drawn lines" title="Clear the lines drawn with Draw">${ICONS.clear}</button>
           <button class="btn icon-only" data-act="fill" aria-label="Fill with walls" title="Fill: a wall on every border the unique solution doesn’t cross">${ICONS.fill}</button>
           <span class="simplify-goal">
             <button class="btn" data-goal="easy" aria-pressed="false" title="Colour the walls and black tiles that could each go on its own, keeping the puzzle unique and solved by the easy rules alone">Easy</button>
@@ -195,6 +206,7 @@ export class EditorView {
       tiles: q('[data-tool=tiles]'),
       walls: q('[data-tool=walls]'),
       ends: q('[data-tool=ends]'),
+      path: q('[data-tool=path]'),
     };
 
     for (const t of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[t].addEventListener('click', () => this.setTool(t));
@@ -209,7 +221,7 @@ export class EditorView {
     for (const b of this.el.querySelectorAll<HTMLButtonElement>('[data-turn]')) {
       b.addEventListener('click', () => {
         this.marksStillFit = false;
-        this.edit((p) => transformPuzzle(p, b.dataset.turn as Transform));
+        this.reshape((p) => transformPuzzle(p, b.dataset.turn as Transform));
       });
     }
     // The Simplify row: per goal, a highlight toggle (one at a time) and Remove all.
@@ -225,6 +237,11 @@ export class EditorView {
     }
     this.fillBtn = q<HTMLButtonElement>('[data-act=fill]');
     this.fillBtn.addEventListener('click', () => this.fill());
+    this.clearPlanBtn = q<HTMLButtonElement>('[data-act=clear-plan]');
+    this.clearPlanBtn.addEventListener('click', () => {
+      this.plan.clear();
+      this.render();
+    });
     this.oneShotBtn = q<HTMLButtonElement>('[data-act=oneshot]');
     this.oneShotBtn.addEventListener('click', () => this.toggleOneShot());
     q<HTMLButtonElement>('[data-logic=step]').addEventListener('click', () => this.stepLogic());
@@ -247,11 +264,13 @@ export class EditorView {
       onBlank: (w, h) => {
         this.marksStillFit = false;
         this.replaced = true;
+        this.plan.clear();
         this.edit(() => createPuzzle(w, h));
       },
       onGenerated: (p, { options, difficulty }) => {
         this.marksStillFit = false;
         this.replaced = true;
+        this.plan.clear();
         this.edit(() => p);
         const word = (d: string) => (d === 'veryhard' ? 'very hard' : d);
         const note =
@@ -281,6 +300,22 @@ export class EditorView {
     );
     attachBoardInput(this.svg, () => this.puzzle, {
       kind: () => TOOL_KIND[this.tool],
+      onPathStart: (cell, edge) => {
+        if (edge >= 0 && this.plan.has(edge)) {
+          this.planMode = 'erase';
+          this.erasePlan(edge);
+          return;
+        }
+        const n = cellEdges(this.puzzle, cell).filter((e) => this.plan.has(e)).length;
+        this.planMode = n === 0 ? 'draw' : n === 1 ? 'undecided' : 'erase';
+      },
+      onStep: (from, to) => this.planStep(from, to),
+      onHoverEdge: (e) => {
+        if (this.planMode === 'erase') this.erasePlan(e);
+      },
+      onTapCell: (cell) => {
+        for (const e of cellEdges(this.puzzle, cell)) this.erasePlan(e);
+      },
       onGestureStart: () => {
         this.changed = false;
       },
@@ -313,6 +348,7 @@ export class EditorView {
 
   load(p: Puzzle): void {
     this.cancelSimplify();
+    this.plan.clear();
     this.puzzle = clonePuzzle(p);
     this.marksStillFit = true;
     this.replaced = false;
@@ -518,6 +554,57 @@ export class EditorView {
     );
   }
 
+  /** A Draw drag moved a tile: draw the line between (if the path can take it) or erase it. */
+  private planStep(from: number, to: number): boolean {
+    const p = this.puzzle;
+    const e = edgeBetween(p, from, to);
+    if (this.planMode === 'undecided') this.planMode = this.plan.has(e) ? 'erase' : 'draw';
+    if (this.planMode === 'erase') {
+      this.erasePlan(e);
+      return true;
+    }
+    if (this.plan.has(e)) return true;
+    const degree = (c: number) => cellEdges(p, c).filter((x) => this.plan.has(x)).length;
+    if (!isUsableEdge(p, e) || degree(from) >= 2 || degree(to) >= 2 || this.planJoins(from, to)) return false;
+    this.plan.add(e);
+    this.render();
+    return true;
+  }
+
+  /** Whether the wanted path already runs from one tile to the other (a line between would close a loop). */
+  private planJoins(a: number, b: number): boolean {
+    const p = this.puzzle;
+    let cell = a;
+    let prev = -1;
+    for (let i = 0; i <= this.plan.size; i++) {
+      const next = neighbors(p, cell).find((n) => n !== prev && this.plan.has(edgeBetween(p, cell, n)));
+      if (next === undefined) return false;
+      if (next === b) return true;
+      [prev, cell] = [cell, next];
+    }
+    return false;
+  }
+
+  private erasePlan(e: number) {
+    if (this.plan.delete(e)) this.render();
+  }
+
+  /** After an edit: the wanted path loses lines through walls or black tiles (or off the board, after an undone resize). */
+  private keepPlanFitting() {
+    const p = this.puzzle;
+    for (const e of [...this.plan]) if (e >= edgeCount(p) || !isUsableEdge(p, e)) this.plan.delete(e);
+  }
+
+  /** A change to the board's shape (turn, flip, rows and columns): the drawn path goes along with it. */
+  private reshape(fn: (p: Puzzle) => Puzzle) {
+    if (this.plan.size) {
+      // Carried as the walls of a copy, so it moves exactly as walls do.
+      const carrier = { ...clonePuzzle(this.puzzle), walls: new Set(this.plan), blocked: new Set<number>() };
+      this.plan = new Set(fn(carrier).walls);
+    }
+    this.edit(fn);
+  }
+
   /** Stop a Remove all: the puzzle it started from has changed. */
   private cancelSimplify() {
     this.simplifyNote = '';
@@ -534,19 +621,24 @@ export class EditorView {
       if (running.goal === 'fill') return this.setMessage('Fill cancelled.');
     }
     const p = this.puzzle;
-    const run = fillInBackground(p);
+    const drawn = this.plan.size > 0;
+    const run = fillInBackground(p, this.plan);
     const handle = { goal: 'fill' as const, cancel: run.cancel };
     this.simplifyRun = handle;
-    this.setMessage('Walling off every border the solution doesn’t cross…');
+    this.setMessage(drawn ? 'Walling off every border no solution through the drawn lines crosses…' : 'Walling off every border no solution crosses…');
     run.result.then(
-      (q) => {
+      (r) => {
         if (this.simplifyRun !== handle) return;
         this.simplifyRun = null;
         this.render();
-        if (!q) return this.setMessage(GOAL_FAILURE['not unique']);
+        if (r === 'none') return this.setMessage(drawn ? 'No solution follows the drawn lines.' : 'No solution to fill around.', 'error');
+        if (r === 'aborted') return this.setMessage('Too big to check: Fill needs to find the solutions.', 'error');
+        const q = r.puzzle;
         const added = q.walls.size - p.walls.size;
-        if (!added) return this.setMessage('Nothing to fill: every border the solution doesn’t cross already has a wall.');
-        const done = `Added ${added} wall${added === 1 ? '' : 's'}. `;
+        const which = r.status === 'unique' ? 'the solution' : 'any solution';
+        const slow = r.unchecked ? ` (${r.unchecked} border${r.unchecked === 1 ? '' : 's'} too slow to check, left open)` : '';
+        if (!added) return this.setMessage(`Nothing to fill: every border ${which} doesn’t cross already has a wall${slow}.`);
+        const done = `Added ${added} wall${added === 1 ? '' : 's'}${r.status === 'multiple' ? ', keeping every solution' + (drawn ? ' through the drawn lines' : '') : ''}${slow}. `;
         this.edit(() => q);
         if (this.removableRun) this.simplifyNote = done;
         this.setMessage(done.trim(), 'success');
@@ -626,7 +718,7 @@ export class EditorView {
     const padPx = (pad / CELL) * cell;
     const gap = padPx / 2;
     const out = padPx * 0.78;
-    const button = (text: string, label: string, x: number, y: number, enabled: boolean, run: () => void) => {
+    const button = (text: string, label: string, x: number, y: number, enabled: boolean, run: (p: Puzzle) => Puzzle) => {
       const b = document.createElement('button');
       b.className = `grid-handle ${text === '+' ? 'add' : 'remove'}`;
       b.innerHTML = text === '+' ? ICONS.plus : ICONS.minus;
@@ -637,14 +729,14 @@ export class EditorView {
       b.style.top = `${y}px`;
       b.addEventListener('click', () => {
         this.marksStillFit = false;
-        this.edit(run as () => Puzzle);
+        this.reshape(run);
       });
       this.handles.append(b);
     };
-    for (let r = 0; r < p.h; r++) button('−', `Delete row ${r + 1}`, x0 - gap, y0 + (r + 0.5) * cell, p.h > MIN_SIZE, () => deleteLine(this.puzzle, 'row', r));
-    for (let r = 0; r <= p.h; r++) button('+', r === 0 ? 'Add a row at the top' : r === p.h ? 'Add a row at the bottom' : `Add a row between rows ${r} and ${r + 1}`, x1 + out, y0 + r * cell, p.h < MAX_SIZE, () => insertLine(this.puzzle, 'row', r));
-    for (let c = 0; c < p.w; c++) button('−', `Delete column ${c + 1}`, x0 + (c + 0.5) * cell, y0 - gap, p.w > MIN_SIZE, () => deleteLine(this.puzzle, 'col', c));
-    for (let c = 0; c <= p.w; c++) button('+', c === 0 ? 'Add a column on the left' : c === p.w ? 'Add a column on the right' : `Add a column between columns ${c} and ${c + 1}`, x0 + c * cell, y1 + out, p.w < MAX_SIZE, () => insertLine(this.puzzle, 'col', c));
+    for (let r = 0; r < p.h; r++) button('−', `Delete row ${r + 1}`, x0 - gap, y0 + (r + 0.5) * cell, p.h > MIN_SIZE, (q) => deleteLine(q, 'row', r));
+    for (let r = 0; r <= p.h; r++) button('+', r === 0 ? 'Add a row at the top' : r === p.h ? 'Add a row at the bottom' : `Add a row between rows ${r} and ${r + 1}`, x1 + out, y0 + r * cell, p.h < MAX_SIZE, (q) => insertLine(q, 'row', r));
+    for (let c = 0; c < p.w; c++) button('−', `Delete column ${c + 1}`, x0 + (c + 0.5) * cell, y0 - gap, p.w > MIN_SIZE, (q) => deleteLine(q, 'col', c));
+    for (let c = 0; c <= p.w; c++) button('+', c === 0 ? 'Add a column on the left' : c === p.w ? 'Add a column on the right' : `Add a column between columns ${c} and ${c + 1}`, x0 + c * cell, y1 + out, p.w < MAX_SIZE, (q) => insertLine(q, 'col', c));
   }
 
   /** The groups in the Rules sheet (easy rules, Checkerboard balance's areas) listed one by one. */
@@ -871,6 +963,7 @@ export class EditorView {
 
   private afterChange() {
     this.cancelSimplify();
+    this.keepPlanFitting();
     this.resetLogic();
     this.clearMessage();
     this.render();
@@ -994,6 +1087,7 @@ export class EditorView {
       suggestWall: this.suggestedWall ?? undefined,
       removable: this.simplifyGoal && this.removable ? { ...this.removable, goal: this.simplifyGoal } : undefined,
       segments: logic ? this.logic.segments : undefined,
+      plan: this.plan,
       xMarks: logic ? this.logic.xs : undefined,
       highlight: logic ? this.logicFresh : undefined,
       focusCells: logic && this.logicFocus.size ? this.logicFocus : undefined,
@@ -1005,6 +1099,7 @@ export class EditorView {
       this.goalBtns[g].setAttribute('aria-pressed', String(this.simplifyGoal === g));
       this.removeAllBtns[g].classList.toggle('busy', this.simplifyRun?.goal === g);
     }
+    this.clearPlanBtn.disabled = !this.plan.size;
     this.fillBtn.classList.toggle('busy', this.simplifyRun?.goal === 'fill');
     this.drawGridHandles();
     this.undoBtn.disabled = !this.history.canUndo;

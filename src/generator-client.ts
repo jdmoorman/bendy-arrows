@@ -1,5 +1,5 @@
 import { decodePuzzle, encodePuzzle } from './codec';
-import { type Difficulty, type GenOptions, type GoalFailure, type SimplifyGoal } from './generator';
+import { type Difficulty, type GenOptions, type FillResult, type GoalFailure, type SimplifyGoal } from './generator';
 import type { LogicOptions } from './logic';
 import type { GeneratorMessage, GeneratorRequest } from './generator.worker';
 import type { Puzzle } from './model';
@@ -76,11 +76,14 @@ export function removableInBackground(p: Puzzle, goal: SimplifyGoal, opts: Logic
   );
 }
 
-/** The puzzle with a wall on every border its unique solution doesn't cross (null: not unique), in a background worker. */
-export function fillInBackground(p: Puzzle): { result: Promise<Puzzle | null>; cancel(): void } {
-  return askWorker<Puzzle | null>(
-    { fill: encodePuzzle(p) },
-    (m) => (m.type !== 'filled' ? undefined : m.code ? decodePuzzle(m.code) : null),
+/**
+ * The puzzle with a wall on every border no solution through the drawn lines crosses (or why
+ * there's no such solution), in a background worker.
+ */
+export function fillInBackground(p: Puzzle, drawn: Iterable<number>): { result: Promise<FillResult | 'none' | 'aborted'>; cancel(): void } {
+  return askWorker<FillResult | 'none' | 'aborted'>(
+    { fill: encodePuzzle(p), drawn: [...drawn] },
+    (m) => (m.type !== 'filled' ? undefined : 'failure' in m ? m.failure : { puzzle: decodePuzzle(m.code), status: m.status, unchecked: m.unchecked }),
     'Filling failed.',
   );
 }

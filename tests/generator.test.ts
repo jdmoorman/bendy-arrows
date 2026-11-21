@@ -122,18 +122,44 @@ describe('Simplify goals', async () => {
 
 describe('fillWalls', async () => {
   const { fillWalls } = await import('../src/generator');
-  const { createPuzzle, edgeCount, edgeCells } = await import('../src/model');
-  test('walls every border between open tiles the solution doesn’t cross, keeping the same unique solution', () => {
-    const { puzzle } = generate({ w: 5, h: 5, difficulties: ['easy'], clues: 'mixed', minimal: true, seed: 3 });
-    const path = solve(puzzle, { maxSolutions: 2 }).solutions[0];
-    const q = fillWalls(puzzle)!;
-    const r = solve(q, { maxSolutions: 2 });
-    expect(r.status).toBe('unique');
-    expect(r.solutions[0]).toEqual(path);
+  const { createPuzzle, edgeBetween, edgeCount, edgeCells, portEnd, portId } = await import('../src/model');
+  type P = ReturnType<typeof createPuzzle>;
+  const lines = (p: P, cells: number[]) => cells.slice(1).map((c, i) => edgeBetween(p, cells[i], c));
+  const keys = (sols: number[][]) => sols.map((s) => s.join(',')).sort();
+  /** Fill keeps exactly the solutions through `drawn`, and walls every open border none of them crosses. */
+  const check = (p: P, drawn: number[] = []) => {
+    const r = fillWalls(p, drawn);
+    if (typeof r === 'string') throw new Error(r);
+    const q = r.puzzle;
+    const before = solve(p, { maxSolutions: 1000, mustUse: drawn }).solutions;
+    expect(keys(solve(q, { maxSolutions: 1000 }).solutions)).toEqual(keys(before));
+    const used = new Set(before.flat());
     for (let e = 0; e < edgeCount(q); e++) {
       const open = edgeCells(q, e).every((c) => !q.blocked.has(c));
-      expect(q.walls.has(e), `border ${e}`).toBe(open && !path.includes(e));
+      expect(q.walls.has(e), `border ${e}`).toBe(open && !used.has(e));
     }
-    expect(fillWalls(createPuzzle(4, 4))).toBeNull();
+    return r;
+  };
+
+  test('a unique puzzle: walls everything its solution doesn’t cross', () => {
+    const { puzzle } = generate({ w: 5, h: 5, difficulties: ['easy'], clues: 'mixed', minimal: true, seed: 3 });
+    expect(check(puzzle).status).toBe('unique');
+  });
+
+  test('several solutions: walls only what none of them crosses', () => {
+    const p = createPuzzle(4, 4);
+    p.endpoints = [portEnd(portId(p, 'left', 0)), portEnd(portId(p, 'right', 2))];
+    const r = check(p);
+    expect(r.status).toBe('multiple');
+  });
+
+  test('drawn lines: only the solutions through them are kept', () => {
+    const p = createPuzzle(4, 4);
+    p.endpoints = [portEnd(portId(p, 'left', 0)), portEnd(portId(p, 'right', 2))];
+    check(p, lines(p, [0, 1, 2]));
+    const q = createPuzzle(3, 3);
+    q.endpoints = [portEnd(portId(q, 'left', 0)), portEnd(portId(q, 'right', 2))];
+    expect(check(q, lines(q, [0, 1, 2, 5, 4, 3])).status).toBe('unique');
+    expect(fillWalls(q, lines(q, [3, 0, 1]))).toBe('none'); // the entrance tile can't take two more lines
   });
 });

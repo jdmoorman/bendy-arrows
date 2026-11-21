@@ -22,6 +22,8 @@ export function columnName(c: number): string {
 
 export interface RenderOptions {
   segments?: Set<number>;
+  /** The editor's drawn path (Draw mode), in its own colour under any other lines. */
+  plan?: Set<number>;
   xMarks?: Set<number>;
   errorCells?: Set<number>;
   errorEdges?: Set<number>;
@@ -212,6 +214,7 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   // corners are seamless.
   const isErr = (e: number) => !!o.errorEdges?.has(e);
   const player = [...(o.segments ?? [])];
+  if (o.plan?.size) parts.push('<g class="plan">', strokes([...o.plan], 'seg-edge plan'), strokes([...o.plan], 'seg plan'), '</g>');
   parts.push('<g class="segments">');
   const isHi = (e: number) => !!o.highlight?.has(e);
   const ok = player.filter((e) => !isErr(e) && !isHi(e));

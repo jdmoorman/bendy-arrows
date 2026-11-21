@@ -19,7 +19,7 @@ import {
   type Side,
   type Transform,
 } from './model';
-import { solve } from './solver';
+import { solutionUnion, solve } from './solver';
 
 /**
  * Procedural puzzle generation. Everything is driven by a seeded random
@@ -422,21 +422,30 @@ export function simplifyPuzzle(p: Puzzle, seed: number, goal: SimplifyGoal = 'mi
   return best;
 }
 
+/** What Fill did: the walled puzzle, whether one solution or several kept it open, and the borders too slow to check (left open). */
+export interface FillResult {
+  puzzle: Puzzle;
+  status: 'unique' | 'multiple';
+  unchecked: number;
+}
+
 /**
- * The editor's Fill: a wall on every border between open tiles that the unique solution doesn't
- * cross. Null if the puzzle doesn't have exactly one solution.
+ * The editor's Fill: a wall on every border between open tiles that no solution crosses, among
+ * the solutions using all of `drawn` (lines the editor's Draw tool drew). Every such solution
+ * still works afterwards; a border too slow to check stays open. 'none' if no solution follows
+ * the lines, 'aborted' if finding one took too long.
  */
-export function fillWalls(p: Puzzle): Puzzle | null {
-  const r = solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT });
-  if (r.status !== 'unique') return null;
-  const used = new Set(r.solutions[0]);
+export function fillWalls(p: Puzzle, drawn: Iterable<number> = []): FillResult | 'none' | 'aborted' {
+  const r = solutionUnion(p, { nodeLimit: NODE_LIMIT, mustUse: drawn });
+  if (r.status === 'none' || r.status === 'aborted') return r.status;
+  const used = new Set([...r.edges, ...r.unchecked]);
   const q = clonePuzzle(p);
   for (let e = 0; e < edgeCount(p); e++) {
     if (used.has(e)) continue;
     const [a, b] = edgeCells(p, e);
     if (!p.blocked.has(a) && !p.blocked.has(b)) q.walls.add(e);
   }
-  return q;
+  return { puzzle: q, status: r.status, unchecked: r.unchecked.length };
 }
 
 /**

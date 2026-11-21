@@ -328,9 +328,12 @@ export function solutionUnion(
     shouldAbort?: () => boolean;
     /** Seed the searches with what the logic rules deduce (default true; off for comparison). */
     useLogic?: boolean;
+    /** Only solutions that use all of these lines count (e.g. lines drawn in the editor). */
+    mustUse?: Iterable<number>;
   } = {},
 ): UnionResult {
-  const first = solve(p, { maxSolutions: 2, nodeLimit: opts.nodeLimit, shouldAbort: opts.shouldAbort });
+  const must = [...(opts.mustUse ?? [])];
+  const first = solve(p, { maxSolutions: 2, nodeLimit: opts.nodeLimit, shouldAbort: opts.shouldAbort, mustUse: must });
   const used = new Set(first.solutions.flat());
   if (first.status !== 'multiple') return { status: first.status, edges: [...used], unchecked: [], suggestedWall: null };
   // Every distinct solution found, and how many of them use each border (for the suggestion).
@@ -344,10 +347,10 @@ export function solutionUnion(
   };
   for (const sol of first.solutions) count(sol);
   // What every solution must do, from the logic rules: required lines, and X'd borders as walls.
-  let required: number[] = [];
+  let required: number[] = must;
   let q = p;
   if (opts.useLogic ?? true) {
-    const logic = runLogic(p, ALL_RULES);
+    const logic = runLogic(p, ALL_RULES, { segments: new Set(must), xs: new Set() });
     if (!logic.contradiction) {
       required = [...logic.state.segments];
       q = clonePuzzle(p);
