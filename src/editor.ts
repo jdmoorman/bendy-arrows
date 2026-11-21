@@ -93,7 +93,15 @@ export class EditorView {
   private logicNote = '';
   private logicRules = loadRuleChoice(new Storage());
   /** Apply the chosen rules after every change, until they get stuck. */
-  private autoLogic = new Storage().loadLogicRules()?.auto === true;
+  /** Which groups of the chosen rules Auto-apply runs after every change. */
+  private autoGroups = loadAutoGroups(new Storage());
+  /** The chosen rules Auto-apply runs: those in a group switched on for it. */
+  private get autoRules(): RuleId[] {
+    return [...this.logicRules].filter((r) => this.autoGroups.has(autoGroupOf(r)));
+  }
+  private get autoLogic(): boolean {
+    return this.autoRules.length > 0;
+  }
   /** Logic engine options: whether rooms stop growing at a tie. */
   private logicOpts: LogicOptions = loadLogicOptions(new Storage());
   private autoWorker: Worker | null = null;
@@ -360,7 +368,7 @@ export class EditorView {
       this.logicNote = r.segments.length || r.xs.length ? 'Auto-apply: the chosen rules get this far, then get stuck.' : 'Auto-apply: the chosen rules find nothing to fill in.';
       this.render();
     };
-    this.autoWorker.postMessage({ id, code: encodePuzzle(p), rules: [...this.logicRules], opts: this.logicOpts } satisfies LogicRequest);
+    this.autoWorker.postMessage({ id, code: encodePuzzle(p), rules: this.autoRules, opts: this.logicOpts } satisfies LogicRequest);
   }
 
   private cancelAutoLogic() {
@@ -479,7 +487,7 @@ export class EditorView {
       this.storage.saveLogicRules({
         enabled: [...this.logicRules],
         known: [...ALL_RULES, IMBALANCE_RULE.id],
-        auto: this.autoLogic,
+        autoGroups: [...this.autoGroups],
         // Saved as the ones switched off, so a newly added kind of area starts on.
         areaSourcesOff: AREA_SOURCES.filter((x) => !(this.logicOpts.areaSources ?? AREA_SOURCES).includes(x)),
       });
@@ -494,7 +502,8 @@ export class EditorView {
       text.className = 'switch-text';
       const small = document.createElement('small');
       small.append(hint);
-      text.append(document.createTextNode(label), small);
+      text.append(document.createTextNode(label));
+      if (hint) text.append(small);
       const input = document.createElement('input');
       input.type = 'checkbox';
       input.className = 'switch';
@@ -508,20 +517,26 @@ export class EditorView {
 
     const render = () => {
       body.replaceChildren();
-      switchRow('Auto-apply', 'After every change, apply the chosen rules until they get stuck.', this.autoLogic, (on) => {
-        this.autoLogic = on;
-        if (!on) {
-          this.cancelAutoLogic();
-          this.resetLogic();
-          this.render();
-        }
-        save();
-      });
-      body.append(document.createElement('hr'));
-      body.lastElementChild!.className = 'sheet-sep';
+      // Under a rule's switch: whether Auto-apply runs it after every change, until stuck.
+      const autoRow = (g: AutoGroup) =>
+        switchRow(
+          `Auto-apply ${AUTO_LABELS[g]}`,
+          '',
+          this.autoGroups.has(g),
+          (on) => {
+            on ? this.autoGroups.add(g) : this.autoGroups.delete(g);
+            if (!this.autoLogic) {
+              this.cancelAutoLogic();
+              this.resetLogic();
+              this.render();
+            }
+            save();
+          },
+          'auto-row',
+        );
       // A switch for several choices at once, with a link to choose them one by one.
       type Choice = { label: string; hint: string; on: boolean; set: (on: boolean) => void };
-      const group = (key: string, label: string, summary: string, items: Choice[], main?: Choice) => {
+      const group = (key: string, label: string, summary: string, items: Choice[], auto: AutoGroup, main?: Choice) => {
         const onCount = items.filter((x) => x.on).length;
         const open = this.expandedRuleGroups.has(key);
         const hint = document.createElement('span');
@@ -546,6 +561,7 @@ export class EditorView {
           render();
         });
         all.indeterminate = main ? main.on && onCount < items.length : onCount > 0 && onCount < items.length;
+        autoRow(auto);
         if (open) {
           for (const x of items) {
             switchRow(
@@ -569,7 +585,7 @@ export class EditorView {
         set: (on) => (on ? this.logicRules.add(r.id) : this.logicRules.delete(r.id)),
       });
       const easy = RULES.filter((r) => !ADVANCED_RULES.includes(r.id));
-      group('easy', 'Easy rules', `${easy.map((r) => r.label).join(', ')}.`, easy.map(ruleChoice));
+      group('easy', 'Easy rules', `${easy.map((r) => r.label).join(', ')}.`, easy.map(ruleChoice), 'easy');
       for (const r of RULES.filter((r) => ADVANCED_RULES.includes(r.id) && r.id !== 'balance')) {
         const c = ruleChoice(r);
         switchRow(c.label, c.hint, c.on, (on) => {
@@ -592,13 +608,14 @@ export class EditorView {
         },
       }));
       const balance = RULES.find((r) => r.id === 'balance')!;
-      group('balance', balance.label, `${balance.hint} Areas: ${AREA_SOURCES.map((x) => AREA_SOURCE_TEXT[x][0].toLowerCase()).join(', ')}.`, areas, ruleChoice(balance));
+      group('balance', balance.label, `${balance.hint} Areas: ${AREA_SOURCES.map((x) => AREA_SOURCE_TEXT[x][0].toLowerCase()).join(', ')}.`, areas, 'balance', ruleChoice(balance));
       const im = ruleChoice(IMBALANCE_RULE);
       switchRow(im.label, `${im.hint} Uses the same areas as Checkerboard balance.`, im.on, (on) => {
         im.set(on);
         save();
         render();
       });
+      autoRow('imbalance');
     };
     render();
     openSheet('Logic rules', body);
@@ -836,6 +853,19 @@ function loadLogicOptions(storage: Storage): LogicOptions {
   const off = new Set(saved?.areaSourcesOff ?? []);
   const sources = AREA_SOURCES.filter((x) => !off.has(x));
   return { areaSources: sources.length < AREA_SOURCES.length ? sources : undefined };
+}
+
+type AutoGroup = 'easy' | 'balance' | 'imbalance';
+/** The groups Auto-apply can run, each with its own switch (under its rule's). */
+const AUTO_LABELS: Record<AutoGroup, string> = { easy: 'easy rules', balance: 'Checkerboard balance', imbalance: 'Checkerboard imbalance' };
+const autoGroupOf = (r: RuleId): AutoGroup => (r === 'balance' || r === 'imbalance' ? r : 'easy');
+
+/** The saved Auto-apply groups; an older save's single switch meant every group. */
+function loadAutoGroups(storage: Storage): Set<AutoGroup> {
+  const saved = storage.loadLogicRules();
+  const all = Object.keys(AUTO_LABELS) as AutoGroup[];
+  if (saved?.autoGroups) return new Set(all.filter((g) => saved.autoGroups!.includes(g)));
+  return new Set(saved?.auto ? all : []);
 }
 
 function loadRuleChoice(storage: Storage): Set<RuleId> {
