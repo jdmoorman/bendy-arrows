@@ -60,6 +60,8 @@ let playing: Puzzle = createPuzzle(6, 6);
 let playingCode = encodePuzzle(playing);
 let libraryId: string | undefined;
 let puzzleName: string | undefined;
+/** Made with New puzzle or Generate and not saved yet: the title says "New puzzle" until it's saved with a name. */
+let unnamed = false;
 /**
  * The pack level the puzzle was opened from (it stays through edits), when it isn't linked to
  * a Library entry: saving it makes a Library copy named after the level, in the pack's collection.
@@ -94,7 +96,14 @@ play.onProgress = (progress, solved) => {
   if (libraryId) storage.updateProgress(libraryId, playingCode, progress, solved);
   saveSession();
 };
-editor.changeListeners.push(() => saveSession());
+editor.changeListeners.push(() => {
+  // New puzzle or Generate: the title says so until it's saved with a name.
+  if (editor.replaced && !unnamed) {
+    unnamed = true;
+    updateHeader();
+  }
+  saveSession();
+});
 
 interface LoadMeta {
   progress?: Progress;
@@ -113,6 +122,7 @@ function loadPuzzle(p: Puzzle, meta: LoadMeta = {}, startTab: Tab = 'play') {
   libraryId = saved && saved.code === playingCode ? saved.id : undefined;
   fromLevel = libraryId ? undefined : level;
   puzzleName = meta.name ?? saved?.name ?? (level ? levelName(level) : undefined);
+  unnamed = false;
   play.load(playing, meta.progress ?? saved?.progress);
   editor.load(playing);
   updateHeader();
@@ -121,7 +131,7 @@ function loadPuzzle(p: Puzzle, meta: LoadMeta = {}, startTab: Tab = 'play') {
 }
 
 function updateHeader() {
-  titleEl.textContent = puzzleName ?? 'BendyArrows';
+  titleEl.textContent = unnamed ? 'New puzzle' : (puzzleName ?? 'BendyArrows');
   const code = encodePuzzle(playing);
   const hash = `#p=${code}`;
   if (location.hash !== hash) history.replaceState(null, '', hash);
@@ -137,6 +147,7 @@ function saveSession() {
     name: puzzleName,
     editorCode: editorCode !== playingCode ? editorCode : undefined,
     editorReplaced: editorCode !== playingCode && editor.replaced ? true : undefined,
+    unnamed: unnamed || undefined,
     tab,
   });
 }
@@ -157,6 +168,8 @@ function setTab(t: Tab) {
     if (libraryId) fromLevel = undefined;
     else if (level) fromLevel = level;
     puzzleName = saved?.name ?? (level ? levelName(level) : undefined);
+    // A new puzzle stays "New puzzle" until it's saved (or turns out to be one that was).
+    if (saved || level) unnamed = false;
     // An edited puzzle is a new puzzle: keep the marks that still fit.
     // A replaced, resized or turned puzzle starts with an empty board.
     const { segments, xMarks } = play.progress;
@@ -237,6 +250,7 @@ function saveCurrent(fromEditor: boolean, toLibrary = false) {
       } else if (entry.code === playingCode) {
         libraryId = entry.id;
         puzzleName = entry.name;
+        unnamed = false;
         updateHeader();
         saveSession();
       }
@@ -376,6 +390,7 @@ function start() {
     setTab(session.tab === 'play' && !editor.checkPlayable() ? 'edit' : session.tab);
   }
   if (fromLink && wantsEditor) setTab('edit');
+  if (reload && sessionPuzzle && puzzlesEqual(playing, sessionPuzzle) && (session?.unnamed || editor.replaced)) unnamed = true;
   updateHeader();
   ready = true;
   saveSession();

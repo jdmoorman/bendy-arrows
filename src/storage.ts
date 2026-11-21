@@ -28,6 +28,8 @@ export interface Session {
   editorCode?: string;
   /** The unsaved editor puzzle was made with New puzzle or Generate (not edited from the played one). */
   editorReplaced?: boolean;
+  /** The current puzzle came from New puzzle or Generate and hasn't been saved: it's titled "New puzzle". */
+  unnamed?: boolean;
   tab?: 'play' | 'edit' | 'library' | 'packs';
 }
 
