@@ -336,3 +336,30 @@ export function orientEnds(p: Puzzle, keepSize = false): Puzzle {
   return t ? transformPuzzle(p, t) : p;
 }
 
+/**
+ * A key for a solution path's shape: the same for two paths exactly when one is the other
+ * turned or mirrored (whatever obstacles and ends the puzzles have). `edges` are the path's lines.
+ */
+export function pathKey(s: Size, edges: Iterable<number>): string {
+  const { w, h } = s;
+  const pairs = [...edges].map((e) => edgeCells(s, e).map((c) => cellRC(s, c)));
+  // The 8 ways to turn or mirror a w×h grid: where (r, c) goes, and the new width.
+  const maps: [(r: number, c: number) => [number, number], number][] = [
+    [(r, c) => [r, c], w],
+    [(r, c) => [r, w - 1 - c], w],
+    [(r, c) => [h - 1 - r, c], w],
+    [(r, c) => [h - 1 - r, w - 1 - c], w],
+    [(r, c) => [c, r], h],
+    [(r, c) => [c, h - 1 - r], h],
+    [(r, c) => [w - 1 - c, r], h],
+    [(r, c) => [w - 1 - c, h - 1 - r], h],
+  ];
+  const keys = maps.map(([f, nw]) => {
+    const lines = pairs.map(([[r1, c1], [r2, c2]]) => {
+      const [a, b] = [f(r1, c1), f(r2, c2)].map(([r, c]) => r * nw + c).sort((x, y) => x - y);
+      return `${a}-${b}`;
+    });
+    return `${nw}x${(w * h) / nw}:${lines.sort().join(',')}`;
+  });
+  return keys.sort()[0];
+}

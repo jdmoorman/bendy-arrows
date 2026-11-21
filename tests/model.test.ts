@@ -131,3 +131,23 @@ describe('orientEnds', async () => {
   });
 
 });
+
+describe('pathKey', async () => {
+  const { pathKey, createPuzzle, edgeBetween, transformPuzzle } = await import('../src/model');
+  const { solve } = await import('../src/solver');
+  const { decodePuzzle } = await import('../src/codec');
+
+  test('a path turned or mirrored has the same key; a different path does not', () => {
+    const p = decodePuzzle('BjGrTR3joHI');
+    const path = solve(p, { maxSolutions: 1 }).solutions[0];
+    for (const t of ['rotateRight', 'rotateLeft', 'flipH', 'flipV'] as const) {
+      const q = transformPuzzle(p, t);
+      expect(pathKey(q, solve(q, { maxSolutions: 1 }).solutions[0])).toBe(pathKey(p, path));
+    }
+    // Two different paths through a 2×2 board's corner: an L and its other half.
+    const b = createPuzzle(3, 2);
+    const snake = [edgeBetween(b, 0, 1), edgeBetween(b, 1, 2), edgeBetween(b, 2, 5), edgeBetween(b, 5, 4), edgeBetween(b, 4, 3)];
+    const other = [edgeBetween(b, 0, 3), edgeBetween(b, 3, 4), edgeBetween(b, 4, 1), edgeBetween(b, 1, 2), edgeBetween(b, 2, 5)];
+    expect(pathKey(b, snake)).not.toBe(pathKey(b, other));
+  });
+});

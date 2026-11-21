@@ -1,7 +1,7 @@
 import { decodePuzzle, encodePuzzle } from './codec';
 import { MIN_PACK_LEVELS, PACKS } from './levels';
 import type { PacksMessage, PacksRequest } from './packs.worker';
-import { transformPuzzle } from './model';
+import { pathKey, transformPuzzle } from './model';
 import { padFor, renderBoard } from './render';
 import type { Storage } from './storage';
 import { ICONS } from './icons';
@@ -130,7 +130,26 @@ export class PacksView {
     if (shape) return `${shape === 1 ? 'A level is' : `${shape} levels are`} wider than tall or more than twice as tall as wide.`;
     const notUnique = this.order.flat().filter((c) => this.solutions.get(c)?.unique === false).length;
     if (notUnique) return `${notUnique === 1 ? 'A level has' : `${notUnique} levels have`} more than one solution, or none.`;
+    const repeats = this.repeats().size;
+    if (repeats) return `${repeats === 1 ? 'A level has' : `${repeats} levels have`} the same solution path as an earlier one (turned or mirrored).`;
     return '';
+  }
+
+  /** Levels whose solution path is an earlier level's, turned or mirrored: which level that is. */
+  private repeats(): Map<string, string> {
+    const first = new Map<string, string>();
+    const out = new Map<string, string>();
+    this.order.forEach((levels, pi) =>
+      levels.forEach((code, i) => {
+        const lines = this.solutions.get(code)?.lines;
+        if (!lines) return;
+        const key = pathKey(decodePuzzle(code), lines);
+        const earlier = first.get(key);
+        if (earlier) out.set(code, earlier);
+        else first.set(key, `${this.names[pi]} ${i + 1}`);
+      }),
+    );
+    return out;
   }
 
   private draw() {
@@ -210,14 +229,18 @@ export class PacksView {
 
   /** Number the tiles, count each pack, and say what's unsaved. */
   private update() {
+    const repeats = this.repeats();
     for (const grid of this.body.querySelectorAll<HTMLElement>('.pack-tiles')) {
       const pi = Number(grid.dataset.pack);
       const tiles = [...grid.querySelectorAll<HTMLElement>('.pack-tile')];
       tiles.forEach((t, i) => {
         const p = decodePuzzle(t.dataset.code!);
         const label = t.querySelector('.pack-tile-label')!;
-        const bad = shapeProblem(t.dataset.code!) || (this.solutions.get(t.dataset.code!)?.unique === false ? 'not unique' : '');
+        const code = t.dataset.code!;
+        const repeat = repeats.get(code);
+        const bad = shapeProblem(code) || (this.solutions.get(code)?.unique === false ? 'not unique' : repeat ? `same path as ${repeat}` : '');
         label.textContent = `${i + 1} · ${p.w}×${p.h}${bad ? ` · ${bad}` : ''}`;
+        t.classList.toggle('bad', !!bad);
         t.setAttribute('aria-label', `${this.names[pi]} ${i + 1}, ${p.w} by ${p.h}`);
         t.classList.toggle('moved', PACKS[pi].levels[i] !== t.dataset.code);
         t.classList.toggle('added', !PACKS.some((k) => k.levels.includes(t.dataset.code!)));

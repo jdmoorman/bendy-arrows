@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { decodePuzzle, encodePuzzle } from '../src/codec';
 import { findLevel, levelName, MIN_PACK_LEVELS, PACKS } from '../src/levels';
 import { ADVANCED_RULES, ALL_RULES, runStroke } from '../src/logic';
-import { isOneShot, openCells, transformPuzzle, type Puzzle } from '../src/model';
+import { isOneShot, openCells, pathKey } from '../src/model';
 import { solve } from '../src/solver';
 
 // Every official level must be a good puzzle before it ships: GitHub runs these before
@@ -34,32 +34,22 @@ describe('level packs', () => {
     }
   });
 
-  test('no level is another turned, mirrored or with its ends swapped', () => {
-    // Every way a board can face (4 turns, each mirrored or not), with the ends either way round.
-    const variants = (p: Puzzle): string[] => {
-      const out: string[] = [];
-      for (const q0 of [p, { ...p, endpoints: [...p.endpoints].reverse() }]) {
-        let q = q0;
-        for (let r = 0; r < 4; r++) {
-          out.push(encodePuzzle(q), encodePuzzle(transformPuzzle(q, 'flipH')));
-          q = transformPuzzle(q, 'rotateRight');
-        }
-      }
-      return out;
-    };
+  test('no two levels have the same solution path, even turned or mirrored', () => {
+    // (This covers repeats of a whole level too, turned, mirrored or with its ends swapped.)
     const seen = new Map<string, string>();
     const same: string[] = [];
     PACKS.forEach((pack) =>
       pack.levels.forEach((code, i) => {
         const name = `${pack.name} ${i + 1}`;
-        const vs = variants(decodePuzzle(code));
-        const hit = vs.map((v) => seen.get(v)).find((n) => n);
-        if (hit) same.push(`${name} is ${hit}`);
-        for (const v of vs) seen.set(v, name);
+        const p = decodePuzzle(code);
+        const key = pathKey(p, solve(p, { maxSolutions: 1 }).solutions[0]);
+        const hit = seen.get(key);
+        if (hit) same.push(`${name} has the same path as ${hit}`);
+        else seen.set(key, name);
       }),
     );
     expect(same).toEqual([]);
-  });
+  }, 120_000);
 
   test('levels are found by code and named by pack and number', () => {
     const ref = findLevel(PACKS[0].levels[2])!;
