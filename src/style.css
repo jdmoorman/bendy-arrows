@@ -1252,6 +1252,7 @@ a.btn {
   max-width: 560px;
   width: 100%;
   margin: 0 auto;
+  container-type: inline-size;
 }
 .pack-head {
   display: flex;
@@ -1306,10 +1307,16 @@ a.btn {
   color: var(--text-muted);
   line-height: 1.4;
 }
+/* Rows of 5 levels, or 10 where ten tap-sized buttons fit across. */
 .level-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--gap);
+}
+@container (min-width: 512px) {
+  .level-grid {
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+  }
 }
 .level-btn {
   position: relative;
@@ -1379,6 +1386,9 @@ a.btn {
   overflow-y: auto;
   padding-bottom: 24px;
 }
+.pack-section {
+  container-type: inline-size;
+}
 .pack-section + .pack-section {
   margin-top: 16px;
 }
@@ -1388,11 +1398,17 @@ a.btn {
 .pack-count.off-target {
   color: var(--hint-edge);
 }
+/* Rows of 5 levels, or 10 where ten tiles of about 80px fit across. */
 .pack-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--gap);
   min-height: 80px;
+}
+@container (min-width: 800px) {
+  .pack-tiles {
+    grid-template-columns: repeat(10, minmax(0, 1fr));
+  }
 }
 .pack-tile {
   display: flex;
