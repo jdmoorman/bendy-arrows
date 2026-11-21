@@ -268,6 +268,17 @@ export class EditorView {
     q<HTMLButtonElement>('[data-act=save]').addEventListener('click', () => this.onSave?.());
     q<HTMLButtonElement>('[data-act=play]').addEventListener('click', () => this.onPlay?.());
 
+    // Touching the board means rows and columns are done: editing them ends, and the touch
+    // goes on to do what it would have anyway (this runs before the board's own handler).
+    this.svg.addEventListener(
+      'pointerdown',
+      () => {
+        if (!this.gridEdit) return;
+        this.gridEdit = false;
+        this.render();
+      },
+      { capture: true },
+    );
     attachBoardInput(this.svg, () => this.puzzle, {
       kind: () => TOOL_KIND[this.tool],
       onGestureStart: () => {
@@ -592,7 +603,7 @@ export class EditorView {
   /**
    * In row-and-column editing, buttons around the board: a − beside each row (left) and above
    * each column (top) deletes it, and a + at each gap between rows (right) or columns (bottom),
-   * edges included, inserts an empty one there. The board itself is off limits meanwhile.
+   * edges included, inserts an empty one there. Touching the board ends it.
    */
   private drawGridHandles() {
     this.handles.replaceChildren();

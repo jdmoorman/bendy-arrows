@@ -168,9 +168,6 @@ a.btn {
   pointer-events: none;
   z-index: 2;
 }
-.board-wrap.grid-editing .board {
-  pointer-events: none;
-}
 .grid-handle {
   position: absolute;
   transform: translate(-50%, -50%);
