@@ -1481,12 +1481,6 @@ a.btn {
 .pack-section + .pack-section {
   margin-top: 16px;
 }
-.pack-count.short {
-  color: var(--error);
-}
-.pack-count.off-target {
-  color: var(--hint-edge);
-}
 /* Rows of 5 levels, or 10 where ten tiles of about 80px fit across. */
 .pack-tiles {
   display: grid;

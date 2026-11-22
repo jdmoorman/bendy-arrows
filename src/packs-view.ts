@@ -1,5 +1,5 @@
 import { decodePuzzle, encodePuzzle } from './codec';
-import { MIN_PACK_LEVELS, PACK_SIZE_STEP, PACKS } from './levels';
+import { PACKS } from './levels';
 import type { PackRating, PacksMessage, PacksRequest } from './packs.worker';
 import { isOneShot, levelKey, pathKey } from './model';
 import { boardSize, padFor, renderBoard } from './render';
@@ -154,6 +154,7 @@ export class PacksView {
     const names = this.packs.map((k) => k.name.trim());
     if (names.some((n) => !n)) return 'Every pack needs a name.';
     if (new Set(names).size !== names.length) return 'Two packs have the same name.';
+    if (this.packs.some((k) => !k.levels.length)) return 'Every pack needs a level.';
     const wrongKind = this.packs.reduce((n, k) => n + k.levels.filter((c) => isOneShot(decodePuzzle(c)) !== k.oneShot).length, 0);
     if (wrongKind) return `${wrongKind === 1 ? 'A level is' : `${wrongKind} levels are`} in the wrong kind of pack (one-shot or classic).`;
     const shape = this.packs.flatMap((k) => k.levels).filter((c) => shapeProblem(c)).length;
@@ -377,12 +378,7 @@ export class PacksView {
       });
       const count = grid.parentElement!.querySelector('.pack-count')!;
       const n = tiles.length;
-      // Packs aim for a multiple of PACK_SIZE_STEP levels (a soft target: Save still works).
-      const lo = n - (n % PACK_SIZE_STEP);
-      const aim = n % PACK_SIZE_STEP ? ` · aim for ${[lo, lo + PACK_SIZE_STEP].filter((x) => x >= MIN_PACK_LEVELS).join(' or ')}` : '';
-      count.textContent = `${n} level${n === 1 ? '' : 's'}${n < MIN_PACK_LEVELS ? ` · needs ${MIN_PACK_LEVELS}` : aim}`;
-      count.classList.toggle('short', n < MIN_PACK_LEVELS);
-      count.classList.toggle('off-target', n >= MIN_PACK_LEVELS && !!aim);
+      count.textContent = `${n} level${n === 1 ? '' : 's'}`;
     }
     const changed = this.changed;
     const problem = this.problem;

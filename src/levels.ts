@@ -7,8 +7,8 @@
  *   2. Running locally, tap "Copy level entry" beside the hint count, and paste the
  *      line into a pack's `levels` below (or write the code by hand: everything after
  *      `#p=` in the puzzle's share link). Levels play in the order listed.
- *   3. `npm test` checks every pack: a name, at least MIN_PACK_LEVELS
- *      levels, each no more than twice as long as it is wide (either way up), with
+ *   3. `npm test` checks every pack: a name, at least one level
+ *      (any number past that), each no more than twice as long as it is wide (either way up), with
  *      exactly one solution, and no level used twice (not even turned, mirrored or with its
  *      ends swapped).
  *   4. Commit and push to main. GitHub builds the site and publishes it to Pages.
@@ -23,11 +23,6 @@ export interface LevelPack {
   /** Every level is a one-shot (and only such packs hold one-shots). */
   oneShot?: boolean;
 }
-
-/** Every pack has at least this many levels. */
-export const MIN_PACK_LEVELS = 10;
-/** A soft target: a pack's size is best a multiple of this (the Packs tab nudges, nothing enforces it). */
-export const PACK_SIZE_STEP = 5;
 
 export const PACKS: LevelPack[] = [
   {
@@ -69,7 +64,8 @@ export const PACKS: LevelPack[] = [
       'BjHuRImBv_mg',
       'BjrlFWLnRQxTEFoA',
     ],
-  },  {
+  },
+  {
     name: 'One-Shot Minis',
     oneShot: true,
     levels: [
