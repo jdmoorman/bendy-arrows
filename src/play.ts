@@ -6,6 +6,7 @@ import { attachBoardInput } from './input';
 import { cellEdges, edgeBetween, isOneShot, isUsableEdge, type Puzzle } from './model';
 import { padFor, renderBoard } from './render';
 import { canPlace, checkSolution } from './rules';
+import { edgeName, SolveLog } from './solve-log';
 import { toast } from './ui';
 
 export interface Progress {
@@ -45,6 +46,8 @@ export class PlayView {
   /** Bumped on every change, so a slow hint can tell the board moved on. */
   private changeCount = 0;
   private solved = false;
+  /** Every step taken on this puzzle, for the Share sheet's Copy solve log. */
+  readonly log = new SolveLog();
 
   private svg: SVGSVGElement;
   private status: HTMLElement;
@@ -177,6 +180,7 @@ export class PlayView {
     this.history.clear();
     this.shownHint = null;
     this.solved = checkSolution(p, this.segments).solved;
+    this.log.load(p);
     const action = this.solvedAction();
     this.nextBtn.querySelector('span')!.textContent = action?.label ?? '';
     this.nextBtn.classList.toggle('hidden', !action);
@@ -186,9 +190,11 @@ export class PlayView {
   /** Reset: empty the board, as one undoable step. */
   private reset() {
     if (!this.segments.size && !this.xMarks.size) return;
-    this.history.push(this.snapshot());
+    const before = this.snapshot();
+    this.history.push(before);
     this.segments.clear();
     this.xMarks.clear();
+    this.log.noteChange('reset', before, this.snapshot());
     this.afterChange();
   }
 
@@ -203,6 +209,7 @@ export class PlayView {
     this.history.push(before);
     this.segments = segments;
     this.xMarks = xMarks;
+    this.log.noteChange('marks set', before, this.snapshot());
     this.afterChange();
   }
 
@@ -317,6 +324,7 @@ export class PlayView {
       this.placing();
       this.segments.delete(e);
     }
+    this.log.note(`${on ? '+' : '-'}line ${edgeName(this.puzzle, e)}`);
   }
 
   private setX(e: number, on: boolean) {
@@ -330,6 +338,7 @@ export class PlayView {
       this.placing();
       this.xMarks.delete(e);
     }
+    this.log.note(`${on ? '+' : '-'}X ${edgeName(this.puzzle, e)}`);
     this.render();
   }
 
@@ -370,20 +379,27 @@ export class PlayView {
     this.render();
     this.onProgress?.(this.progress, this.solved);
     // Every time the board becomes solved (e.g. again after Reset or Undo), not just the first.
-    if (this.solved && !wasSolved) this.onSolved?.();
+    if (this.solved && !wasSolved) {
+      this.log.note('solved');
+      this.onSolved?.();
+    }
   }
 
   private undo() {
-    const prev = this.history.undo(this.snapshot());
+    const before = this.snapshot();
+    const prev = this.history.undo(before);
     if (!prev) return;
     this.restore(prev);
+    this.log.noteChange('undo', before, prev);
     this.afterChange();
   }
 
   private redo() {
-    const next = this.history.redo(this.snapshot());
+    const before = this.snapshot();
+    const next = this.history.redo(before);
     if (!next) return;
     this.restore(next);
+    this.log.noteChange('redo', before, next);
     this.afterChange();
   }
 
@@ -439,6 +455,7 @@ export class PlayView {
       const best = closestWrong(solutions, this.segments, this.xMarks);
       if (best && best.lines.length + best.xs.length) {
         this.shownHint = { kind: 'wrong', edges: [...best.lines, ...best.xs], text: wrongText(best.lines.length, best.xs.length) };
+        this.log.note(`hint: wrong ${this.shownHint.edges.map((e) => edgeName(this.puzzle, e)).join(', ')}`);
         this.render();
         return;
       }
@@ -450,6 +467,12 @@ export class PlayView {
     } else {
       this.shownHint = findHint(this.puzzle, { segments: this.segments, xs: this.xMarks });
     }
+    const h = this.shownHint;
+    this.log.note(
+      h.kind === 'deduction'
+        ? `hint ${h.deduction.rule}: ${[...h.deduction.segments.map((e) => `line ${edgeName(this.puzzle, e)}`), ...h.deduction.xs.map((e) => `X ${edgeName(this.puzzle, e)}`)].join(', ')}`
+        : `hint (${h.kind})`,
+    );
     this.render();
   }
 

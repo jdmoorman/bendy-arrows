@@ -45,8 +45,8 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-function download(filename: string, text: string) {
-  const blob = new Blob([text], { type: 'application/json' });
+export function download(filename: string, text: string, type = 'application/json') {
+  const blob = new Blob([text], { type });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = filename;

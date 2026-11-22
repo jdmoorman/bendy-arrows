@@ -8,9 +8,10 @@ import { LibraryView } from './library-view';
 import { PacksView } from './packs-view';
 import { clonePuzzle, createPuzzle, puzzlesEqual, type Puzzle } from './model';
 import { PlayView, type Progress } from './play';
+import { allLogsText } from './solve-log';
 import { findLevel, levelName, PACKS, type LevelRef } from './levels';
 import { openSaveSheet } from './save-ui';
-import { hashWantsEditor, openShareSheet, puzzleFromHash } from './share';
+import { download, hashWantsEditor, openShareSheet, puzzleFromHash } from './share';
 import { openSettingsSheet, applySettings } from './settings-ui';
 import { Storage } from './storage';
 import { applyTheme, DEFAULT_THEME } from './themes';
@@ -198,6 +199,16 @@ for (const b of app.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
   b.addEventListener('click', () => (b.dataset.tab === 'play' ? requestPlay() : setTab(b.dataset.tab as Tab)));
 }
 
+/** Download every kept solve log as a text file, each named after its level where it is one. */
+function exportSolveLogs() {
+  const text = allLogsText((c) => {
+    const ref = findLevel(c);
+    return ref ? levelName(ref) : undefined;
+  });
+  if (!text) return toast('No solve logs yet.');
+  download(`solve-logs-${new Date().toISOString().slice(0, 10)}.txt`, text, 'text/plain');
+}
+
 app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
   openSettingsSheet(settings, (s) => {
     settings = s;
@@ -207,7 +218,7 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
     editor.render();
     play.setAutoCheck(s.autoCheck);
     storage.saveSettings(s);
-  });
+  }, exportSolveLogs);
 });
 
 app.querySelector('[data-act=share]')!.addEventListener('click', () => {

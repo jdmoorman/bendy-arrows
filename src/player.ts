@@ -4,7 +4,8 @@ import { ICONS } from './icons';
 import { findLevel, levelName, PACKS, type LevelRef } from './levels';
 import { endVariants, type Puzzle } from './model';
 import { PlayView } from './play';
-import { puzzleFromHash } from './share';
+import { allLogsText } from './solve-log';
+import { download, openShareSheet, puzzleFromHash } from './share';
 import { applySettings, openSettingsSheet } from './settings-ui';
 import { Storage, type PlayerState } from './storage';
 import { applyTheme, DEFAULT_THEME } from './themes';
@@ -27,6 +28,7 @@ app.innerHTML = `
       <button class="seg-btn" role="tab" data-tab="play">Play</button>
       <button class="seg-btn" role="tab" data-tab="levels">Levels</button>
     </div>
+    <button class="btn icon" data-act="share" aria-label="Share or open a puzzle">${ICONS.share}</button>
     <button class="btn icon" data-act="settings" aria-label="Settings">${ICONS.settings}</button>
   </header>
   <main class="views"></main>
@@ -221,6 +223,26 @@ function firstUnsolved(): LevelRef {
   return { pack: 0, level: 0 };
 }
 
+// Share the puzzle on the board (or open one); while playing, copy or clear its solve log.
+app.querySelector('[data-act=share]')!.addEventListener('click', () => {
+  if (!currentCode) return toast('Open a level first.');
+  openShareSheet({
+    puzzle: decodePuzzle(currentCode),
+    name: title(),
+    onOpen: (p) => load(p, encodePuzzle(p), findLevel(encodePuzzle(p)) ?? undefined),
+  });
+});
+
+/** Download every kept solve log as a text file, each named after its level where it is one. */
+function exportSolveLogs() {
+  const text = allLogsText((c) => {
+    const ref = findLevel(c);
+    return ref ? levelName(ref) : undefined;
+  });
+  if (!text) return toast('No solve logs yet.');
+  download(`solve-logs-${new Date().toISOString().slice(0, 10)}.txt`, text, 'text/plain');
+}
+
 app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
   openSettingsSheet(settings, (s) => {
     settings = s;
@@ -228,7 +250,7 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
     play.render();
     play.setAutoCheck(s.autoCheck);
     storage.saveSettings(s);
-  });
+  }, exportSolveLogs);
 });
 
 document.addEventListener('keydown', (ev) => {
