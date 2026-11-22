@@ -37,6 +37,8 @@ export interface RenderOptions {
   showPortTargets?: boolean;
   /** For a puzzle short of ends: frame spots where an end gives a solution (only one, or several). */
   endOptions?: Map<number, 'unique' | 'multiple'>;
+  /** Tiles whose change alone (made black, or a black tile made open) gives a puzzle with no solution one: exactly one, or several. */
+  tileFixes?: Map<number, 'unique' | 'multiple'>;
   /** Margin around the grid in SVG units (default PAD). */
   pad?: number;
   /** Tiles to shade in the highlight colour (e.g. the tile a hint is about). */
@@ -164,6 +166,15 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
       if (ports.includes(port)) continue;
       const { x, y, d } = portPoint(port);
       parts.push(`<circle class="end-option ${status}" cx="${x + d[0] * 26}" cy="${y + d[1] * 26}" r="12"/>`);
+    }
+    parts.push('</g>');
+  }
+
+  if (o.tileFixes?.size) {
+    parts.push('<g class="tile-fixes">');
+    for (const [cell, status] of o.tileFixes) {
+      const [r, c] = cellRC(p, cell);
+      parts.push(`<circle class="tile-fix ${status}" cx="${pad + c * CELL + CELL / 2}" cy="${pad + r * CELL + CELL / 2}" r="${CELL * 0.3}"/>`);
     }
     parts.push('</g>');
   }

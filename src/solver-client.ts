@@ -1,6 +1,6 @@
 import { encodePuzzle } from './codec';
 import type { Puzzle } from './model';
-import type { EndOption, SolveResult, UnionResult } from './solver';
+import type { EndOption, SolveResult, TileFix, UnionResult } from './solver';
 import type { SolverMessage, SolverRequest } from './solver.worker';
 
 export interface SolverRun {
@@ -99,6 +99,41 @@ export function endPlacementsInBackground(p: Puzzle, onFound: (o: EndOption) => 
     settle.reject(new Error(ev.message || 'Solver failed.'));
   };
   worker.postMessage({ code: encodePuzzle(p), ends: true } satisfies SolverRequest);
+  return {
+    result,
+    cancel() {
+      worker.terminate();
+      settle.reject(new DOMException('Cancelled', 'AbortError'));
+    },
+  };
+}
+
+export interface FixesRun {
+  result: Promise<TileFix[]>;
+  cancel(): void;
+}
+
+/** For a puzzle with no solution, the one-tile changes among `cells` that give it one, in a background worker; `onFound` sees each. */
+export function tileFixesInBackground(p: Puzzle, cells: number[], onFound: (f: TileFix) => void): FixesRun {
+  const worker = new Worker(new URL('./solver.worker.ts', import.meta.url), { type: 'module' });
+  let settle: { resolve: (r: TileFix[]) => void; reject: (e: Error) => void };
+  const result = new Promise<TileFix[]>((resolve, reject) => (settle = { resolve, reject }));
+  worker.onmessage = (ev: MessageEvent<SolverMessage>) => {
+    const m = ev.data;
+    if (m.type === 'fix') onFound(m.fix);
+    else if (m.type === 'fixes-done') {
+      worker.terminate();
+      settle.resolve(m.fixes);
+    } else if (m.type === 'error') {
+      worker.terminate();
+      settle.reject(new Error(m.message));
+    }
+  };
+  worker.onerror = (ev) => {
+    worker.terminate();
+    settle.reject(new Error(ev.message || 'Solver failed.'));
+  };
+  worker.postMessage({ code: encodePuzzle(p), fixes: cells } satisfies SolverRequest);
   return {
     result,
     cancel() {

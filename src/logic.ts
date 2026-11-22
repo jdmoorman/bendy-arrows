@@ -15,7 +15,8 @@ export type RuleId =
   | 'noSeal'
   | 'bottlenecks'
   | 'balance'
-  | 'imbalance';
+  | 'imbalance'
+  | 'trial';
 
 export interface RuleInfo {
   id: RuleId;
@@ -66,6 +67,18 @@ export const IMBALANCE_RULE: RuleInfo = {
   hint: 'The path alternates colours, so it crosses into an area on its commoner colour twice as many extra times as that colour has extra tiles.',
 };
 
+/**
+ * One-step trial: suppose a line (or an X) on a border and let the quick rules run; if that
+ * breaks the puzzle, the border gets the opposite. It's trial and error, so like Checkerboard
+ * imbalance it is left out of RULES (and so of ALL_RULES and every hint, rating and logic run);
+ * pass it explicitly to use it. Only a last resort, when nothing else applies.
+ */
+export const TRIAL_RULE: RuleInfo = {
+  id: 'trial',
+  label: 'One-step trial',
+  hint: 'Try a line (or an X) on a border and apply the quick rules: if that breaks the puzzle, the border gets the opposite. Used only when nothing else applies.',
+};
+
 /** The rules from before the advanced ones were added (for migrating saved choices). */
 export const BASIC_RULES: RuleId[] = ['continue', 'corners', 'passages', 'noLoops'];
 
@@ -84,6 +97,10 @@ export interface Contradiction {
   reason: string;
   /** Longer explanation for a Play hint. */
   hint: string;
+  /** A checkerboard area that can't balance: how many of its tiles are shaded and white. */
+  balance?: { shaded: number; white: number };
+  /** Tiles worth trying to change (made black, or made open) to fix it, when that's not just around `cells`. */
+  fixCells?: number[];
 }
 
 export interface StepResult {
@@ -109,6 +126,57 @@ function needs(p: Puzzle): Int8Array {
   for (const c of openCells(p)) need[c] = 2;
   for (const c of ends) need[c] = 1;
   return need;
+}
+
+/** Why the board's checkerboard colours rule out a path through every tile, or null if they don't. */
+function parityProblem(p: Puzzle): { shaded: number; white: number; wrongEnds: number[]; why: string } | null {
+  const shaded = (c: number) => (Math.floor(c / p.w) + (c % p.w)) % 2 === 1;
+  const open = openCells(p);
+  const s = open.filter(shaded).length;
+  const w = open.length - s;
+  const ends = endpointCells(p).slice(0, 2);
+  const mix = `The board has ${s} shaded and ${w} white tiles`;
+  // The path alternates colours: over every tile, the two colours differ by at most one, and an
+  // odd count puts both ends on the commoner colour; an even one, one end on each.
+  if (Math.abs(s - w) > 1) return { shaded: s, white: w, wrongEnds: [], why: `${mix}, but a path through every tile alternates colours, so they can differ by one at most.` };
+  if (s !== w) {
+    const wrong = ends.filter((c) => shaded(c) !== s > w);
+    if (wrong.length) {
+      const common = s > w ? 'shaded' : 'white';
+      return { shaded: s, white: w, wrongEnds: wrong, why: `${mix}, so both ends of the path must be on ${common} tiles, but ${wrong.length === 1 ? 'one is' : 'both are'} on ${s > w ? 'white' : 'shaded'}.` };
+    }
+  } else if (ends.length === 2 && shaded(ends[0]) === shaded(ends[1])) {
+    return { shaded: s, white: w, wrongEnds: ends, why: `${mix}, so one end of the path must be on each colour, but both are on ${shaded(ends[0]) ? 'shaded' : 'white'} tiles.` };
+  }
+  return null;
+}
+
+/**
+ * The whole board's checkerboard colours, as a contradiction: the colours of a path through
+ * every tile alternate, so the counts and the ends' colours have to fit. Its fix cells are the
+ * tiles whose change alone (open made black, black made open; not an end) makes them fit.
+ */
+export function boardParity(p: Puzzle): Contradiction | null {
+  const bad = parityProblem(p);
+  if (!bad) return null;
+  const ends = new Set(endpointCells(p));
+  const fixCells: number[] = [];
+  for (let c = 0; c < cellCount(p); c++) {
+    if (ends.has(c)) continue;
+    const blocked = new Set(p.blocked);
+    if (blocked.has(c)) blocked.delete(c);
+    else blocked.add(c);
+    if (!parityProblem({ ...p, blocked })) fixCells.push(c);
+  }
+  const open = openCells(p);
+  return {
+    cell: bad.wrongEnds[0] ?? open[0],
+    cells: bad.wrongEnds,
+    reason: bad.why,
+    hint: `Something is off: ${bad.why[0].toLowerCase()}${bad.why.slice(1)}`,
+    balance: { shaded: bad.shaded, white: bad.white },
+    fixCells,
+  };
 }
 
 /** One conclusion of one rule at one tile. */
@@ -166,9 +234,13 @@ export interface LogicOptions {
    * original 'search', kept to check the two agree.
    */
   threeCuts?: 'labels' | 'search';
+  /** A tile to look near first: the one-step trial tries the borders closest to it first (a one-shot's head). */
+  focus?: number;
 }
 
 function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: LogicOptions = {}): Analysis {
+  const parity = boardParity(p);
+  if (parity) return { kind: 'contradiction', ...parity };
   const need = needs(p);
   const open = openCells(p);
   const closed = closedBorders(p, state, need);
@@ -216,7 +288,91 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
   }
+  // The trial is a last resort: only when nothing simpler applies (with a focus, a one-shot's
+  // head, nothing simpler draws a line there).
+  const atFocus = (d: Deduction) => opts.focus !== undefined && d.segments.some((e) => edgeCells(p, e).includes(opts.focus!));
+  if (enabled.has('trial') && !deductions.some((d) => opts.focus === undefined || atFocus(d)) && open.length <= TRIAL_MAX_TILES) {
+    const d = trialDeduction(p, state, closed, opts.focus);
+    if (d) deductions.push(d);
+  }
   return { kind: 'open', deductions };
+}
+
+/** The one-step trial only runs on boards up to this many tiles (it is slow). */
+const TRIAL_MAX_TILES = 150;
+
+/** The rules a trial runs: the quick, local ones. */
+const TRIAL_RULES: RuleId[] = ['corners', 'passages', 'continue', 'noLoops', 'noFinish'];
+
+/** Does this state break, as far as the trial rules can tell? Returns how. */
+function breaks(p: Puzzle, start: LogicState): { phrase: string; cells: number[] } | null {
+  let state = start;
+  for (let i = 0; i < 40; i++) {
+    const loop = earlyLoop(p, state);
+    if (loop) return { phrase: 'the lines would close a loop too soon', cells: loop };
+    const step = logicStep(p, state, TRIAL_RULES);
+    if (step.contradiction) {
+      const c = step.contradiction;
+      const phrase =
+        c.reason === 'A tile has too many lines.'
+          ? 'a tile would end up with too many lines'
+          : c.reason === 'A tile has too few ways in or out.'
+            ? 'a tile would be left with too few ways in or out'
+            : 'the rules would contradict each other';
+      return { phrase: i ? `the quick rules would soon find that ${phrase}` : phrase, cells: c.cells ?? [c.cell] };
+    }
+    if (step.solved || (!step.segments.length && !step.xs.length)) return null;
+    state = applyStep(state, step);
+  }
+  return null;
+}
+
+/** Tiles of a loop among the lines (a path never closes one). */
+function earlyLoop(p: Puzzle, state: LogicState): number[] | null {
+  const n = cellCount(p);
+  const parent = Int32Array.from({ length: n }, (_, i) => i);
+  const find = (x: number): number => {
+    while (parent[x] !== x) x = parent[x] = parent[parent[x]];
+    return x;
+  };
+  for (const e of state.segments) {
+    const [a, b] = edgeCells(p, e);
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) {
+      parent[ra] = rb;
+      continue;
+    }
+    return openCells(p).filter((c) => find(c) === ra);
+  }
+  return null;
+}
+
+/**
+ * One-step trial: try a line (then an X) on each open border and run the quick rules; if that
+ * breaks, the border must be the other way. Borders nearest `focus` (a one-shot's head) are
+ * tried first, since only a move there helps the stroke.
+ */
+function trialDeduction(p: Puzzle, state: LogicState, closed: Set<number>, focus?: number): Deduction | null {
+  let borders = openBorders(p, state, closed);
+  if (focus !== undefined) {
+    const fr = Math.floor(focus / p.w);
+    const fc = focus % p.w;
+    const away = (e: number) => Math.min(...edgeCells(p, e).map((c) => Math.abs(Math.floor(c / p.w) - fr) + Math.abs((c % p.w) - fc)));
+    borders = borders.map((e) => [e, away(e)]).sort((a, b) => a[1] - b[1]).map(([e]) => e);
+  }
+  for (const e of borders) {
+    const [a] = edgeCells(p, e);
+    const withLine = breaks(p, { segments: new Set([...state.segments, e]), xs: state.xs });
+    if (withLine) {
+      return { rule: 'trial', cell: a, cells: withLine.cells, segments: [], xs: [e], why: `Suppose the highlighted border had a line: then ${withLine.phrase}. So it gets an X.` };
+    }
+    const withX = breaks(p, { segments: state.segments, xs: new Set([...state.xs, e]) });
+    if (withX) {
+      return { rule: 'trial', cell: a, cells: withX.cells, segments: [e], xs: [], why: `Suppose the highlighted border had an X: then ${withX.phrase}. So the path must go through it.` };
+    }
+  }
+  return null;
 }
 
 /** The checkerboard rules among those enabled. */
@@ -282,6 +438,7 @@ const SPEED_TIERS: RuleId[][] = [
   ['continue', 'corners', 'passages', 'noLoops', 'noFinish'],
   ['noSeal'],
   ['bottlenecks', 'balance', 'imbalance'],
+  ['trial'],
 ];
 
 /**
@@ -292,8 +449,8 @@ const SPEED_TIERS: RuleId[][] = [
 export function fastStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>, opts: LogicOptions = {}): StepResult {
   const chosen = new Set(rules);
   const tiered = new Set(SPEED_TIERS.flat());
-  // Rules not in any group (none today) run last.
-  const tiers = [...SPEED_TIERS, [...chosen].filter((r) => !tiered.has(r))];
+  // Rules not in any group (none today) run with the expensive ones, before the trial.
+  const tiers = [...SPEED_TIERS.slice(0, -1), [...chosen].filter((r) => !tiered.has(r)), SPEED_TIERS.at(-1)!];
   let last: StepResult = { segments: [], xs: [], byRule: {}, solved: false };
   for (const tier of tiers) {
     const use = tier.filter((r) => chosen.has(r));
@@ -330,7 +487,7 @@ export function runLogic(p: Puzzle, rules: Iterable<RuleId>, start: LogicState =
 }
 
 /** The rules outside the editor's "Easy rules" group. */
-export const ADVANCED_RULES: RuleId[] = ['balance', 'imbalance'];
+export const ADVANCED_RULES: RuleId[] = ['balance', 'imbalance', 'trial'];
 
 /** One hint a player needed: its rule, and for area rules how many tiles the area had. */
 export interface HintStep {
@@ -470,14 +627,14 @@ function movePlaces(ds: Deduction[], state: LogicState): number {
 /** Simplest rules first: the order hints are chosen in. */
 export const HINT_ORDER: RuleId[] = ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'noSeal', 'bottlenecks', 'balance'];
 /** HINT_ORDER with Checkerboard imbalance last, used only when it is passed in explicitly. */
-const HINT_ORDER_ALL: RuleId[] = [...HINT_ORDER, 'imbalance'];
+const HINT_ORDER_ALL: RuleId[] = [...HINT_ORDER, 'imbalance', 'trial'];
 
 const TOO_MANY = 'Something is off: the highlighted tile has more lines than the path can use there.';
 const TOO_FEW = 'Something is off: the highlighted tile has too few ways in or out left — check the X marks around it.';
 
 export type Hint =
   | { kind: 'deduction'; deduction: Deduction; text: string }
-  | { kind: 'mistake'; cell: number; cells?: number[]; text: string }
+  | { kind: 'mistake'; cell: number; cells?: number[]; fixCells?: number[]; reason?: string; text: string }
   | { kind: 'solved'; text: string }
   | { kind: 'none'; text: string };
 
@@ -489,7 +646,7 @@ export function findHint(p: Puzzle, state: LogicState, rules: Iterable<RuleId> =
   const allowed = new Set(rules);
   const order = HINT_ORDER_ALL.filter((r) => allowed.has(r));
   const an = analyse(p, state, new Set(order), opts);
-  if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, text: an.hint };
+  if (an.kind === 'contradiction') return { kind: 'mistake', cell: an.cell, cells: an.cells, fixCells: an.fixCells, reason: an.reason, text: an.hint };
   if (an.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
   const d = simplest(an.deductions, order);
   if (d) return { kind: 'deduction', deduction: d, text: explain(p, state, d) };
@@ -523,10 +680,12 @@ export function strokeFrom(p: Puzzle, segments: Set<number>): { tiles: number[];
  */
 export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opts: LogicOptions = {}, rules: Iterable<RuleId> = HINT_ORDER, xs: Set<number> = new Set()): Hint {
   const base: LogicState = { segments: stroke, xs };
+  // The one-step trial looks at the head first: only a move there carries the stroke on.
+  opts = { ...opts, focus: head };
   const allowed = new Set(rules);
   const order = HINT_ORDER_ALL.filter((r) => allowed.has(r));
   const all = analyse(p, base, new Set(order), opts);
-  if (all.kind === 'contradiction') return { kind: 'mistake', cell: all.cell, cells: all.cells, text: all.hint };
+  if (all.kind === 'contradiction') return { kind: 'mistake', cell: all.cell, cells: all.cells, fixCells: all.fixCells, reason: all.reason, text: all.hint };
   if (all.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
   const next = (d: Deduction) => d.segments.find((e) => !stroke.has(e) && edgeCells(p, e).includes(head));
   // The simplest rules first: with each, a line straight away, or else after X marks.
@@ -598,7 +757,7 @@ export function runStroke(p: Puzzle, rules: Iterable<RuleId>, start: LogicState 
     const state = { segments: lines, xs };
     const h = findStrokeHint(p, lines, tiles[tiles.length - 1], opts, chosen, xs);
     if (h.kind === 'solved') return { state, rounds, solved: true };
-    if (h.kind === 'mistake') return { state, rounds, solved: false, contradiction: { cell: h.cell, cells: h.cells, reason: 'The stroke can’t be finished.', hint: h.text } };
+    if (h.kind === 'mistake') return { state, rounds, solved: false, contradiction: { cell: h.cell, cells: h.cells, fixCells: h.fixCells, reason: h.reason ?? 'The stroke can’t be finished.', hint: h.text } };
     if (h.kind !== 'deduction') return { state, rounds, solved: false };
     if (h.deduction.xs.length) xs = new Set([...xs, ...h.deduction.xs]);
     ({ tiles, lines } = strokeFrom(p, new Set([...lines, ...h.deduction.segments])));
@@ -1076,11 +1235,16 @@ function areaRules(
     }
     if (!sOpen.length && !wOpen.length) return null;
     if (sMin > sMax) {
+      const nS = area.filter(shaded).length;
+      const ends = endS + endW;
+      const ways = (n: number) => `${n} way${n === 1 ? '' : 's'}`;
+      const mix = `${nS} shaded and ${area.length - nS} white tiles${ends ? ` and ${ends === 1 ? 'an end' : 'both ends'} of the path` : ''}, with ${ways(sDrawn + sOpen.length)} in or out through shaded tiles and ${ways(wDrawn + wOpen.length)} through white`;
       return {
         cell: Math.min(...area),
         cells: [...area],
-        reason: "An area's shaded and white tiles can't balance.",
-        hint: 'Something is off: the highlighted area has the wrong mix of shaded and white tiles for the ways in and out that are left — check the lines and X marks around it.',
+        reason: `An area of ${mix}, can't balance.`,
+        hint: `Something is off: the highlighted area has ${mix}, the wrong mix for the path to pass through — check the lines and X marks around it.`,
+        balance: { shaded: nS, white: area.length - nS },
       };
     }
     const wMin = sMin - target;

@@ -282,3 +282,18 @@ describe('endPlacements with union', async () => {
     }
   });
 });
+
+describe('tileFixes', async () => {
+  const { tileFixes } = await import('../src/solver');
+  const { createPuzzle, portEnd, portId, cellAt } = await import('../src/model');
+  test('a 3×3 with both ends on the rarer colour has no solution; blacking out the middle (the commoner colour) fixes it', () => {
+    const p = createPuzzle(3, 3);
+    p.endpoints = [portEnd(portId(p, 'left', 0)), portEnd(portId(p, 'top', 1))];
+    const all = Array.from({ length: 9 }, (_, i) => i);
+    const fixes = tileFixes(p, all);
+    expect(fixes.some((f) => f.cell === cellAt(p, 1, 1) && f.add)).toBe(true);
+    // The end tiles stay open, and no tile of the rarer colour helps.
+    expect(fixes.every((f) => f.cell !== cellAt(p, 0, 0) && f.cell !== cellAt(p, 0, 1))).toBe(true);
+    expect(fixes.every((f) => (Math.floor(f.cell / 3) + (f.cell % 3)) % 2 === 0)).toBe(true);
+  });
+});

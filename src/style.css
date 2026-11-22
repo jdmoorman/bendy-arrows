@@ -294,6 +294,18 @@ a.btn {
 .end-option.multiple {
   fill: rgb(217 119 6);
 }
+/* A tile whose change alone would give a puzzle with no solution one (black made open, or open made black). */
+.tile-fix {
+  fill: none;
+  stroke-width: 8;
+  stroke-dasharray: 14 10;
+}
+.tile-fix.unique {
+  stroke: var(--success);
+}
+.tile-fix.multiple {
+  stroke: rgb(217 119 6);
+}
 .border-target {
   fill: var(--text-muted);
   opacity: 0.35;

@@ -27,10 +27,11 @@ import {
 } from './model';
 import { CELL, padFor, renderBoard } from './render';
 import { missingEnds } from './rules';
-import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, findStrokeHint, IMBALANCE_RULE, RULES, runLogic, runStroke, strokeFrom, type AreaSource, type LogicOptions, type LogicState, type RuleId, type RuleInfo } from './logic';
+import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, findStrokeHint, IMBALANCE_RULE, RULES, runLogic, TRIAL_RULE, runStroke, strokeFrom, type AreaSource, type LogicOptions, type LogicState, type RuleId, type RuleInfo } from './logic';
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
+import { tileFixesInBackground, type FixesRun } from './solver-client';
 import { fillInBackground, removableInBackground, simplifyInBackground, type Removable } from './generator-client';
 import type { GoalFailure, SimplifyGoal } from './generator';
 import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from './new-puzzle-ui';
@@ -78,6 +79,9 @@ export class EditorView {
   private ghost: Set<number> | null = null;
   /** For a puzzle short of ends: where an end would give a solution (from the uniqueness check). */
   private endOptions: Map<number, 'unique' | 'multiple'> | null = null;
+  /** After a contradiction: tiles whose change alone gives the puzzle a solution, and the search for them. */
+  private fixes = new Map<number, 'unique' | 'multiple'>();
+  private fixRun: FixesRun | null = null;
   private suggestedWall: number | null = null;
   private message = '';
   private messageKind: '' | 'success' | 'error' = '';
@@ -378,6 +382,7 @@ export class EditorView {
   // --- Logic helper -------------------------------------------------------
 
   private resetLogic() {
+    this.clearFixes();
     this.logic = { segments: new Set(), xs: new Set() };
     this.logicFresh = new Set();
     this.logicSteps = 0;
@@ -401,7 +406,7 @@ export class EditorView {
     this.logicFocus = new Set();
     this.logicBad = hint.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
     if (hint.kind === 'mistake') {
-      this.setMessage(`Contradiction: ${hint.text} This puzzle has no solution.`, 'error');
+      this.showContradiction(hint.text, hint.fixCells);
       return;
     }
     if (hint.kind === 'solved') {
@@ -409,6 +414,7 @@ export class EditorView {
       return;
     }
     if (hint.kind === 'none') {
+      if (stroke && this.strokeStuckProblem(this.logicRules)) return;
       this.logicNote = this.logicSteps
         ? `Stuck after ${this.logicSteps} step${this.logicSteps === 1 ? '' : 's'} — the chosen rules find nothing more.`
         : 'The chosen rules find nothing to fill in.';
@@ -421,7 +427,7 @@ export class EditorView {
     this.logicFresh = new Set([...d.segments, ...d.xs]);
     this.logicFocus = new Set(d.cells ?? [d.cell]);
     this.logicSteps++;
-    const label = [...RULES, IMBALANCE_RULE].find((r) => r.id === d.rule)?.label ?? d.rule;
+    const label = [...RULES, IMBALANCE_RULE, TRIAL_RULE].find((r) => r.id === d.rule)?.label ?? d.rule;
     this.logicNote = `Step ${this.logicSteps} · ${label}`;
     this.render();
   }
@@ -449,7 +455,8 @@ export class EditorView {
     const c = run.contradiction;
     this.logicBad = c ? (c.cells ?? [c.cell]) : [];
     const added = [lines ? `+${lines} line${lines === 1 ? '' : 's'}` : '', xs ? `+${xs} X` : ''].filter(Boolean).join(', ');
-    if (c) this.setMessage(`Contradiction: ${c.reason} This puzzle has no solution.`, 'error');
+    if (c) this.showContradiction(c.reason, c.fixCells);
+    else if (!run.solved && isOneShot(p) && this.strokeStuckProblem(rules)) return;
     else if (run.solved) this.setMessage(`Fast forward: ${added ? added + ', and ' : ''}the easy rules solve it!`, 'success');
     else {
       this.logicNote = fresh.size ? `Fast forward: ${added}. The easy rules find nothing more.` : 'The easy rules find nothing more.';
@@ -477,7 +484,7 @@ export class EditorView {
       }
       if (r.contradiction) {
         this.logicBad = r.contradiction.cells ?? [r.contradiction.cell];
-        this.setMessage(`Contradiction: ${r.contradiction.reason} This puzzle has no solution.`, 'error');
+        this.showContradiction(r.contradiction.reason, r.contradiction.fixCells);
         return;
       }
       if (r.solved) {
@@ -505,6 +512,7 @@ export class EditorView {
     this.logicFresh = new Set();
     this.logicFocus = new Set();
     this.logicBad = [];
+    this.clearFixes();
     this.logicNote = this.logicSteps ? `Back to step ${this.logicSteps}.` : 'Back to the start.';
     this.render();
   }
@@ -752,7 +760,7 @@ export class EditorView {
     const save = () => {
       this.storage.saveLogicRules({
         enabled: [...this.logicRules],
-        known: [...ALL_RULES, IMBALANCE_RULE.id],
+        known: [...ALL_RULES, IMBALANCE_RULE.id, TRIAL_RULE.id],
         autoGroups: [...this.autoGroups],
         // Saved as the ones switched off, so a newly added kind of area starts on.
         areaSourcesOff: AREA_SOURCES.filter((x) => !(this.logicOpts.areaSources ?? AREA_SOURCES).includes(x)),
@@ -882,9 +890,75 @@ export class EditorView {
         render();
       });
       autoRow('imbalance');
+      const tr = ruleChoice(TRIAL_RULE);
+      switchRow(tr.label, `${tr.hint} Slow, and only on boards of up to 150 tiles.`, tr.on, (on) => {
+        tr.set(on);
+        save();
+        render();
+      });
+      autoRow('trial');
     };
     render();
     openSheet('Logic rules', body);
+  }
+
+  /**
+   * A contradiction the logic found: say why, then look for one-tile changes in and around the
+   * highlighted tiles (an open tile made black, or a black tile beside them made open) that give
+   * the puzzle a solution, and ring them.
+   */
+  private showContradiction(why: string, fixCells?: number[]) {
+    this.clearFixes();
+    const base = `Contradiction: ${why} This puzzle has no solution.`;
+    const p = this.puzzle;
+    const area = new Set(this.logicBad);
+    const cells = fixCells ?? [...area, ...[...area].flatMap((c) => neighbors(p, c)).filter((c) => p.blocked.has(c))];
+    if (!cells.length) {
+      // The colour check found no one tile that fixes it: only moving an end can.
+      this.setMessage(fixCells ? `${base} No single black-tile change can fix the colours: move an end.` : base, 'error');
+      return;
+    }
+    this.setMessage(`${base} Looking for a one-tile fix…`, 'error');
+    const run = tileFixesInBackground(p, cells, (f) => {
+      this.fixes.set(f.cell, f.status === 'unique' ? 'unique' : 'multiple');
+      this.render();
+    });
+    this.fixRun = run;
+    run.result
+      .then((fixes) => {
+        if (this.fixRun !== run) return;
+        this.fixRun = null;
+        const unique = fixes.filter((f) => f.status === 'unique').length;
+        const add = fixes.some((f) => f.add);
+        const remove = fixes.some((f) => !f.add);
+        const how = add && remove ? 'Making a ringed tile black (or a ringed black tile open)' : add ? 'Making a ringed tile black' : 'Making a ringed black tile open';
+        this.setMessage(
+          fixes.length
+            ? `${base} ${how} gives it a solution${unique ? ` — exactly one for the ${unique === fixes.length ? '' : `${unique} `}green one${unique === 1 ? '' : 's'}` : ', though more than one'}.`
+            : `${base} No single black-tile change here gives it a solution.`,
+          'error',
+        );
+      })
+      .catch(() => {});
+  }
+
+  /**
+   * A one-shot's stroke is stuck: the stroke's rules only look at its head, so run the rules
+   * over the whole board from here too, and show any contradiction they find (the puzzle may
+   * have no solution). True if there was one.
+   */
+  private strokeStuckProblem(rules: Iterable<RuleId>): boolean {
+    const c = runLogic(this.puzzle, rules, this.logic, this.logicOpts).contradiction;
+    if (!c) return false;
+    this.logicBad = c.cells?.length ? c.cells : [c.cell];
+    this.showContradiction(`The stroke is stuck, and the rules find a problem elsewhere on the board. ${c.reason}`, c.fixCells);
+    return true;
+  }
+
+  private clearFixes() {
+    this.fixRun?.cancel();
+    this.fixRun = null;
+    this.fixes = new Map();
   }
 
   /** Show a message under the board until the next edit. */
@@ -1098,6 +1172,7 @@ export class EditorView {
       highlight: logic ? this.logicFresh : undefined,
       focusCells: logic && this.logicFocus.size ? this.logicFocus : undefined,
       errorCells: logic && this.logicBad.length ? new Set(this.logicBad) : undefined,
+      tileFixes: this.fixes.size && this.logicBad.length ? this.fixes : undefined,
     });
     this.oneShotBtn.setAttribute('aria-pressed', String(!!p.oneShot));
     this.gridBtn.setAttribute('aria-pressed', String(this.gridEdit));
@@ -1144,10 +1219,10 @@ function loadLogicOptions(storage: Storage): LogicOptions {
   return { areaSources: sources.length < AREA_SOURCES.length ? sources : undefined };
 }
 
-type AutoGroup = 'easy' | 'balance' | 'imbalance';
+type AutoGroup = 'easy' | 'balance' | 'imbalance' | 'trial';
 /** The groups Auto-apply can run, each with its own switch (under its rule's). */
-const AUTO_LABELS: Record<AutoGroup, string> = { easy: 'easy rules', balance: 'Checkerboard balance', imbalance: 'Checkerboard imbalance' };
-const autoGroupOf = (r: RuleId): AutoGroup => (r === 'balance' || r === 'imbalance' ? r : 'easy');
+const AUTO_LABELS: Record<AutoGroup, string> = { easy: 'easy rules', balance: 'Checkerboard balance', imbalance: 'Checkerboard imbalance', trial: 'One-step trial' };
+const autoGroupOf = (r: RuleId): AutoGroup => (r === 'balance' || r === 'imbalance' || r === 'trial' ? r : 'easy');
 
 /** The saved Auto-apply groups; an older save's single switch meant every group. */
 function loadAutoGroups(storage: Storage): Set<AutoGroup> {
@@ -1162,7 +1237,7 @@ function loadRuleChoice(storage: Storage): Set<RuleId> {
   if (!saved) return new Set(ALL_RULES);
   const known = new Set<string>(saved.known ?? BASIC_RULES);
   const on = new Set<string>(saved.enabled);
-  // Checkerboard imbalance is off unless chosen.
+  // Checkerboard imbalance and the one-step trial are off unless chosen.
   const chosen = ALL_RULES.filter((r) => on.has(r) || !known.has(r));
-  return new Set(on.has(IMBALANCE_RULE.id) ? [...chosen, IMBALANCE_RULE.id] : chosen);
+  return new Set([...chosen, ...[IMBALANCE_RULE.id, TRIAL_RULE.id].filter((r) => on.has(r))]);
 }

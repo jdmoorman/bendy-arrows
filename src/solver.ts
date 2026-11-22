@@ -469,3 +469,33 @@ export function endPlacements(
   }
   return { options, unchecked };
 }
+
+/** What a single black-tile change does to a puzzle: the tile, whether it's added or taken away, and the solutions after. */
+export interface TileFix {
+  cell: number;
+  add: boolean;
+  status: SolveStatus;
+}
+
+/**
+ * For a puzzle with no solution: each change of one tile among `cells` (an open tile made black,
+ * or a black tile made open; end tiles stay open), and whether the puzzle then has a solution.
+ * Only the changes that give it one are returned, each as it's found to `onFound`.
+ */
+export function tileFixes(p: Puzzle, cells: Iterable<number>, opts: { nodeLimit?: number; onFound?: (f: TileFix) => void } = {}): TileFix[] {
+  const ends = new Set(endpointCells(p));
+  const out: TileFix[] = [];
+  for (const cell of new Set(cells)) {
+    const add = !p.blocked.has(cell);
+    if (add && ends.has(cell)) continue;
+    const q = clonePuzzle(p);
+    if (add) q.blocked.add(cell);
+    else q.blocked.delete(cell);
+    const r = solve(q, { maxSolutions: 2, nodeLimit: opts.nodeLimit ?? 200_000 });
+    if (r.status !== 'unique' && r.status !== 'multiple') continue;
+    const f = { cell, add, status: r.status };
+    out.push(f);
+    opts.onFound?.(f);
+  }
+  return out;
+}

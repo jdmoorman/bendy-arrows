@@ -20,6 +20,11 @@ ctx.onmessage = (ev: MessageEvent<LogicRequest>) => {
   const { id, code, rules, opts } = ev.data;
   const p = decodePuzzle(code);
   const run = isOneShot(p) ? runStroke(p, rules, undefined, opts) : runLogic(p, rules, undefined, opts);
+  // A one-shot's stroke that's stuck: the rules over the whole board may find the puzzle can't be solved.
+  if (isOneShot(p) && !run.solved && !run.contradiction) {
+    const c = runLogic(p, rules, run.state, opts).contradiction;
+    if (c) run.contradiction = { ...c, reason: `The stroke is stuck, and the rules find a problem elsewhere on the board. ${c.reason}` };
+  }
   ctx.postMessage({
     id,
     segments: [...run.state.segments],

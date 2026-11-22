@@ -30,7 +30,9 @@ describe('logic rules', () => {
   });
 
   test('passages: a tile walled on opposite sides gets a straight line', () => {
-    const p = board(3, 3);
+    // Ends at two corners: a 3×3 has one more of the corners' colour, so both ends go on it.
+    const p = createPuzzle(3, 3);
+    p.endpoints = [portEnd(portId(p, 'left', 0)), portEnd(portId(p, 'right', 2))];
     p.walls.add(edgeBetween(p, 1, 4)).add(edgeBetween(p, 4, 7)); // centre walled top and bottom
     const step = logicStep(p, empty(), ['passages']);
     // The centre, and the top/bottom middle tiles (walled toward the centre), get straight lines.
@@ -449,6 +451,24 @@ describe('searchMetrics', async () => {
   });
 });
 
+describe('one-step trial', async () => {
+  const { TRIAL_RULE, deductions: ds, HINT_ORDER } = await import('../src/logic');
+  const { decodePuzzle } = await import('../src/codec');
+  test('is off everywhere unless chosen: not in ALL_RULES or the hint order', () => {
+    expect(ALL_RULES).not.toContain(TRIAL_RULE.id);
+    expect(HINT_ORDER).not.toContain(TRIAL_RULE.id);
+  });
+  test('when chosen, its deduction agrees with the solution', () => {
+    for (const code of ['Bil7VRR8ig', 'BiouuR74XSs']) {
+      const p = decodePuzzle(code);
+      const sol = new Set(solve(p, { maxSolutions: 1 }).solutions[0]);
+      const d = ds(p, { segments: new Set(), xs: new Set() }, [TRIAL_RULE.id]);
+      expect(d.length, code).toBe(1);
+      expect(d[0].segments.every((e) => sol.has(e)) && d[0].xs.every((e) => !sol.has(e)), code).toBe(true);
+    }
+  });
+});
+
 describe('findStrokeHint', async () => {
   const { findStrokeHint } = await import('../src/logic');
   test('an X mark from an easy rule can lead to the next line: a No early finish hint, then Continue', () => {
@@ -540,5 +560,23 @@ describe('one-shot logic', async () => {
     expect(s.tiles[0]).toBe(start);
     expect(s.lines.size).toBeLessThanOrEqual(3);
     expect(strokeFrom(p, new Set()).tiles).toEqual([start]);
+  });
+});
+
+describe('board colours', async () => {
+  const { boardParity } = await import('../src/logic');
+  test('a board whose colours rule out a path is a contradiction, with the tiles whose change would fit them', () => {
+    // 3×3: five tiles of the corners' colour and four of the other, so both ends must be on the corners' colour.
+    const p = createPuzzle(3, 3);
+    p.endpoints = [portEnd(portId(p, 'left', 0)), portEnd(portId(p, 'top', 1))];
+    const c = boardParity(p)!;
+    expect(c.reason).toContain('4 shaded and 5 white');
+    expect(c.cells).toEqual([1]); // the end on the rarer colour
+    // Blacking out the centre (the commoner colour, not an end) evens them, so the ends can differ.
+    expect(c.fixCells).toContain(4);
+    expect(c.fixCells).not.toContain(0);
+    expect(logicStep(p, empty(), ALL_RULES).contradiction?.reason).toBe(c.reason);
+    p.endpoints = [portEnd(portId(p, 'left', 0)), portEnd(portId(p, 'right', 2))];
+    expect(boardParity(p)).toBeNull();
   });
 });
