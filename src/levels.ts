@@ -3,13 +3,12 @@
  * lists each pack as a collection).
  *
  * To publish a level:
- *   1. Make it in the creator (create.html). The Unique chip must be green.
+ *   1. Make it in the creator (create.html). The checker must say Unique.
  *   2. Running locally, tap "Copy level entry" beside the hint count, and paste the
  *      line into a pack's `levels` below (or write the code by hand: everything after
  *      `#p=` in the puzzle's share link). Levels play in the order listed.
  *   3. `npm test` checks every pack: a name, at least MIN_PACK_LEVELS
- *      levels, each at least as tall as it is wide (phones are held upright) but no more
- *      than twice as tall, and with
+ *      levels, each no more than twice as long as it is wide (either way up), with
  *      exactly one solution, and no level used twice (not even turned, mirrored or with its
  *      ends swapped).
  *   4. Commit and push to main. GitHub builds the site and publishes it to Pages.

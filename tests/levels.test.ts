@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { decodePuzzle, encodePuzzle } from '../src/codec';
 import { findLevel, levelName, MIN_PACK_LEVELS, PACKS } from '../src/levels';
 import { ADVANCED_RULES, ALL_RULES, runStroke } from '../src/logic';
-import { isOneShot, openCells, pathKey, tailLeftLow } from '../src/model';
+import { isOneShot, openCells, pathKey } from '../src/model';
 import { solve } from '../src/solver';
 
 // Every official level must be a good puzzle before it ships: GitHub runs these before
@@ -62,14 +62,11 @@ describe('level packs', () => {
 
   for (const pack of PACKS) {
     pack.levels.forEach((code, i) => {
-      test(`${pack.name} ${i + 1}: decodes in the current format, is upright but at most twice as tall as wide, with its tail low on the left where it can be, and has exactly one solution`, () => {
+      test(`${pack.name} ${i + 1}: decodes in the current format, is at most twice as long as wide, and has exactly one solution`, () => {
         const p = decodePuzzle(code);
         expect(encodePuzzle(p)).toBe(code);
-        // Phones are held upright: a level is at least as tall as it is wide, but no more than twice.
-        expect(p.h, `${p.w}×${p.h} is wider than tall`).toBeGreaterThanOrEqual(p.w);
-        expect(p.h, `${p.w}×${p.h} is more than twice as tall as wide`).toBeLessThanOrEqual(2 * p.w);
-        // Turned or mirrored so the path starts on the left edge, in its bottom half, where it can.
-        expect(tailLeftLow(p), 'the tail could be turned onto the left edge, or lower').toBe(true);
+        // Which way up a level is, and where its tail is, are each pack's own business.
+        expect(Math.max(p.w, p.h), `${p.w}×${p.h} is more than twice as long as wide`).toBeLessThanOrEqual(2 * Math.min(p.w, p.h));
         expect(solve(p, { maxSolutions: 2 }).status).toBe('unique');
       }, 60000);
     });

@@ -1,16 +1,19 @@
 import { decodePuzzle, encodePuzzle } from './codec';
 import { MIN_PACK_LEVELS, PACK_SIZE_STEP, PACKS } from './levels';
 import type { PackRating, PacksMessage, PacksRequest } from './packs.worker';
-import { isOneShot, levelKey, orientTail, pathKey, tailLeftLow, transformPuzzle } from './model';
+import { isOneShot, levelKey, pathKey } from './model';
 import { boardSize, padFor, renderBoard } from './render';
 import type { Storage } from './storage';
 import { ICONS } from './icons';
 import { el, openSheet, toast } from './ui';
 
-/** Why a level's shape can't be a level (phones are held upright), or '' if it's fine. */
+/**
+ * Why a level's shape can't be a level, or '' if it's fine: only too long and thin. Which way up
+ * a level is, and where its tail is, are each pack's own business.
+ */
 function shapeProblem(code: string): string {
   const p = decodePuzzle(code);
-  return p.w > p.h ? 'wider than tall' : p.h > 2 * p.w ? 'too tall' : !tailLeftLow(p) ? 'tail not low on the left' : '';
+  return Math.max(p.w, p.h) > 2 * Math.min(p.w, p.h) ? 'more than twice as long as it is wide' : '';
 }
 
 /** A pack as edited: its name, kind and levels, and which saved pack it was (none for a new one). */
@@ -154,7 +157,7 @@ export class PacksView {
     const wrongKind = this.packs.reduce((n, k) => n + k.levels.filter((c) => isOneShot(decodePuzzle(c)) !== k.oneShot).length, 0);
     if (wrongKind) return `${wrongKind === 1 ? 'A level is' : `${wrongKind} levels are`} in the wrong kind of pack (one-shot or classic).`;
     const shape = this.packs.flatMap((k) => k.levels).filter((c) => shapeProblem(c)).length;
-    if (shape) return `${shape === 1 ? 'A level is' : `${shape} levels are`} wider than tall, more than twice as tall as wide, or with a tail that could be turned onto the left edge or lower.`;
+    if (shape) return `${shape === 1 ? 'A level is' : `${shape} levels are`} more than twice as long as wide.`;
     const notUnique = this.packs.flatMap((k) => k.levels).filter((c) => this.solutions.get(c)?.unique === false).length;
     if (notUnique) return `${notUnique === 1 ? 'A level has' : `${notUnique} levels have`} more than one solution, or none.`;
     const repeats = this.repeats().size;
@@ -407,7 +410,7 @@ export class PacksView {
         if (!code) return { e, code: null, why: 'can’t be read' };
         const taken = inPacks.get(levelKey(decodePuzzle(code)));
         const shape = shapeProblem(code);
-        const why = taken ? `already in ${taken}` : shape === 'too tall' ? 'more than twice as long as it is wide' : shape;
+        const why = taken ? `already in ${taken}` : shape;
         return { e, code, why };
       })
       .sort((a, b) => b.e.updated - a.e.updated);
@@ -489,15 +492,12 @@ export class PacksView {
   }
 
   /**
-   * A Library puzzle as a level of pack `pi`: turned upright if it's wider than tall, then
-   * turned or mirrored so its tail is low on the left, and a
-   * one-shot exactly when the pack is a one-shot pack. None if it can't be read.
+   * A Library puzzle as a level of pack `pi`, the way round it was made: a one-shot exactly when
+   * the pack is a one-shot pack. None if it can't be read.
    */
   private asLevel(code: string, pi: number): string | null {
     try {
-      let p = decodePuzzle(code);
-      if (p.w > p.h) p = transformPuzzle(p, 'rotateRight');
-      p = orientTail(p);
+      const p = decodePuzzle(code);
       if (this.packs[pi].oneShot) p.oneShot = true;
       else delete p.oneShot;
       return encodePuzzle(p);

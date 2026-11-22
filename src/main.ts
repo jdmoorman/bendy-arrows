@@ -276,18 +276,18 @@ function openLevelSaveSheet(level: LevelRef, p: Puzzle, fromEditor: boolean) {
   const to = encodePuzzle(p);
   const body = el('div', 'sheet-stack');
   const note = el('p', 'field-label');
-  // Phones are held upright, so levels are at least as tall as they are wide.
-  const wide = p.w > p.h;
+  // Either way up is fine for a level (that's the pack's business), but not too long and thin.
+  const thin = Math.max(p.w, p.h) > 2 * Math.min(p.w, p.h);
   note.textContent =
     to === from
       ? `${levelName(level)} is unchanged.`
-      : wide
-        ? `Levels are tall, for phones held upright: turn this ${p.w}×${p.h} puzzle a quarter turn (Size, rotate and flip) before updating ${levelName(level)}.`
+      : thin
+        ? `A level is at most twice as long as it is wide, and this puzzle is ${p.w}×${p.h}.`
         : `Replace ${levelName(level)} in src/levels.ts with this puzzle.`;
   const row = el('div', 'sheet-row');
   const copy = el('button', 'btn', '<span>Save to Library</span>');
   const update = el('button', 'btn primary', `${ICONS.save}<span>Update level</span>`);
-  update.disabled = to === from || wide;
+  update.disabled = to === from || thin;
   row.append(copy, update);
   body.append(note, row);
   const sheet = openSheet(`Save ${levelName(level)}`, body);
@@ -311,7 +311,7 @@ function openLevelSaveSheet(level: LevelRef, p: Puzzle, fromEditor: boolean) {
       toast(`Updated ${levelName(level)} in src/levels.ts.`);
     } catch (err) {
       toast(err instanceof Error ? err.message : String(err), 'error');
-      update.disabled = wide;
+      update.disabled = thin;
     }
   });
 }
