@@ -134,15 +134,13 @@ const KINDS = {
   classic: {
     title: 'Classic',
     intro: [
-      'Draw one path that comes in at the tail arrow, visits every tile exactly once, and leaves at the head arrow. Walls and black tiles block the way.',
-      'Drag between tiles to draw lines, and tap a border to mark it with an X where the path can’t go. Work on any part of the board, in any order.',
+      "Find a path from the arrow's tail to its head, visiting every tile exactly once. Work on any part of the board, in any order.",
     ],
   },
   oneShot: {
     title: 'One-shot',
     intro: [
-      'The same puzzle, with one more rule: draw the whole path in a single stroke. Start at the tail and keep going from the end of your line, all the way to the head.',
-      'You can’t jump ahead and draw somewhere else, so read the board before each move. Drag back along your line to undo it, and mark borders with an X as usual.',
+      'The same puzzle, with a twist: draw the whole path in one stroke.',
     ],
   },
 };
