@@ -395,18 +395,21 @@ export class PacksView {
   /** Pick a Library puzzle to add to the end of pack `pi`. */
   private openAddSheet(pi: number) {
     // Every Library puzzle is listed. One that can't be a level here is faded, saying why: it's
-    // already a level somewhere (the same puzzle, turned, mirrored and so on), it's too long and
-    // thin for a level, or it can't be read.
+    // already a level somewhere (the same puzzle, turned, mirrored and so on), it's the wrong
+    // kind for the pack (a one-shot in a classic pack, or the other way), it's too long and thin
+    // for a level, or it can't be read.
     const inPacks = new Map<string, string>();
     for (const k of this.packs) for (const c of k.levels) inPacks.set(levelKey(decodePuzzle(c)), k.name);
     const entries = this.storage
       .list()
       .map((e) => {
-        const code = this.asLevel(e.code, pi);
+        const code = this.asLevel(e.code);
         if (!code) return { e, code: null, why: 'can’t be read' };
         const taken = inPacks.get(levelKey(decodePuzzle(code)));
+        const oneShot = isOneShot(decodePuzzle(code));
+        const kind = oneShot === this.packs[pi].oneShot ? '' : oneShot ? 'a one-shot, and this is a classic pack' : 'not a one-shot, and this is a one-shot pack';
         const shape = shapeProblem(code);
-        const why = taken ? `already in ${taken}` : shape;
+        const why = taken ? `already in ${taken}` : kind || shape;
         return { e, code, why };
       })
       .sort((a, b) => b.e.updated - a.e.updated);
@@ -488,15 +491,12 @@ export class PacksView {
   }
 
   /**
-   * A Library puzzle as a level of pack `pi`, the way round it was made: a one-shot exactly when
-   * the pack is a one-shot pack. None if it can't be read.
+   * A Library puzzle as a level, just as it was made (the way round, and one-shot or not: a
+   * level of the wrong kind for the pack is turned down, not changed). None if it can't be read.
    */
-  private asLevel(code: string, pi: number): string | null {
+  private asLevel(code: string): string | null {
     try {
-      const p = decodePuzzle(code);
-      if (this.packs[pi].oneShot) p.oneShot = true;
-      else delete p.oneShot;
-      return encodePuzzle(p);
+      return encodePuzzle(decodePuzzle(code));
     } catch {
       return null;
     }
