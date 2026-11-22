@@ -268,7 +268,7 @@ describe('hint choice', async () => {
   const { SAMPLES } = await import('./samples');
   const { decodePuzzle } = await import('../src/codec');
   const { EASY_RULES } = await import('../src/generator');
-  test('among checkerboard deductions, the hint picks the fewest tiles with exits, then the smallest area', () => {
+  test('among checkerboard deductions, the hint picks the smallest area, then the fewest tiles with exits', () => {
     let tried = 0;
     for (const s of SAMPLES.filter((x) => !x.group && x.level === 'medium')) {
       const p = decodePuzzle(s.code);
@@ -278,13 +278,20 @@ describe('hint choice', async () => {
       if (h.kind !== 'deduction' || h.deduction.rule !== 'balance') continue;
       tried++;
       const all = deductions(p, state, ['balance']);
-      const fewest = Math.min(...all.map((d) => d.exitTiles!));
-      expect(h.deduction.exitTiles, s.name).toBe(fewest);
-      const smallest = Math.min(...all.filter((d) => d.exitTiles === fewest).map((d) => d.cells!.length));
+      const smallest = Math.min(...all.map((d) => d.cells!.length));
       expect(h.deduction.cells?.length, s.name).toBe(smallest);
+      const fewest = Math.min(...all.filter((d) => d.cells!.length === smallest).map((d) => d.exitTiles!));
+      expect(h.deduction.exitTiles, s.name).toBe(fewest);
     }
     // Four medium samples need Checkerboard balance (the Numbers samples that also did are gone).
     expect(tried).toBeGreaterThanOrEqual(4);
+  });
+  test('a small area wins over a much bigger one with one exit fewer', () => {
+    // Turned review 11: after the easy rules, the bottom-right block (6 tiles, 3 with exits) and
+    // most of the top half (22 tiles, 2 with exits) both work; a player checks the block.
+    const p = decodePuzzle('BjHpEQjpSBKA');
+    const h = findHint(p, runToEnd(p, EASY_RULES).state);
+    expect(h.kind === 'deduction' && h.deduction.cells?.length).toBe(6);
   });
 });
 

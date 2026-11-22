@@ -636,14 +636,14 @@ export function strokeJourney(p: Puzzle, opts: LogicOptions = {}, watch?: Journe
 /** The deduction a hint would show: simplest rule first, then the simplest use of it. */
 function simplest(ds: Deduction[], order: RuleId[] = HINT_ORDER): Deduction | undefined {
   for (const rule of order) {
-    // Within a rule, the simplest: the fewest tiles with exits (checkerboard rules), then the smallest
-    // area (or shortest piece), then the fewest marks, then top-left first.
+    // Within a rule, the simplest: the smallest area (or shortest piece), then the fewest tiles
+    // with exits (checkerboard rules), then the fewest marks, then top-left first.
     const exits = (x: Deduction) => x.exitTiles ?? 0;
     const size = (x: Deduction) => x.cells?.length ?? x.size ?? 1;
     const marks = (x: Deduction) => x.segments.length + x.xs.length;
     const d = ds
       .filter((x) => x.rule === rule)
-      .sort((a, b) => exits(a) - exits(b) || size(a) - size(b) || marks(a) - marks(b) || a.cell - b.cell)[0];
+      .sort((a, b) => size(a) - size(b) || exits(a) - exits(b) || marks(a) - marks(b) || a.cell - b.cell)[0];
     if (d) return d;
   }
   return undefined;
