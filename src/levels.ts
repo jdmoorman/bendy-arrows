@@ -41,6 +41,16 @@ export const PACKS: LevelPack[] = [
     ],
   },
   {
+    name: 'Fancy Paths',
+    levels: [
+      'BjpoyUJDf91-mA',
+      'BkIoH2EJAkLWggW9eHeaAA',
+      'BjnubY6KeSZPgetXLQA',
+      'BjKo0WEP_7UpUhiQoUBmIA',
+      'BjnvvYz_2gkHqI0HAA',
+    ],
+  },
+  {
     name: 'Near-Symmetry',
     levels: [
       'BiouuR74XSs',
@@ -63,6 +73,21 @@ export const PACKS: LevelPack[] = [
       'BjJkn0LQ2nprYA',
       'BjHuRImBv_mg',
       'BjrlFWLnRQxTEFoA',
+    ],
+  },
+  {
+    name: 'ABCs',
+    levels: [
+      'BjqpHUEb2JULgAQoXQA',
+      'BjqllEEL0BiLMqFB9A',
+      'Bjqo20ELwhKhRdqR6A',
+      'BjqoVEEb0BiFCuFAHoA',
+      'BjqlASEP-AZvoGf0AA',
+      'BjqonUEfQAicgCLtdIA',
+      'BjqoxmEgaYKVHEEJaNP__6A',
+      'BjqoTGEMiQqAAUJC0H__8w',
+      'BjqlBWFcgCzvYA74TV8-RtTQ',
+      'BjqoimEdXd0gHZNPXxHyWIA',
     ],
   },
   {
