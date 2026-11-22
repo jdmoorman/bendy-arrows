@@ -1,4 +1,4 @@
-import { cellCount, cellEdges, edgeCells, edgeCount, endpointCells, isHorizontalEdge, isUsableEdge, neighbors, openCells, portCell, type Puzzle } from './model';
+import { cellCount, cellEdges, cellRC, edgeCells, edgeCount, endpointCells, isHorizontalEdge, isUsableEdge, neighbors, openCells, portCell, type Puzzle } from './model';
 
 /**
  * Simple, local deduction rules for the editor's logic helper. A "step"
@@ -514,12 +514,20 @@ export function strokeFrom(p: Puzzle, segments: Set<number>): { tiles: number[];
 }
 
 /**
+ * How far from the stroke's head (in tiles, diagonal steps counting as one) a one-shot hint may
+ * put X marks: both tiles of the border are at most this far away.
+ */
+export const STROKE_X_REACH = 2;
+
+/**
  * One-shot mode's hint: the simplest deduction (with `rules`) that forces the stroke's next
  * line out of `head`, from the stroke and the X marks `xs` (no lines off the stroke). Where no
  * rule draws that line yet, the hint is an X-mark move that leads to it: with the simplest
  * rules first (then one more rule at a time), rule out borders until a rule draws the line, and
  * give the first X marks that line relies on, as in "No early finish rules out going up" (and
  * a follow-up hint: "so Continue goes right"). An easy rule's X marks beat a harder rule's line.
+ * X marks only go near the head (STROKE_X_REACH), so they can't stand in for drawing the path
+ * somewhere else.
  */
 export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opts: LogicOptions = {}, rules: Iterable<RuleId> = HINT_ORDER, xs: Set<number> = new Set()): Hint {
   const base: LogicState = { segments: stroke, xs };
@@ -529,6 +537,12 @@ export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opt
   if (all.kind === 'contradiction') return { kind: 'mistake', cell: all.cell, cells: all.cells, text: all.hint };
   if (all.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
   const next = (d: Deduction) => d.segments.find((e) => !stroke.has(e) && edgeCells(p, e).includes(head));
+  const [hr, hc] = cellRC(p, head);
+  const nearHead = (e: number) =>
+    edgeCells(p, e).every((c) => {
+      const [r, col] = cellRC(p, c);
+      return Math.max(Math.abs(r - hr), Math.abs(col - hc)) <= STROKE_X_REACH;
+    });
   // The simplest rules first: with each, a line straight away, or else after X marks.
   let found: Deduction | undefined;
   // The X-mark deductions of each round, in order.
@@ -542,7 +556,8 @@ export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opt
       if (an.kind !== 'open') break;
       found = simplest(an.deductions.filter((x) => next(x) !== undefined), order);
       if (found) break;
-      const fresh = an.deductions.filter((x) => x.xs.some((e) => !state.xs.has(e)));
+      // Only X marks near the head count: further off, they'd stand in for drawing the path there.
+      const fresh = an.deductions.map((x) => ({ ...x, xs: x.xs.filter(nearHead) })).filter((x) => x.xs.some((e) => !state.xs.has(e)));
       if (!fresh.length) break;
       crossed.push(fresh);
       state = { segments: stroke, xs: new Set([...state.xs, ...fresh.flatMap((x) => x.xs)]) };

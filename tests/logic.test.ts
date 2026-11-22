@@ -451,6 +451,28 @@ describe('searchMetrics', async () => {
 
 describe('findStrokeHint', async () => {
   const { findStrokeHint } = await import('../src/logic');
+  test('X marks only go near the head (STROKE_X_REACH), all the way through tricky one-shots', async () => {
+    const { STROKE_X_REACH } = await import('../src/logic');
+    const { cellRC } = await import('../src/model');
+    const { PACKS } = await import('../src/levels');
+    for (const code of PACKS.find((k) => k.name === 'Tricky One-Shots')!.levels.slice(0, 6)) {
+      const p = decodePuzzle(code);
+      let state: LogicState = { segments: new Set(), xs: new Set() };
+      for (let i = 0; i < 2 * edgeCount(p); i++) {
+        const st = strokeFrom(p, state.segments);
+        const head = st.tiles[st.tiles.length - 1];
+        const h = findStrokeHint(p, st.lines, head, {}, undefined, state.xs);
+        if (h.kind !== 'deduction') break;
+        const [hr, hc] = cellRC(p, head);
+        for (const e of h.deduction.xs)
+          for (const c of edgeCells(p, e)) {
+            const [r, col] = cellRC(p, c);
+            expect(Math.max(Math.abs(r - hr), Math.abs(col - hc)), code).toBeLessThanOrEqual(STROKE_X_REACH);
+          }
+        state = { segments: new Set([...st.lines, ...h.deduction.segments]), xs: new Set([...state.xs, ...h.deduction.xs]) };
+      }
+    }
+  }, 120_000);
   test('an X mark from an easy rule can lead to the next line: a No early finish hint, then Continue', () => {
     // 6×6, tail at row 5 on the left, head just above it; the tile below the tail is black.
     // Going up would join the ends early, so the only way on is right.
