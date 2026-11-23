@@ -1,6 +1,6 @@
 import { History } from './history';
 import { solveInBackground, type SolverRun } from './solver-client';
-import { findHint, findStrokeHint, strokeFrom, type Hint } from './logic';
+import { findHint, findStrokeHint, hintPrompt, strokeFrom, type Hint } from './logic';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
 import { cellEdges, edgeBetween, isOneShot, isUsableEdge, type Puzzle } from './model';
@@ -481,15 +481,16 @@ export class PlayView {
     const errorCells = new Set<number>();
     const errorEdges = new Set<number>(this.autoCheck ? this.autoCheckEdges() : []);
     if (this.shownHint?.kind === 'wrong') for (const e of this.shownHint.edges) errorEdges.add(e);
-    // A shown hint is drawn on top of the board in the highlight colour.
+    // A shown hint highlights where to look and says what reasoning applies there; it doesn't
+    // draw the move (that's the player's to find).
     const hint = this.shownHint;
     const d = hint?.kind === 'deduction' ? hint.deduction : null;
-    const focus = d ? (d.cells ?? [d.cell]) : hint?.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
+    const prompt = d ? hintPrompt(this.puzzle, { segments: this.segments, xs: this.xMarks }, d) : null;
+    const focus = prompt ? prompt.cells : hint?.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
     renderBoard(this.svg, this.puzzle, {
       pad: padFor(this.puzzle),
-      segments: d ? new Set([...this.segments, ...d.segments]) : this.segments,
-      xMarks: d ? new Set([...this.xMarks, ...d.xs]) : this.xMarks,
-      highlight: d ? new Set([...d.segments, ...d.xs]) : undefined,
+      segments: this.segments,
+      xMarks: this.xMarks,
       focusCells: focus.length ? new Set(focus) : undefined,
       errorCells,
       errorEdges,
@@ -499,7 +500,7 @@ export class PlayView {
     const kind = hint ? (hint.kind === 'mistake' || hint.kind === 'wrong' ? 'error' : 'hint') : '';
     this.status.classList.toggle('error', kind === 'error');
     this.status.classList.toggle('hint', kind === 'hint');
-    this.status.textContent = hint ? hint.text : '';
+    this.status.textContent = prompt ? prompt.text : hint ? hint.text : '';
 
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;

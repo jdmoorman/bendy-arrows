@@ -825,6 +825,47 @@ const DIR_NAMES = (p: Puzzle, cell: number, e: number): string => {
   return other === cell - 1 ? 'left' : 'right';
 };
 
+/**
+ * A player's hint for a deduction: the tiles to look at and the reasoning to apply there, without
+ * the move it leads to (no line or X is drawn for them). The tiles are the deduction's area, or
+ * for a rule about one border the two tiles either side of it.
+ */
+export function hintPrompt(p: Puzzle, state: LogicState, d: Deduction): { cells: number[]; text: string } {
+  const border = d.xs[0] ?? d.segments[0];
+  const sides = border === undefined ? [d.cell] : edgeCells(p, border);
+  const need = endpointCells(p).includes(d.cell) ? 1 : 2;
+  const drawn = cellEdges(p, d.cell).filter((e) => state.segments.has(e)).length;
+  // A rule's own explanation, up to the move it concludes.
+  // (The conclusion is its last sentence when that starts "So" or "The other", else the last ", so …" or "— so …"
+  // clause; the board highlights tiles, so "the highlighted border" is the one between them.)
+  const reasoning = (why: string) => {
+    const cut = / (So|The other) [^.]*\.$/.test(why) ? why.replace(/ (So|The other) [^.]*\.$/, '') : why.replace(/(\s*—|,)\s*so\b[^.]*\.$/, '.');
+    return cut.replace(/the highlighted border/g, 'the border between the highlighted tiles');
+  };
+  switch (d.rule) {
+    case 'corners':
+      return { cells: [d.cell], text: 'The highlighted tile has only two ways in or out, at a right angle, and the path has to pass through it.' };
+    case 'passages':
+      return { cells: [d.cell], text: 'The highlighted tile is blocked on two opposite sides, and the path has to pass through it.' };
+    case 'continue':
+      return {
+        cells: [d.cell],
+        text:
+          need === 1 && drawn === 0
+            ? 'The path ends at the highlighted tile, so it has to leave it somehow: how many ways out does it have?'
+            : `The highlighted tile needs ${need - drawn} more line${need - drawn === 1 ? '' : 's'}: how many ways out has it got left?`,
+      };
+    case 'noLoops':
+      return { cells: sides, text: 'Look at the border between the highlighted tiles: a line there would close a loop before every tile is used.' };
+    case 'noFinish':
+      return { cells: sides, text: 'Look at the border between the highlighted tiles: a line there would join both ends of the path before every tile is used.' };
+    case 'noSeal':
+      return { cells: d.cells ?? sides, text: 'A line on a border beside the highlighted tiles would wall them off, and then the path could never reach them.' };
+    default:
+      return { cells: d.cells ?? sides, text: d.why ? reasoning(d.why) : 'Look closely at the highlighted tiles.' };
+  }
+}
+
 function explain(p: Puzzle, state: LogicState, d: Deduction): string {
   const dirs = (es: number[]) => es.map((e) => DIR_NAMES(p, d.cell, e)).join(' and ');
   const isEnd = endpointCells(p).includes(d.cell);

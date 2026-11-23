@@ -581,3 +581,21 @@ describe('board colours', async () => {
     expect(boardParity(p)).toBeNull();
   });
 });
+
+describe('hintPrompt', async () => {
+  const { hintPrompt, findHint, runLogic, ADVANCED_RULES } = await import('../src/logic');
+  const { decodePuzzle } = await import('../src/codec');
+  const { PACKS } = await import('../src/levels');
+  test("a player's hint says where to look and why, never the move", () => {
+    const easy = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
+    for (const code of PACKS.filter((k) => !k.oneShot).flatMap((k) => k.levels).slice(0, 25)) {
+      const p = decodePuzzle(code);
+      const state = runLogic(p, easy).state;
+      const h = findHint(p, state);
+      if (h.kind !== 'deduction') continue;
+      const { cells, text } = hintPrompt(p, state, h.deduction);
+      expect(cells.length, code).toBeGreaterThan(0);
+      expect(text, code).not.toMatch(/gets an X|So it|so it uses|must go (up|down|left|right)|\b(up|down|left|right)\b/);
+    }
+  }, 120_000);
+});
