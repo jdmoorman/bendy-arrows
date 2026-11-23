@@ -51,7 +51,8 @@ export const THEMES = {
     accent: '#5eb8ff',
     'accent-text': '#08121c',
     tile: '#1d2230',
-    'tile-alt': '#191e2a',
+    // Shaded checkerboard tiles: clearly apart from the plain ones.
+    'tile-alt': '#121621',
     // Walls and blocked tiles are light, to stand out on dark tiles (the inverse of
     // the light theme's black); they share a colour so blocks read as solid shapes.
     'tile-blocked': '#c9cfdb',
@@ -64,7 +65,8 @@ export const THEMES = {
     'error-edge': '#c23a55',
     hint: '#b5e8a0',
     'hint-edge': '#7fbf66',
-    'hint-fill': 'rgba(181, 232, 160, 0.35)',
+    // The highlighted tiles a hint points to: strong enough to spot at a glance.
+    'hint-fill': 'rgba(181, 232, 160, 0.6)',
     xmark: '#ff8a65',
     end: '#e6e9f0',
     error: '#ff5c7a',
@@ -88,7 +90,8 @@ export const THEMES = {
     accent: '#2563eb',
     'accent-text': '#ffffff',
     tile: '#ffffff',
-    'tile-alt': '#f1f3f6',
+    // Shaded checkerboard tiles: clearly apart from the plain ones.
+    'tile-alt': '#e3e6ec',
     'tile-blocked': '#000000',
     'grid-line': '#c4c9d2',
     wall: '#000000',
@@ -99,7 +102,8 @@ export const THEMES = {
     'error-edge': '#9e1f3a',
     hint: '#b8e6a3',
     'hint-edge': '#6aa852',
-    'hint-fill': '#e3f5da',
+    // The highlighted tiles a hint points to: strong enough to spot at a glance.
+    'hint-fill': '#b6e39f',
     xmark: '#000000',
     end: '#000000',
     error: '#d92d4b',
