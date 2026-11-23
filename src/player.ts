@@ -214,7 +214,7 @@ const KINDS = {
   oneShot: {
     title: 'One-shot',
     intro: [
-      'The same puzzle, with a twist: you must draw the whole path in one stroke.',
+      'The same puzzle, with a twist: you must draw the whole path in order, from tail to head.',
     ],
   },
 };
