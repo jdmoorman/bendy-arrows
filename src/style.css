@@ -1465,6 +1465,43 @@ a.btn {
   touch-action: auto;
   pointer-events: none;
 }
+/*
+ * Difficulty: four dots, as many coloured in as it is hard (green, yellow, orange, red), the rest
+ * grey; on level cards and beside a level's name.
+ */
+.difficulty {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+  --level: var(--difficulty-1);
+}
+.difficulty.d2 {
+  --level: var(--difficulty-2);
+}
+.difficulty.d3 {
+  --level: var(--difficulty-3);
+}
+.difficulty.d4 {
+  --level: var(--difficulty-4);
+}
+/* The dots not coloured in: the pale border grey, well apart from the colours. */
+.difficulty i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border);
+}
+.difficulty i.on {
+  background: var(--level);
+}
+.app-title .difficulty {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.app-title .difficulty i {
+  width: 9px;
+  height: 9px;
+}
 /* Solved: the card turns green, with a tick in its corner. */
 .level-btn.solved {
   border-color: var(--success);

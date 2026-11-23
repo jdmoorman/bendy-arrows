@@ -4,6 +4,8 @@ import { ICONS } from './icons';
 import { findLevel, levelName, PACKS, type LevelRef } from './levels';
 import { endVariants, type Puzzle } from './model';
 import { padFor, renderBoard } from './render';
+import { RATING_VERSION } from './library-table';
+import type { RatingMessage, RatingRequest } from './rating.worker';
 import { PlayView } from './play';
 import { allLogsText } from './solve-log';
 import { download, openShareSheet, puzzleFromHash } from './share';
@@ -88,12 +90,81 @@ function setTab(t: Tab) {
   levels.classList.toggle('hidden', t !== 'levels');
   if (t === 'levels') drawLevels();
   for (const b of app.querySelectorAll<HTMLButtonElement>('[data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === t));
-  titleEl.textContent = t === 'play' ? title() : 'BendyArrows';
+  showTitle();
   save();
 }
 
 function title(): string {
   return current ? levelName(current) : 'Puzzle';
+}
+
+/** The header: the level's name and difficulty while playing, else the app's name. */
+function showTitle() {
+  titleEl.textContent = tab === 'play' ? title() : 'BendyArrows';
+  if (tab === 'play' && currentCode) {
+    const d = difficultyBadge(currentCode);
+    if (d) titleEl.append(d);
+  }
+}
+
+// --- Difficulty -------------------------------------------------------------
+// A level's difficulty is how many hints a player alternating the easy rules and hints needs
+// (for a one-shot, along its stroke), worked out once in the background and kept (the ratings
+// the creator's Library uses too). Shown as four dots, as many coloured in as the difficulty
+// (green, yellow, orange, red), the rest grey.
+
+const ratings = storage.loadRatings();
+type Hints = { hints: number; stuck: boolean; maxArea: number };
+/** Hints a level needs, whether hints alone get stuck, and the biggest area a hint reasons about (if worked out with today's rules). */
+function hintsFor(code: string): Hints | null {
+  const r = ratings[code];
+  return r && r.v === RATING_VERSION && typeof r.hints === 'number' ? { hints: r.hints, stuck: !!r.hintsStuck, maxArea: r.maxArea ?? 0 } : null;
+}
+/**
+ * Difficulty from 1 to 4:
+ *   1  no hints;
+ *   2  a few (up to 3), none about a big area;
+ *   3  more (up to 7), or a hint about an area of more than 12 tiles;
+ *   4  an unreasonable number (8 or more), a hint about an area of more than 24 tiles, or hints
+ *      alone get stuck.
+ */
+function difficulty(h: Hints): number {
+  if (h.stuck || h.hints >= 8 || h.maxArea > 24) return 4;
+  if (h.hints >= 4 || h.maxArea > 12) return 3;
+  return h.hints ? 2 : 1;
+}
+const DIFFICULTY_NAMES = ['', 'Easy', 'Medium', 'Hard', 'Very hard'];
+/** Four dots, the first `difficulty` coloured in; null until it's worked out. */
+function difficultyBadge(code: string): HTMLElement | null {
+  const h = hintsFor(code);
+  if (!h) return null;
+  const d = difficulty(h);
+  const badge = el('span', `difficulty d${d}`, Array.from({ length: 4 }, (_, i) => `<i${i < d ? ' class="on"' : ''}></i>`).join(''));
+  const label = `${DIFFICULTY_NAMES[d]} (${h.hints ? `${h.hints} hint${h.hints === 1 ? '' : 's'}` : 'no hints'})`;
+  badge.title = label;
+  badge.setAttribute('role', 'img');
+  badge.setAttribute('aria-label', `Difficulty: ${label}`);
+  return badge;
+}
+/** Work out the difficulty of every level not yet rated, a few at a time, showing each as it comes. */
+function rateLevels() {
+  const todo = PACKS.flatMap((k) => k.levels).filter((c) => !hintsFor(c));
+  if (!todo.length) return;
+  const worker = new Worker(new URL('./rating.worker.ts', import.meta.url), { type: 'module' });
+  let left = todo.length;
+  worker.onmessage = (ev: MessageEvent<RatingMessage>) => {
+    const { code, rating } = ev.data;
+    ratings[code] = rating;
+    storage.saveRating(code, rating);
+    for (const card of levels.querySelectorAll<HTMLElement>(`.level-btn[data-code="${code}"]`)) {
+      card.querySelector('.difficulty')?.remove();
+      const d = difficultyBadge(code);
+      if (d) card.append(d);
+    }
+    if (code === currentCode) showTitle();
+    if (--left === 0) worker.terminate();
+  };
+  worker.postMessage(todo satisfies RatingRequest);
 }
 
 /** Put a puzzle on the board: a level, or (with no ref) one from a link. */
@@ -196,8 +267,11 @@ function drawLevels() {
       const p = decodePuzzle(code);
       const marks = state.progress[code];
       renderBoard(svg, p, { coordinates: false, pad: padFor(p, false, false), segments: started ? new Set(marks.segments) : undefined, xMarks: started ? new Set(marks.xMarks) : undefined });
+      b.dataset.code = code;
       b.append(svg);
       if (done) b.append(el('span', 'level-check', ICONS.check));
+      const d = difficultyBadge(code);
+      if (d) b.append(d);
       b.classList.toggle('solved', done);
       b.classList.toggle('started', started);
       b.classList.toggle('current', current?.pack === pi && current.level === li);
@@ -316,6 +390,7 @@ document.addEventListener('visibilitychange', () => {
  * scrolled to), rather than a level, since packs and levels may have been reordered.
  */
 function start() {
+  rateLevels();
   if (location.hash && openLink()) return;
   // Older saves kept the level's place: find its pack.
   if (!state.pack && valid(state.current)) state.pack = PACKS[state.current.pack].name;

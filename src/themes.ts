@@ -32,7 +32,11 @@ export type ThemeTokens = Record<
   | 'error-fill'
   | 'success'
   | 'ghost'
-  | 'hover',
+  | 'hover'
+  | 'difficulty-1'
+  | 'difficulty-2'
+  | 'difficulty-3'
+  | 'difficulty-4',
   string
 >;
 
@@ -68,6 +72,11 @@ export const THEMES = {
     success: '#b5e8a0',
     ghost: 'rgba(181, 232, 160, 0.45)',
     hover: 'rgba(94, 184, 255, 0.18)',
+    // A level's difficulty dots: the success green, a warm yellow, the X marks' orange, the error red.
+    'difficulty-1': '#b5e8a0',
+    'difficulty-2': '#f2d06b',
+    'difficulty-3': '#ff9a4d',
+    'difficulty-4': '#ff5c7a',
   },
   light: {
     bg: '#f2f3f5',
@@ -98,6 +107,11 @@ export const THEMES = {
     success: '#4e8f36',
     ghost: 'rgba(106, 168, 82, 0.38)',
     hover: 'rgba(37, 99, 235, 0.1)',
+    // A level's difficulty dots: the solved path's green, a warm yellow, an orange, the error red.
+    'difficulty-1': '#6aa852',
+    'difficulty-2': '#e0a810',
+    'difficulty-3': '#ee7a1c',
+    'difficulty-4': '#d92d4b',
   },
 } satisfies Record<string, ThemeTokens>;
 

@@ -23,6 +23,7 @@ ctx.onmessage = (ev: MessageEvent<RatingRequest>) => {
         // A one-shot's hints are those for its stroke.
         const j = isOneShot(p) ? strokeJourney(p) : hintJourney(p);
         rating.hints = j.steps.length;
+        rating.maxArea = Math.max(0, ...j.steps.map((s) => s.area ?? 0));
         if (j.outcome === 'stuck') rating.hintsStuck = true;
         const m = searchMetrics(p);
         rating.tightest = Math.round(m.tightest);

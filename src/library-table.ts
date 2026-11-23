@@ -42,7 +42,7 @@ export interface LibRow {
  * Bump when the logic changes in a way that changes ratings: older ratings are shown until
  * the background worker has redone them.
  */
-export const RATING_VERSION = 12;
+export const RATING_VERSION = 13;
 
 /** A puzzle's uniqueness and hint steps, worked out in the background for saved puzzles. */
 export interface Rating {
@@ -53,6 +53,8 @@ export interface Rating {
   hints?: number | null;
   /** The hints ran out before the puzzle was solved. */
   hintsStuck?: boolean;
+  /** The biggest area (in tiles) a hint had to reason about (Checkerboard balance, Bottlenecks); 0 if none. */
+  maxArea?: number;
   /** How hidden the moves are (see searchMetrics in logic.ts); missing in old ratings. */
   tightest?: number | null;
   effort?: number | null;
