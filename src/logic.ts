@@ -70,8 +70,9 @@ export const IMBALANCE_RULE: RuleInfo = {
 /**
  * One-step trial: suppose a line (or an X) on a border and let the quick rules run; if that
  * breaks the puzzle, the border gets the opposite. It's trial and error, so like Checkerboard
- * imbalance it is left out of RULES (and so of ALL_RULES and every hint, rating and logic run);
- * pass it explicitly to use it. Only a last resort, when nothing else applies.
+ * imbalance it is left out of RULES (and so of ALL_RULES and classic hints, ratings and logic
+ * runs); one-shot hints use it as a last resort at the head (STROKE_HINT_ORDER), and elsewhere
+ * it must be passed explicitly. Only a last resort, when nothing else applies.
  */
 export const TRIAL_RULE: RuleInfo = {
   id: 'trial',
@@ -109,8 +110,6 @@ export interface StepResult {
   xs: number[];
   /** How many marks each rule contributed. */
   byRule: Partial<Record<RuleId, number>>;
-  /** Which rule found each new mark. */
-  ruleOf?: Map<number, RuleId>;
   /** A tile where the deductions break the rules (the puzzle has no solution). */
   contradiction?: Contradiction;
   /** Every tile has all its lines: the logic has solved the puzzle. */
@@ -241,8 +240,6 @@ export interface LogicOptions {
 }
 
 function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: LogicOptions = {}): Analysis {
-  const parity = boardParity(p);
-  if (parity) return { kind: 'contradiction', ...parity };
   const need = needs(p);
   const open = openCells(p);
   const closed = closedBorders(p, state, need);
@@ -290,11 +287,19 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
   }
+  // The board's colours rule out a path: said once the other rules have nothing left to draw,
+  // so the logic still gets as far as it can first.
+  if (!deductions.length) {
+    const parity = boardParity(p);
+    if (parity) return { kind: 'contradiction', ...parity };
+  }
   // The trial is a last resort: only when nothing simpler applies (with a focus, a one-shot's
   // head, nothing simpler draws a line there).
   const atFocus = (d: Deduction) => opts.focus !== undefined && d.segments.some((e) => edgeCells(p, e).includes(opts.focus!));
   if (enabled.has('trial') && !deductions.some((d) => opts.focus === undefined || atFocus(d)) && open.length <= TRIAL_MAX_TILES) {
-    const d = trialDeduction(p, state, closed, opts.focus);
+    // If the board breaks with no supposition at all, every trial would "break" too and prove
+    // anything: no trial then (the other rules get as far as they can and find what's wrong).
+    const d = breaks(p, state) ? null : trialDeduction(p, state, closed, opts.focus);
     if (d) deductions.push(d);
   }
   return { kind: 'open', deductions };
@@ -394,7 +399,7 @@ export function logicStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>,
 
 /** The marks an analysis adds, checked for rules that disagree. */
 function stepFrom(p: Puzzle, state: LogicState, an: Analysis): StepResult {
-  const result: StepResult = { segments: [], xs: [], byRule: {}, solved: false, ruleOf: new Map() };
+  const result: StepResult = { segments: [], xs: [], byRule: {}, solved: false };
   if (an.kind === 'contradiction') {
     const { kind: _, ...c } = an;
     result.contradiction = c;
@@ -423,13 +428,11 @@ function stepFrom(p: Puzzle, state: LogicState, an: Analysis): StepResult {
     if (state.segments.has(e)) continue;
     result.segments.push(e);
     result.byRule[rule] = (result.byRule[rule] ?? 0) + 1;
-    result.ruleOf!.set(e, rule);
   }
   for (const [e, rule] of addX) {
     if (state.xs.has(e) || state.segments.has(e)) continue;
     result.xs.push(e);
     result.byRule[rule] = (result.byRule[rule] ?? 0) + 1;
-    result.ruleOf!.set(e, rule);
   }
   return result;
 }
@@ -472,35 +475,22 @@ export interface LogicRun {
   rounds: number;
   solved: boolean;
   contradiction?: Contradiction;
-  /** Which rule found each mark the run added. */
-  ruleOf?: Map<number, RuleId>;
 }
-
-/** How hard a rule is beyond the easy ones (0 for those), for crediting marks: balance, imbalance, then the trial. */
-const RULE_TIER: Partial<Record<RuleId, number>> = { balance: 1, imbalance: 2, trial: 3 };
-const harder = (a: RuleId, b: RuleId) => ((RULE_TIER[b] ?? 0) > (RULE_TIER[a] ?? 0) ? b : a);
 
 /** Apply every deduction the rules find, round after round, until they find nothing more. */
 export function runLogic(p: Puzzle, rules: Iterable<RuleId>, start: LogicState = { segments: new Set(), xs: new Set() }, opts: LogicOptions = {}): LogicRun {
   const chosen = [...rules];
   let state = start;
-  const ruleOf = new Map<number, RuleId>();
   // Every round adds a mark, so there can't be more rounds than borders.
   const limit = edgeCount(p) + 1;
   for (let rounds = 0; rounds < limit; rounds++) {
     const step = fastStep(p, state, chosen, opts);
-    if (step.contradiction) return { state, rounds, solved: false, contradiction: step.contradiction, ruleOf };
-    if (step.solved) return { state, rounds, solved: true, ruleOf };
-    if (!step.segments.length && !step.xs.length) return { state, rounds, solved: false, ruleOf };
-    for (const [e, r] of step.ruleOf ?? []) {
-      // A line beside an X a harder rule put down is credited to that rule (it took the X to see).
-      let rule = r;
-      if (step.segments.includes(e)) for (const c of edgeCells(p, e)) for (const x of cellEdges(p, c)) if (state.xs.has(x) && ruleOf.has(x)) rule = harder(rule, ruleOf.get(x)!);
-      ruleOf.set(e, rule);
-    }
+    if (step.contradiction) return { state, rounds, solved: false, contradiction: step.contradiction };
+    if (step.solved) return { state, rounds, solved: true };
+    if (!step.segments.length && !step.xs.length) return { state, rounds, solved: false };
     state = applyStep(state, step);
   }
-  return { state, rounds: limit, solved: false, ruleOf };
+  return { state, rounds: limit, solved: false };
 }
 
 /** The rules outside the editor's "Easy rules" group. */
@@ -643,6 +633,8 @@ function movePlaces(ds: Deduction[], state: LogicState): number {
 
 /** Simplest rules first: the order hints are chosen in. */
 export const HINT_ORDER: RuleId[] = ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'noSeal', 'bottlenecks', 'balance'];
+/** A one-shot's hints: HINT_ORDER, then the One-step trial as a last resort at the stroke's head. */
+export const STROKE_HINT_ORDER: RuleId[] = [...HINT_ORDER, 'trial'];
 /** HINT_ORDER with Checkerboard imbalance last, used only when it is passed in explicitly. */
 const HINT_ORDER_ALL: RuleId[] = [...HINT_ORDER, 'imbalance', 'trial'];
 
@@ -695,7 +687,7 @@ export function strokeFrom(p: Puzzle, segments: Set<number>): { tiles: number[];
  * give the first X marks that line relies on, as in "No early finish rules out going up" (and
  * a follow-up hint: "so Continue goes right"). An easy rule's X marks beat a harder rule's line.
  */
-export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opts: LogicOptions = {}, rules: Iterable<RuleId> = HINT_ORDER, xs: Set<number> = new Set()): Hint {
+export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opts: LogicOptions = {}, rules: Iterable<RuleId> = STROKE_HINT_ORDER, xs: Set<number> = new Set()): Hint {
   const base: LogicState = { segments: stroke, xs };
   // The one-step trial looks at the head first: only a move there carries the stroke on.
   opts = { ...opts, focus: head };
@@ -769,25 +761,17 @@ export function runStroke(p: Puzzle, rules: Iterable<RuleId>, start: LogicState 
   const chosen = [...rules];
   let { tiles, lines } = strokeFrom(p, start.segments);
   let xs = new Set(start.xs);
-  const ruleOf = new Map<number, RuleId>();
-  /** The hardest rule behind X marks since the last line. */
-  let pending: RuleId | null = null;
   // Each round adds a line or an X.
   for (let rounds = 0; rounds <= 2 * edgeCount(p); rounds++) {
     const state = { segments: lines, xs };
     const h = findStrokeHint(p, lines, tiles[tiles.length - 1], opts, chosen, xs);
-    if (h.kind === 'solved') return { state, rounds, solved: true, ruleOf };
-    if (h.kind === 'mistake') return { state, rounds, solved: false, ruleOf, contradiction: { cell: h.cell, cells: h.cells, fixCells: h.fixCells, reason: h.reason ?? 'The stroke can’t be finished.', hint: h.text } };
-    if (h.kind !== 'deduction') return { state, rounds, solved: false, ruleOf };
-    // X marks from a harder rule lead to the next line: that line is credited to it.
-    const rule = harder(h.deduction.rule, pending ?? h.deduction.rule);
-    for (const e of h.deduction.xs) if (!xs.has(e)) ruleOf.set(e, h.deduction.rule);
-    for (const e of h.deduction.segments) if (!lines.has(e)) ruleOf.set(e, rule);
-    pending = h.deduction.segments.length ? null : harder(h.deduction.rule, pending ?? h.deduction.rule);
+    if (h.kind === 'solved') return { state, rounds, solved: true };
+    if (h.kind === 'mistake') return { state, rounds, solved: false, contradiction: { cell: h.cell, cells: h.cells, fixCells: h.fixCells, reason: h.reason ?? 'The stroke can’t be finished.', hint: h.text } };
+    if (h.kind !== 'deduction') return { state, rounds, solved: false };
     if (h.deduction.xs.length) xs = new Set([...xs, ...h.deduction.xs]);
     ({ tiles, lines } = strokeFrom(p, new Set([...lines, ...h.deduction.segments])));
   }
-  return { state: { segments: lines, xs: new Set() }, rounds: edgeCount(p), solved: false, ruleOf };
+  return { state: { segments: lines, xs: new Set() }, rounds: edgeCount(p), solved: false };
 }
 
 /**
@@ -805,7 +789,7 @@ export function strokeJourney(p: Puzzle, opts: LogicOptions = {}, watch?: Journe
     if (run.solved) return { steps, outcome: 'solved' };
     if (run.contradiction) return { steps, outcome: 'stuck' };
     const { tiles, lines } = strokeFrom(p, state.segments);
-    const h = findStrokeHint(p, lines, tiles[tiles.length - 1], opts, HINT_ORDER, state.xs);
+    const h = findStrokeHint(p, lines, tiles[tiles.length - 1], opts, STROKE_HINT_ORDER, state.xs);
     if (h.kind === 'solved') return { steps, outcome: 'solved' };
     if (h.kind !== 'deduction') return { steps, outcome: 'stuck' };
     const d = h.deduction;

@@ -82,8 +82,8 @@ export class EditorView {
   /** After a contradiction: tiles whose change alone gives the puzzle a solution, and the search for them. */
   private fixes = new Map<number, 'unique' | 'multiple'>();
   private fixRun: FixesRun | null = null;
-  /** Auto-apply's lines found by harder rules: 1 Checkerboard balance, 2 imbalance, 3 One-step trial (drawn lighter). */
-  private logicTiers = new Map<number, number>();
+  /** A one-shot whose stroke stalls: the lines the rules find over the rest of the board, drawn faintly. */
+  private faintLines = new Set<number>();
   private suggestedWall: number | null = null;
   private message = '';
   private messageKind: '' | 'success' | 'error' = '';
@@ -385,7 +385,7 @@ export class EditorView {
 
   private resetLogic() {
     this.clearFixes();
-    this.logicTiers = new Map();
+    this.faintLines = new Set();
     this.logic = { segments: new Set(), xs: new Set() };
     this.logicFresh = new Set();
     this.logicSteps = 0;
@@ -397,6 +397,7 @@ export class EditorView {
 
   private stepLogic() {
     this.cancelAutoLogic();
+    this.faintLines = new Set();
     this.clearMessage();
     const p = this.puzzle;
     // One step is exactly what a Play hint would suggest, using the chosen rules (for a
@@ -438,6 +439,7 @@ export class EditorView {
   /** Take hint-sized steps with the chosen easy rules until they find nothing more. */
   private fastForwardLogic() {
     this.cancelAutoLogic();
+    this.faintLines = new Set();
     const p = this.puzzle;
     const rules = [...this.logicRules].filter((r) => !ADVANCED_RULES.includes(r));
     const before = { logic: this.logic, steps: this.logicSteps };
@@ -480,8 +482,7 @@ export class EditorView {
       this.clearMessage();
       this.resetLogic();
       this.logic = { segments: new Set(r.segments), xs: new Set(r.xs) };
-      const tierOf: Partial<Record<RuleId, number>> = { balance: 1, imbalance: 2, trial: 3 };
-      this.logicTiers = new Map(r.ruleOf.filter(([e, rule]) => tierOf[rule] && this.logic.segments.has(e)).map(([e, rule]) => [e, tierOf[rule]!]));
+      this.faintLines = new Set(r.faint);
       // Count the automatic run as one step, so Back clears it and Step carries on from it.
       if (r.segments.length || r.xs.length) {
         this.logicHistory.push({ logic: { segments: new Set(), xs: new Set() }, steps: 0 });
@@ -509,6 +510,7 @@ export class EditorView {
 
   private stepLogicBack() {
     this.cancelAutoLogic();
+    this.faintLines = new Set();
     const prev = this.logicHistory.pop();
     if (!prev) return;
     this.clearMessage();
@@ -953,7 +955,10 @@ export class EditorView {
    * have no solution). True if there was one.
    */
   private strokeStuckProblem(rules: Iterable<RuleId>): boolean {
-    const c = runLogic(this.puzzle, rules, this.logic, this.logicOpts).contradiction;
+    const run = runLogic(this.puzzle, rules, this.logic, this.logicOpts);
+    // The rest of the board's lines, faintly: the stroke itself stays as it is.
+    this.faintLines = new Set([...run.state.segments].filter((e) => !this.logic.segments.has(e)));
+    const c = run.contradiction;
     if (!c) return false;
     this.logicBad = c.cells?.length ? c.cells : [c.cell];
     this.showContradiction(`The stroke is stuck, and the rules find a problem elsewhere on the board. ${c.reason}`, c.fixCells);
@@ -1178,7 +1183,7 @@ export class EditorView {
       focusCells: logic && this.logicFocus.size ? this.logicFocus : undefined,
       errorCells: logic && this.logicBad.length ? new Set(this.logicBad) : undefined,
       tileFixes: this.fixes.size && this.logicBad.length ? this.fixes : undefined,
-      segmentTiers: logic && this.logicTiers.size ? this.logicTiers : undefined,
+      faint: this.faintLines.size ? this.faintLines : undefined,
     });
     this.oneShotBtn.setAttribute('aria-pressed', String(!!p.oneShot));
     this.gridBtn.setAttribute('aria-pressed', String(this.gridEdit));

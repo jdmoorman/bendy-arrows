@@ -575,7 +575,8 @@ describe('board colours', async () => {
     // Blacking out the centre (the commoner colour, not an end) evens them, so the ends can differ.
     expect(c.fixCells).toContain(4);
     expect(c.fixCells).not.toContain(0);
-    expect(logicStep(p, empty(), ALL_RULES).contradiction?.reason).toBe(c.reason);
+    // The rules draw what they can first, then find it (or another contradiction).
+    expect(runToEnd(p).contradiction).toBeDefined();
     p.endpoints = [portEnd(portId(p, 'left', 0)), portEnd(portId(p, 'right', 2))];
     expect(boardParity(p)).toBeNull();
   });

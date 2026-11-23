@@ -11,8 +11,8 @@ export type LogicReply = {
   rounds: number;
   solved: boolean;
   contradiction?: Contradiction;
-  /** Which rule found each mark. */
-  ruleOf: [number, RuleId][];
+  /** A one-shot whose stroke stalls: the lines the rules find over the rest of the board (drawn faintly). */
+  faint: number[];
 };
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
@@ -22,9 +22,13 @@ ctx.onmessage = (ev: MessageEvent<LogicRequest>) => {
   const { id, code, rules, opts } = ev.data;
   const p = decodePuzzle(code);
   const run = isOneShot(p) ? runStroke(p, rules, undefined, opts) : runLogic(p, rules, undefined, opts);
-  // A one-shot's stroke that's stuck: the rules over the whole board may find the puzzle can't be solved.
+  // A one-shot's stroke that's stuck: the rules over the rest of the board, whose lines are shown
+  // faintly, and may find the puzzle can't be solved.
+  let faint: number[] = [];
   if (isOneShot(p) && !run.solved && !run.contradiction) {
-    const c = runLogic(p, rules, run.state, opts).contradiction;
+    const whole = runLogic(p, rules, run.state, opts);
+    faint = [...whole.state.segments].filter((e) => !run.state.segments.has(e));
+    const c = whole.contradiction;
     if (c) run.contradiction = { ...c, reason: `The stroke is stuck, and the rules find a problem elsewhere on the board. ${c.reason}` };
   }
   ctx.postMessage({
@@ -34,6 +38,6 @@ ctx.onmessage = (ev: MessageEvent<LogicRequest>) => {
     rounds: run.rounds,
     solved: run.solved,
     contradiction: run.contradiction,
-    ruleOf: [...(run.ruleOf ?? [])],
+    faint,
   } satisfies LogicReply);
 };
