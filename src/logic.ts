@@ -837,32 +837,37 @@ export function hintPrompt(p: Puzzle, state: LogicState, d: Deduction): { cells:
   const drawn = cellEdges(p, d.cell).filter((e) => state.segments.has(e)).length;
   // A rule's own explanation, up to the move it concludes.
   // (The conclusion is its last sentence when that starts "So" or "The other", else the last ", so …" or "— so …"
-  // clause; the board highlights tiles, so "the highlighted border" is the one between them.)
+  // clause; the board highlights tiles, so "the highlighted border" is the one between them, and "the
+  // highlighted" area or tiles are "this" or "these".)
   const reasoning = (why: string) => {
     const cut = / (So|The other) [^.]*\.$/.test(why) ? why.replace(/ (So|The other) [^.]*\.$/, '') : why.replace(/(\s*—|,)\s*so\b[^.]*\.$/, '.');
-    return cut.replace(/the highlighted border/g, 'the border between the highlighted tiles');
+    return cut
+      .replace(/the highlighted border/g, 'the border between these two tiles')
+      .replace(/[Tt]he highlighted (area|tile|tiles)\b/g, (m, w: string) => `${m[0] === 'T' ? 'T' : 't'}${w === 'tiles' ? 'hese' : 'his'} ${w}`);
   };
   switch (d.rule) {
     case 'corners':
-      return { cells: [d.cell], text: 'The highlighted tile has only two ways in or out, at a right angle, and the path has to pass through it.' };
+      return { cells: [d.cell], text: 'This tile has only two ways in or out, at a right angle, so the path has a corner here.' };
     case 'passages':
-      return { cells: [d.cell], text: 'The highlighted tile is blocked on two opposite sides, and the path has to pass through it.' };
+      return { cells: [d.cell], text: 'This tile is blocked on two opposite sides, and the path has to pass through it.' };
     case 'continue':
       return {
         cells: [d.cell],
         text:
           need === 1 && drawn === 0
-            ? 'The path ends at the highlighted tile, so it has to leave it somehow: how many ways out does it have?'
-            : `The highlighted tile needs ${need - drawn} more line${need - drawn === 1 ? '' : 's'}: how many ways out has it got left?`,
+            ? 'The path ends at this tile, and this tile has only one way out.'
+            : // (Continue is only for an end, or a tile with a line already: an untouched tile with two
+              // ways out is Corners or Passages, so this tile needs exactly one more.)
+              'This tile needs one more line, and it has only one way out left.',
       };
     case 'noLoops':
-      return { cells: sides, text: 'Look at the border between the highlighted tiles: a line there would close a loop before every tile is used.' };
+      return { cells: sides, text: 'A line between these tiles would close a loop.' };
     case 'noFinish':
-      return { cells: sides, text: 'Look at the border between the highlighted tiles: a line there would join both ends of the path before every tile is used.' };
+      return { cells: sides, text: 'A line between these tiles would join both ends of the path before every tile is used.' };
     case 'noSeal':
-      return { cells: d.cells ?? sides, text: 'A line on a border beside the highlighted tiles would wall them off, and then the path could never reach them.' };
+      return { cells: d.cells ?? sides, text: 'A line on a border beside these tiles would wall them off, and then the path could never reach them.' };
     default:
-      return { cells: d.cells ?? sides, text: d.why ? reasoning(d.why) : 'Look closely at the highlighted tiles.' };
+      return { cells: d.cells ?? sides, text: d.why ? reasoning(d.why) : 'Look closely at these tiles.' };
   }
 }
 
