@@ -135,8 +135,19 @@ a.btn {
   color: var(--text-muted);
   cursor: pointer;
   touch-action: manipulation;
+  /* Long presses and drags while playing mustn't select a tab's label (phones highlight it). */
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
   -webkit-tap-highlight-color: transparent;
   white-space: nowrap;
+}
+
+/* The header (title, tabs, buttons) is never selected as text. */
+.app-header {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .seg-btn[aria-pressed='true'],
