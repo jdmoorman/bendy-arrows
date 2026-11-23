@@ -110,6 +110,7 @@ export const PACKS: LevelPack[] = [
     name: 'Misc Classic',
     levels: [
       'BjnpjZZFzQA',
+      'BjIpER6We-GA',
     ],
   },
   {
@@ -176,20 +177,15 @@ export const PACKS: LevelPack[] = [
     ],
   },
   {
-    name: 'XL One-Shots',
+    name: 'Misc One-Shots',
     oneShot: true,
     levels: [
       'Bko2BGLJKxdbIVg',
       'Bkq1wkEuRWVCQ6Zjkqg',
+      'BjI5EZzkl2zA',
+      'Bkp2BENAmcXj9qpQ',
       'Blr3RUFWGoAmo7r4ftdDtg',
       'Bkp1xUP4A5nYedIKgA',
-    ],
-  },
-  {
-    name: 'Misc One-Shots',
-    oneShot: true,
-    levels: [
-      'BjI5EZzkl2zA',
     ],
   },
 ];
