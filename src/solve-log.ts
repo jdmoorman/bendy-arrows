@@ -57,6 +57,12 @@ function logText(log: Log, name?: string): string {
   return [`Solve log for ${name ? `${name}, ` : ''}${link}`, `${log.steps.length} steps`, ...log.steps].join('\n');
 }
 
+/** One puzzle's kept log as text (named `name`), or '' if it has none. */
+export function puzzleLogText(code: string, name?: string): string {
+  const log = loadAll().find((l) => l.code === code);
+  return log ? logText(log, name) : '';
+}
+
 /** Every kept log (the last few puzzles played), oldest first, each named by `nameOf` if it can. */
 export function allLogsText(nameOf: (code: string) => string | undefined): string {
   return loadAll()

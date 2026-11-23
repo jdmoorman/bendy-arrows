@@ -8,7 +8,7 @@ import { LibraryView } from './library-view';
 import { PacksView } from './packs-view';
 import { clonePuzzle, createPuzzle, puzzlesEqual, type Puzzle } from './model';
 import { PlayView, type Progress } from './play';
-import { allLogsText } from './solve-log';
+import { allLogsText, puzzleLogText } from './solve-log';
 import { findLevel, levelName, PACKS, type LevelRef } from './levels';
 import { openSaveSheet } from './save-ui';
 import { download, hashWantsEditor, openShareSheet, puzzleFromHash } from './share';
@@ -89,7 +89,10 @@ function requestPlay() {
 editor.onPlay = requestPlay;
 attachUniquenessCheck(editor);
 
-play.onSolved = () => storage.markSolved(playingCode);
+play.onSolved = () => {
+  storage.markSolved(playingCode);
+  if (play.gold) storage.markGold(playingCode);
+};
 // Solved: Another puzzle (the Library) beside Reset.
 play.solvedAction = () => ({ label: 'Another puzzle', run: () => setTab('library') });
 
@@ -209,6 +212,17 @@ function exportSolveLogs() {
   download(`solve-logs-${new Date().toISOString().slice(0, 10)}.txt`, text, 'text/plain');
 }
 
+/** Whether any solve log is kept. */
+const hasLogs = () => !!allLogsText(() => undefined);
+
+/** The puzzle being played's solve log as a download, if it has one (for Settings). */
+function exportPuzzleLog(): (() => void) | undefined {
+  const name = puzzleName;
+  const text = playingCode ? puzzleLogText(playingCode, name) : '';
+  if (!text) return undefined;
+  return () => download(`solve-log-${(name || playingCode).replace(/[^\w-]+/g, '-')}.txt`, text, 'text/plain');
+}
+
 app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
   openSettingsSheet(settings, (s) => {
     settings = s;
@@ -218,7 +232,7 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
     editor.render();
     play.setAutoCheck(s.autoCheck);
     storage.saveSettings(s);
-  }, exportSolveLogs);
+  }, hasLogs() ? exportSolveLogs : undefined, exportPuzzleLog());
 });
 
 app.querySelector('[data-act=share]')!.addEventListener('click', () => {

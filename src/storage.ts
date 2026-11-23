@@ -37,6 +37,8 @@ const LIBRARY_KEY = 'bendyarrows.library.v1';
 const SESSION_KEY = 'bendyarrows.session.v1';
 const SETTINGS_KEY = 'bendyarrows.settings.v1';
 const SOLVED_KEY = 'bendyarrows.solved.v1';
+/** Puzzles solved with a gold star: no hints (and, for a one-shot, no backtracks). */
+const GOLD_KEY = 'bendyarrows.gold.v1';
 /** Old solve times (the timer is gone): read once to seed SOLVED_KEY. */
 const TIMES_KEY = 'hamiltonian.times.v1';
 /** Before the rename to BendyArrows, every key started with this instead of `bendyarrows.`. */
@@ -45,6 +47,16 @@ const LOGIC_KEY = 'bendyarrows.logic.v1';
 const GENERATOR_KEY = 'bendyarrows.generator.v1';
 const TABLE_KEY = 'bendyarrows.libtable.v1';
 const RATINGS_KEY = 'bendyarrows.ratings.v1';
+const PACK_CACHE_KEY = 'bendyarrows.packcache.v1';
+
+/** A level as the Packs tab worked it out: its solution, whether it's the only one, and its hints (RATING_VERSION v). */
+export interface PackCacheEntry {
+  v: number;
+  segments: number[] | null;
+  unique: boolean;
+  hints?: number;
+  stuck?: boolean;
+}
 const SHOW_SOLUTION_KEY = 'bendyarrows.showsolution.v1';
 const PLAYER_KEY = 'bendyarrows.player.v1';
 const PACK_MARKS_KEY = 'bendyarrows.packmarks.v1';
@@ -99,7 +111,7 @@ export class Storage {
 
   /** Copy data saved under the old app name to the new keys (the old keys are left alone). */
   private migrateOldKeys(): void {
-    const keys = [LIBRARY_KEY, SESSION_KEY, SETTINGS_KEY, SOLVED_KEY, LOGIC_KEY, GENERATOR_KEY, TABLE_KEY, RATINGS_KEY, SHOW_SOLUTION_KEY];
+    const keys = [LIBRARY_KEY, SESSION_KEY, SETTINGS_KEY, SOLVED_KEY, GOLD_KEY, LOGIC_KEY, GENERATOR_KEY, TABLE_KEY, RATINGS_KEY, SHOW_SOLUTION_KEY];
     try {
       for (const key of keys) {
         if (this.store?.getItem(key) !== null) continue;
@@ -199,6 +211,21 @@ export class Storage {
     if (!list.includes(code)) this.write(SOLVED_KEY, [...list, code]);
   }
 
+  /** Share codes of puzzles solved with a gold star (no hints; for a one-shot, no backtracks either). */
+  private loadGold(): string[] {
+    const list = this.read<unknown>(GOLD_KEY, []);
+    return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : [];
+  }
+
+  isGold(code: string): boolean {
+    return this.loadGold().includes(code);
+  }
+
+  markGold(code: string): void {
+    const list = this.loadGold();
+    if (!list.includes(code)) this.write(GOLD_KEY, [...list, code]);
+  }
+
   /**
    * Enabled logic-helper rules and the rules that existed when they were
    * saved, or null if never saved. (Old saves are a plain list: `known` is missing.)
@@ -262,6 +289,16 @@ export class Storage {
 
   savePacksFolded(names: Set<string>): void {
     this.write(PACK_FOLDED_KEY, [...names]);
+  }
+
+  /** The Packs tab's solved levels and hint counts, by code, so they aren't worked out again after a Save (which reloads the page). */
+  loadPackCache(): Record<string, PackCacheEntry> {
+    const r = this.read<unknown>(PACK_CACHE_KEY, {});
+    return r && typeof r === 'object' ? (r as Record<string, PackCacheEntry>) : {};
+  }
+
+  savePackCache(cache: Record<string, PackCacheEntry>): void {
+    this.write(PACK_CACHE_KEY, cache);
   }
 
   /** Uniqueness and hint steps of saved puzzles, by code, worked out in the background. */

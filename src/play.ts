@@ -12,6 +12,10 @@ import { toast } from './ui';
 export interface Progress {
   segments: number[];
   xMarks: number[];
+  /** One-shots: how many times the player has taken the stroke back so far. */
+  backtracks?: number;
+  /** Hints shown so far on this board. */
+  hints?: number;
 }
 
 /** A hint, or the marks that don't fit the solution. */
@@ -38,6 +42,16 @@ export class PlayView {
   private history = new History<Progress>();
   /** Hint shown after pressing Hint, until the next change. */
   private shownHint: PlayHint | null = null;
+  /**
+   * One-shots: backtracks, each a time the player took the stroke back (a drag back along it, a
+   * tap that cuts it, an Undo or Reset that takes lines off it), however far back; and which way
+   * the gesture under way last went (going back after going on is a new backtrack, so a drag
+   * that wiggles back and forth counts each time it turns back).
+   */
+  private backtracks = 0;
+  private strokeWay: 'on' | 'back' | null = null;
+  /** Hints shown on this board (a hint pointing out wrong marks counts too). */
+  private hintsUsed = 0;
   /** Solutions of the puzzle, found once in the background when Hint first needs them. */
   private solutions: Promise<number[][]> | null = null;
   private solutionsRun: SolverRun | null = null;
@@ -117,6 +131,7 @@ export class PlayView {
         this.startedOnSegment = false;
         this.strokeDrag = 'none';
         this.strokeWarned = false;
+        this.strokeWay = null;
       },
       onGestureEnd: () => this.commit(),
       onPathStart: (cell, edge) => {
@@ -177,6 +192,9 @@ export class PlayView {
     const ok = (e: number) => isUsableEdge(p, e);
     this.segments = new Set((progress?.segments ?? []).filter(ok));
     this.xMarks = new Set((progress?.xMarks ?? []).filter(ok));
+    this.backtracks = progress?.backtracks ?? 0;
+    this.strokeWay = null;
+    this.hintsUsed = progress?.hints ?? 0;
     this.history.clear();
     this.shownHint = null;
     this.solved = checkSolution(p, this.segments).solved;
@@ -190,6 +208,7 @@ export class PlayView {
   /** Reset: empty the board, as one undoable step. */
   private reset() {
     if (!this.segments.size && !this.xMarks.size) return;
+    if (this.strokeMode && this.segments.size) this.noteBacktrack();
     const before = this.snapshot();
     this.history.push(before);
     this.segments.clear();
@@ -228,8 +247,18 @@ export class PlayView {
 
   /** Take the stroke back to its `i`th tile, removing the lines after it. */
   private cutStroke(s: number[], i: number) {
+    if (i < s.length - 1 && this.strokeWay !== 'back') {
+      this.noteBacktrack();
+      this.strokeWay = 'back';
+    }
     for (let k = s.length - 1; k > i; k--) this.setSegment(edgeBetween(this.puzzle, s[k - 1], s[k]), false);
     this.render();
+  }
+
+  /** One more backtrack (a one-shot's stroke taken back), counted and logged. */
+  private noteBacktrack() {
+    this.backtracks++;
+    this.log.note(`backtrack ${this.backtracks}`);
   }
 
   /**
@@ -253,7 +282,9 @@ export class PlayView {
       return true;
     }
     if (s.includes(to)) return false;
-    return this.step(from, to);
+    const drew = this.step(from, to);
+    if (drew) this.strokeWay = 'on';
+    return drew;
   }
 
   /** A drag that can't draw in a one-shot (not from the stroke's tip): say how to draw, once per gesture. */
@@ -273,7 +304,18 @@ export class PlayView {
 
   /** The player's marks, for saving. */
   get progress(): Progress {
-    return this.snapshot();
+    const counts = { ...(this.hintsUsed ? { hints: this.hintsUsed } : {}), ...(this.strokeMode ? { backtracks: this.backtracks } : {}) };
+    return { ...this.snapshot(), ...counts };
+  }
+
+  /** Solved with a gold star: no hints (and, for a one-shot, no backtracks). */
+  get gold(): boolean {
+    return this.solved && !this.hintsUsed && (!this.strokeMode || !this.backtracks);
+  }
+
+  /** One-shots: how many times the stroke has been taken back on this board. */
+  get backtrackCount(): number {
+    return this.backtracks;
   }
 
   get isSolved(): boolean {
@@ -366,6 +408,7 @@ export class PlayView {
   }
 
   private commit() {
+    this.strokeWay = null;
     // Each placement already saved its own undo step; just catch up after the gesture.
     if (this.changed) this.afterChange();
     this.changed = false;
@@ -380,7 +423,7 @@ export class PlayView {
     this.onProgress?.(this.progress, this.solved);
     // Every time the board becomes solved (e.g. again after Reset or Undo), not just the first.
     if (this.solved && !wasSolved) {
-      this.log.note('solved');
+      this.log.note(`solved with ${this.hintsUsed} hint${this.hintsUsed === 1 ? '' : 's'}${this.strokeMode ? ` and ${this.backtracks} backtrack${this.backtracks === 1 ? '' : 's'}` : ''}${this.gold ? ' (gold star)' : ''}`);
       this.onSolved?.();
     }
   }
@@ -389,6 +432,8 @@ export class PlayView {
     const before = this.snapshot();
     const prev = this.history.undo(before);
     if (!prev) return;
+    // Undoing lines off a one-shot's stroke takes it back.
+    if (this.strokeMode && prev.segments.length < this.segments.size) this.noteBacktrack();
     this.restore(prev);
     this.log.noteChange('undo', before, prev);
     this.afterChange();
@@ -455,6 +500,7 @@ export class PlayView {
       const best = closestWrong(solutions, this.segments, this.xMarks);
       if (best && best.lines.length + best.xs.length) {
         this.shownHint = { kind: 'wrong', edges: [...best.lines, ...best.xs], text: wrongText(best.lines.length, best.xs.length) };
+        this.hintsUsed++;
         this.log.note(`hint: wrong ${this.shownHint.edges.map((e) => edgeName(this.puzzle, e)).join(', ')}`);
         this.render();
         return;
@@ -468,6 +514,7 @@ export class PlayView {
       this.shownHint = findHint(this.puzzle, { segments: this.segments, xs: this.xMarks });
     }
     const h = this.shownHint;
+    if (h.kind === 'deduction' || h.kind === 'mistake') this.hintsUsed++;
     this.log.note(
       h.kind === 'deduction'
         ? `hint ${h.deduction.rule}: ${[...h.deduction.segments.map((e) => `line ${edgeName(this.puzzle, e)}`), ...h.deduction.xs.map((e) => `X ${edgeName(this.puzzle, e)}`)].join(', ')}`
@@ -495,12 +542,21 @@ export class PlayView {
       errorCells,
       errorEdges,
       solved: this.solved,
+      gold: this.gold,
     });
 
     const kind = hint ? (hint.kind === 'mistake' || hint.kind === 'wrong' ? 'error' : 'hint') : '';
     this.status.classList.toggle('error', kind === 'error');
     this.status.classList.toggle('hint', kind === 'hint');
-    this.status.textContent = prompt ? prompt.text : hint ? hint.text : '';
+    this.status.textContent = prompt
+      ? prompt.text
+      : hint
+        ? hint.text
+        : this.gold
+          ? '★ Solved perfectly!'
+          : this.solved
+            ? `Solved with ${[this.hintsUsed ? `${this.hintsUsed} hint${this.hintsUsed === 1 ? '' : 's'}` : this.strokeMode ? 'no hints' : '', this.strokeMode ? (this.backtracks ? `${this.backtracks} backtrack${this.backtracks === 1 ? '' : 's'}` : 'no backtracks') : ''].filter(Boolean).join(' and ')}.`
+            : '';
 
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;

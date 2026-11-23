@@ -29,6 +29,8 @@ export interface RenderOptions {
   errorEdges?: Set<number>;
   /** Show the board as solved (the lines change colour). */
   solved?: boolean;
+  /** Solved with a gold star: the lines turn gold instead. */
+  gold?: boolean;
   /** A solution drawn faintly underneath (e.g. "show solution" in the editor). */
   ghost?: Set<number>;
   /** Draw faint markers on every border so editors can see where to tap. */
@@ -78,6 +80,7 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
   svg.dataset.pad = String(pad);
   svg.classList.toggle('solved', !!o.solved);
+  svg.classList.toggle('gold', !!o.solved && !!o.gold);
 
   const center = (cell: number): [number, number] => {
     const [r, c] = cellRC(p, cell);

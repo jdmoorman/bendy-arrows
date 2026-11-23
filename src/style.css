@@ -396,6 +396,13 @@ a.btn {
 .board.solved .seg-edge {
   stroke: var(--path-solved-edge);
 }
+/* Solved with a gold star: a gold path. */
+.board.solved.gold .seg {
+  stroke: rgb(250 204 21);
+}
+.board.solved.gold .seg-edge {
+  stroke: rgb(202 138 4);
+}
 
 /* ---------- Status & toolbars ---------- */
 .status {
@@ -1289,6 +1296,13 @@ a.btn {
   text-decoration: underline;
   cursor: pointer;
 }
+/* Nothing to do (e.g. no solve log to export): greyed out, not a link. */
+.link-btn:disabled {
+  color: var(--text-muted);
+  opacity: 0.6;
+  text-decoration: none;
+  cursor: default;
+}
 .switch-row.sub-rule {
   padding-left: 20px;
   border-left: 2px solid var(--border);
@@ -1530,6 +1544,14 @@ a.btn {
   background: var(--success);
   color: #fff;
   box-shadow: 0 0 0 2px var(--surface);
+}
+/* A gold star: solved with no hints (and, for a one-shot, no backtracks). */
+.level-check.gold {
+  background: rgb(234 179 8);
+}
+.level-btn.solved.gold {
+  border-color: rgb(234 179 8);
+  background: color-mix(in srgb, rgb(234 179 8) 22%, var(--surface));
 }
 .level-check svg {
   width: 14px;
