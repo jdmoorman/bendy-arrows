@@ -109,6 +109,8 @@ export interface StepResult {
   xs: number[];
   /** How many marks each rule contributed. */
   byRule: Partial<Record<RuleId, number>>;
+  /** Which rule found each new mark. */
+  ruleOf?: Map<number, RuleId>;
   /** A tile where the deductions break the rules (the puzzle has no solution). */
   contradiction?: Contradiction;
   /** Every tile has all its lines: the logic has solved the puzzle. */
@@ -392,7 +394,7 @@ export function logicStep(p: Puzzle, state: LogicState, rules: Iterable<RuleId>,
 
 /** The marks an analysis adds, checked for rules that disagree. */
 function stepFrom(p: Puzzle, state: LogicState, an: Analysis): StepResult {
-  const result: StepResult = { segments: [], xs: [], byRule: {}, solved: false };
+  const result: StepResult = { segments: [], xs: [], byRule: {}, solved: false, ruleOf: new Map() };
   if (an.kind === 'contradiction') {
     const { kind: _, ...c } = an;
     result.contradiction = c;
@@ -421,11 +423,13 @@ function stepFrom(p: Puzzle, state: LogicState, an: Analysis): StepResult {
     if (state.segments.has(e)) continue;
     result.segments.push(e);
     result.byRule[rule] = (result.byRule[rule] ?? 0) + 1;
+    result.ruleOf!.set(e, rule);
   }
   for (const [e, rule] of addX) {
     if (state.xs.has(e) || state.segments.has(e)) continue;
     result.xs.push(e);
     result.byRule[rule] = (result.byRule[rule] ?? 0) + 1;
+    result.ruleOf!.set(e, rule);
   }
   return result;
 }
@@ -468,22 +472,35 @@ export interface LogicRun {
   rounds: number;
   solved: boolean;
   contradiction?: Contradiction;
+  /** Which rule found each mark the run added. */
+  ruleOf?: Map<number, RuleId>;
 }
+
+/** How hard a rule is beyond the easy ones (0 for those), for crediting marks: balance, imbalance, then the trial. */
+const RULE_TIER: Partial<Record<RuleId, number>> = { balance: 1, imbalance: 2, trial: 3 };
+const harder = (a: RuleId, b: RuleId) => ((RULE_TIER[b] ?? 0) > (RULE_TIER[a] ?? 0) ? b : a);
 
 /** Apply every deduction the rules find, round after round, until they find nothing more. */
 export function runLogic(p: Puzzle, rules: Iterable<RuleId>, start: LogicState = { segments: new Set(), xs: new Set() }, opts: LogicOptions = {}): LogicRun {
   const chosen = [...rules];
   let state = start;
+  const ruleOf = new Map<number, RuleId>();
   // Every round adds a mark, so there can't be more rounds than borders.
   const limit = edgeCount(p) + 1;
   for (let rounds = 0; rounds < limit; rounds++) {
     const step = fastStep(p, state, chosen, opts);
-    if (step.contradiction) return { state, rounds, solved: false, contradiction: step.contradiction };
-    if (step.solved) return { state, rounds, solved: true };
-    if (!step.segments.length && !step.xs.length) return { state, rounds, solved: false };
+    if (step.contradiction) return { state, rounds, solved: false, contradiction: step.contradiction, ruleOf };
+    if (step.solved) return { state, rounds, solved: true, ruleOf };
+    if (!step.segments.length && !step.xs.length) return { state, rounds, solved: false, ruleOf };
+    for (const [e, r] of step.ruleOf ?? []) {
+      // A line beside an X a harder rule put down is credited to that rule (it took the X to see).
+      let rule = r;
+      if (step.segments.includes(e)) for (const c of edgeCells(p, e)) for (const x of cellEdges(p, c)) if (state.xs.has(x) && ruleOf.has(x)) rule = harder(rule, ruleOf.get(x)!);
+      ruleOf.set(e, rule);
+    }
     state = applyStep(state, step);
   }
-  return { state, rounds: limit, solved: false };
+  return { state, rounds: limit, solved: false, ruleOf };
 }
 
 /** The rules outside the editor's "Easy rules" group. */
@@ -752,17 +769,25 @@ export function runStroke(p: Puzzle, rules: Iterable<RuleId>, start: LogicState 
   const chosen = [...rules];
   let { tiles, lines } = strokeFrom(p, start.segments);
   let xs = new Set(start.xs);
+  const ruleOf = new Map<number, RuleId>();
+  /** The hardest rule behind X marks since the last line. */
+  let pending: RuleId | null = null;
   // Each round adds a line or an X.
   for (let rounds = 0; rounds <= 2 * edgeCount(p); rounds++) {
     const state = { segments: lines, xs };
     const h = findStrokeHint(p, lines, tiles[tiles.length - 1], opts, chosen, xs);
-    if (h.kind === 'solved') return { state, rounds, solved: true };
-    if (h.kind === 'mistake') return { state, rounds, solved: false, contradiction: { cell: h.cell, cells: h.cells, fixCells: h.fixCells, reason: h.reason ?? 'The stroke can’t be finished.', hint: h.text } };
-    if (h.kind !== 'deduction') return { state, rounds, solved: false };
+    if (h.kind === 'solved') return { state, rounds, solved: true, ruleOf };
+    if (h.kind === 'mistake') return { state, rounds, solved: false, ruleOf, contradiction: { cell: h.cell, cells: h.cells, fixCells: h.fixCells, reason: h.reason ?? 'The stroke can’t be finished.', hint: h.text } };
+    if (h.kind !== 'deduction') return { state, rounds, solved: false, ruleOf };
+    // X marks from a harder rule lead to the next line: that line is credited to it.
+    const rule = harder(h.deduction.rule, pending ?? h.deduction.rule);
+    for (const e of h.deduction.xs) if (!xs.has(e)) ruleOf.set(e, h.deduction.rule);
+    for (const e of h.deduction.segments) if (!lines.has(e)) ruleOf.set(e, rule);
+    pending = h.deduction.segments.length ? null : harder(h.deduction.rule, pending ?? h.deduction.rule);
     if (h.deduction.xs.length) xs = new Set([...xs, ...h.deduction.xs]);
     ({ tiles, lines } = strokeFrom(p, new Set([...lines, ...h.deduction.segments])));
   }
-  return { state: { segments: lines, xs: new Set() }, rounds: edgeCount(p), solved: false };
+  return { state: { segments: lines, xs: new Set() }, rounds: edgeCount(p), solved: false, ruleOf };
 }
 
 /**

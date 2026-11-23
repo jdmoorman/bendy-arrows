@@ -11,6 +11,8 @@ export type LogicReply = {
   rounds: number;
   solved: boolean;
   contradiction?: Contradiction;
+  /** Which rule found each mark. */
+  ruleOf: [number, RuleId][];
 };
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
@@ -32,5 +34,6 @@ ctx.onmessage = (ev: MessageEvent<LogicRequest>) => {
     rounds: run.rounds,
     solved: run.solved,
     contradiction: run.contradiction,
+    ruleOf: [...(run.ruleOf ?? [])],
   } satisfies LogicReply);
 };

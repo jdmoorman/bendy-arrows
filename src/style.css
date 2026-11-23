@@ -334,6 +334,25 @@ a.btn {
 .seg.error {
   stroke: var(--error);
 }
+/* Lines Auto-apply drew with harder rules, lighter the harder: Checkerboard balance, imbalance, One-step trial. */
+.seg.tier1 {
+  stroke: color-mix(in srgb, var(--path) 70%, var(--surface));
+}
+.seg-edge.tier1 {
+  stroke: color-mix(in srgb, var(--path-edge) 70%, var(--surface));
+}
+.seg.tier2 {
+  stroke: color-mix(in srgb, var(--path) 48%, var(--surface));
+}
+.seg-edge.tier2 {
+  stroke: color-mix(in srgb, var(--path-edge) 48%, var(--surface));
+}
+.seg.tier3 {
+  stroke: color-mix(in srgb, var(--path) 30%, var(--surface));
+}
+.seg-edge.tier3 {
+  stroke: color-mix(in srgb, var(--path-edge) 30%, var(--surface));
+}
 /* The editor's drawn path (Draw mode): teal, apart from the logic helper's and players' lines. */
 .seg.plan {
   stroke: rgb(20 184 166);

@@ -82,6 +82,8 @@ export class EditorView {
   /** After a contradiction: tiles whose change alone gives the puzzle a solution, and the search for them. */
   private fixes = new Map<number, 'unique' | 'multiple'>();
   private fixRun: FixesRun | null = null;
+  /** Auto-apply's lines found by harder rules: 1 Checkerboard balance, 2 imbalance, 3 One-step trial (drawn lighter). */
+  private logicTiers = new Map<number, number>();
   private suggestedWall: number | null = null;
   private message = '';
   private messageKind: '' | 'success' | 'error' = '';
@@ -383,6 +385,7 @@ export class EditorView {
 
   private resetLogic() {
     this.clearFixes();
+    this.logicTiers = new Map();
     this.logic = { segments: new Set(), xs: new Set() };
     this.logicFresh = new Set();
     this.logicSteps = 0;
@@ -477,6 +480,8 @@ export class EditorView {
       this.clearMessage();
       this.resetLogic();
       this.logic = { segments: new Set(r.segments), xs: new Set(r.xs) };
+      const tierOf: Partial<Record<RuleId, number>> = { balance: 1, imbalance: 2, trial: 3 };
+      this.logicTiers = new Map(r.ruleOf.filter(([e, rule]) => tierOf[rule] && this.logic.segments.has(e)).map(([e, rule]) => [e, tierOf[rule]!]));
       // Count the automatic run as one step, so Back clears it and Step carries on from it.
       if (r.segments.length || r.xs.length) {
         this.logicHistory.push({ logic: { segments: new Set(), xs: new Set() }, steps: 0 });
@@ -1173,6 +1178,7 @@ export class EditorView {
       focusCells: logic && this.logicFocus.size ? this.logicFocus : undefined,
       errorCells: logic && this.logicBad.length ? new Set(this.logicBad) : undefined,
       tileFixes: this.fixes.size && this.logicBad.length ? this.fixes : undefined,
+      segmentTiers: logic && this.logicTiers.size ? this.logicTiers : undefined,
     });
     this.oneShotBtn.setAttribute('aria-pressed', String(!!p.oneShot));
     this.gridBtn.setAttribute('aria-pressed', String(this.gridEdit));

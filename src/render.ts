@@ -37,6 +37,8 @@ export interface RenderOptions {
   showPortTargets?: boolean;
   /** For a puzzle short of ends: frame spots where an end gives a solution (only one, or several). */
   endOptions?: Map<number, 'unique' | 'multiple'>;
+  /** How hard a rule found each segment (1 Checkerboard balance, 2 imbalance, 3 One-step trial): drawn lighter the harder. */
+  segmentTiers?: Map<number, number>;
   /** Tiles whose change alone (made black, or a black tile made open) gives a puzzle with no solution one: exactly one, or several. */
   tileFixes?: Map<number, 'unique' | 'multiple'>;
   /** Margin around the grid in SVG units (default PAD). */
@@ -228,13 +230,16 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   if (o.plan?.size) parts.push('<g class="plan">', strokes([...o.plan], 'seg-edge plan'), strokes([...o.plan], 'seg plan'), '</g>');
   parts.push('<g class="segments">');
   const isHi = (e: number) => !!o.highlight?.has(e);
+  const tier = (e: number) => o.segmentTiers?.get(e) ?? 0;
   const ok = player.filter((e) => !isErr(e) && !isHi(e));
+  const byTier = [0, 1, 2, 3].map((t) => ok.filter((e) => tier(e) === t));
+  const tierCls = (t: number) => (t ? ` tier${t}` : '');
   const bad = player.filter(isErr);
   const hi = player.filter((e) => isHi(e) && !isErr(e));
   // Darker outlines first (all of them), then the fills, so outlines never
   // cut across a fill where runs meet.
-  parts.push(strokes(ok, 'seg-edge'), strokes(bad, 'seg-edge error'), strokes(hi, 'seg-edge hint'));
-  parts.push(strokes(ok, 'seg'), strokes(bad, 'seg error'), strokes(hi, 'seg hint'));
+  parts.push(...byTier.map((es, t) => strokes(es, `seg-edge${tierCls(t)}`)), strokes(bad, 'seg-edge error'), strokes(hi, 'seg-edge hint'));
+  parts.push(...byTier.map((es, t) => strokes(es, `seg${tierCls(t)}`)), strokes(bad, 'seg error'), strokes(hi, 'seg hint'));
   parts.push('</g>');
 
   // X marks.
