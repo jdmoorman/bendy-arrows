@@ -335,8 +335,10 @@ a.btn {
   stroke: var(--error);
 }
 /* A one-shot whose stroke stalls: the rules' lines over the rest of the board, faint. */
+/* Solid (a pale mix of the path colour with the tiles'), so the green solution line underneath
+   doesn't show through and turn it grey. */
 .seg.faint {
-  opacity: 0.3;
+  stroke: color-mix(in srgb, var(--path) 35%, var(--tile));
 }
 /* The editor's drawn path (Draw mode): teal, apart from the logic helper's and players' lines. */
 .seg.plan {
