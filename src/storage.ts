@@ -64,9 +64,11 @@ export interface Settings {
 
 export const DEFAULT_SETTINGS: Settings = { checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false };
 
-/** The player app's place: the level being played, the tab shown, and unfinished boards. */
+/** The player app's place: the pack last played, the tab shown, and unfinished boards. */
 export interface PlayerState {
-  /** The level being played, as pack and level (from 0). */
+  /** The pack of the level last played, by name: the app reopens to it (not to a level, so packs can be reordered). */
+  pack?: string;
+  /** Older saves: the level being played, as pack and level (from 0). Read once to find `pack`. */
   current?: { pack: number; level: number };
   tab: 'play' | 'levels';
   /** Lines and X's on each level started and not finished, by code. */
@@ -294,7 +296,8 @@ export class Storage {
     const c = s?.current;
     const current = c && Number.isInteger(c.pack) && Number.isInteger(c.level) ? { pack: c.pack, level: c.level } : undefined;
     const collapsed = Array.isArray(s?.collapsed) ? s.collapsed.filter((x): x is string => typeof x === 'string') : [];
-    return { current, tab: s?.tab === 'play' ? 'play' : 'levels', progress, collapsed };
+    const pack = typeof s?.pack === 'string' ? s.pack : undefined;
+    return { pack, current, tab: s?.tab === 'play' ? 'play' : 'levels', progress, collapsed };
   }
 
   savePlayer(s: PlayerState): void {

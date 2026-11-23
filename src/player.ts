@@ -74,7 +74,9 @@ let tab: Tab = 'levels';
 const valid = (ref: LevelRef | undefined): ref is LevelRef => !!ref && !!PACKS[ref.pack]?.levels[ref.level];
 
 function save() {
-  state.current = current;
+  // The pack, not the level: packs and levels can be reordered between visits.
+  if (current) state.pack = PACKS[current.pack].name;
+  delete state.current;
   state.tab = tab;
   storage.savePlayer(state);
 }
@@ -207,13 +209,18 @@ function drawLevels() {
 
 for (const b of app.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
   b.addEventListener('click', () => {
-    // Play with nothing chosen yet starts on the first unsolved level.
-    if (b.dataset.tab === 'play' && !currentCode) openLevel(firstUnsolved());
+    // Play with nothing chosen yet starts on the first unsolved level (of the pack last played, if any).
+    if (b.dataset.tab === 'play' && !currentCode) openLevel(firstUnsolved(PACKS.findIndex((k) => k.name === state.pack)));
     else setTab(b.dataset.tab as Tab);
   });
 }
 
-function firstUnsolved(): LevelRef {
+/** The first unsolved level, in pack `from` if it has one, else in any pack. */
+function firstUnsolved(from = -1): LevelRef {
+  if (PACKS[from]) {
+    const level = PACKS[from].levels.findIndex((c) => !storage.isSolved(c));
+    if (level >= 0) return { pack: from, level };
+  }
   for (let pack = 0; pack < PACKS.length; pack++) {
     const level = PACKS[pack].levels.findIndex((c) => !storage.isSolved(c));
     if (level >= 0) return { pack, level };
@@ -282,14 +289,19 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') save();
 });
 
+/**
+ * Opening the app: a link's puzzle, or else the Levels tab at the pack last played (open, and
+ * scrolled to), rather than a level, since packs and levels may have been reordered.
+ */
 function start() {
   if (location.hash && openLink()) return;
-  if (valid(state.current)) {
-    openLevel(state.current);
-    if (state.tab === 'levels') setTab('levels');
-  } else {
-    setTab('levels');
-  }
+  // Older saves kept the level's place: find its pack.
+  if (!state.pack && valid(state.current)) state.pack = PACKS[state.current.pack].name;
+  delete state.current;
+  const pi = PACKS.findIndex((k) => k.name === state.pack);
+  if (pi >= 0) state.collapsed = state.collapsed.filter((n) => n !== state.pack);
+  setTab('levels');
+  if (pi >= 0) levels.querySelectorAll<HTMLElement>('.pack')[pi]?.scrollIntoView({ block: 'start' });
 }
 
 start();
