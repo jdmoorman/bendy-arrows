@@ -1339,7 +1339,7 @@ a.btn {
 }
 /* A kind of level (classic or one-shot): a heading and a short explanation above its packs. */
 .level-kind {
-  max-width: 560px;
+  max-width: 880px;
   width: 100%;
   margin: 12px auto 0;
   padding: 14px 16px;
@@ -1364,7 +1364,7 @@ a.btn {
 }
 .pack {
   display: block;
-  max-width: 560px;
+  max-width: 880px;
   width: 100%;
   margin: 0 auto;
   container-type: inline-size;
@@ -1423,35 +1423,31 @@ a.btn {
   font-variant-numeric: tabular-nums;
 }
 /* Rows of 5 levels, or 10 where ten tap-sized buttons fit across. */
+/* Rows of 5, or 10 where ten cards of about 60px fit across (packs come in fives). */
 .level-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--gap);
 }
-@container (min-width: 512px) {
+@container (min-width: 640px) {
   .level-grid {
     grid-template-columns: repeat(10, minmax(0, 1fr));
   }
 }
+/* A level's card: its board (and a tick once solved). */
 .level-btn {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  gap: 2px;
+  padding: 6px;
   text-decoration: none;
-  aspect-ratio: 1;
-  min-height: var(--tap);
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface-2);
-  color: var(--text);
-  font: inherit;
-  font-size: 1.05rem;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
+  background: var(--surface);
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
 }
 .level-btn:focus-visible {
   outline: 2px solid var(--accent);
@@ -1460,16 +1456,36 @@ a.btn {
 .level-btn:active {
   filter: brightness(1.25);
 }
-.level-btn svg {
+/* A small board in the card's flow (not the play area's full-size board), and a swipe on it scrolls. */
+.level-btn svg.level-board {
+  position: static;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  touch-action: auto;
+  pointer-events: none;
+}
+/* Solved: the card turns green, with a tick in its corner. */
+.level-btn.solved {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 22%, var(--surface));
+}
+.level-check {
   position: absolute;
-  top: 4px;
-  right: 4px;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--success);
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.level-check svg {
   width: 14px;
   height: 14px;
-}
-.level-btn.solved {
-  color: var(--success);
-  border-color: var(--success);
 }
 .level-btn.started {
   border-color: var(--accent);

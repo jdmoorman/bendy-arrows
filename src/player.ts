@@ -3,6 +3,7 @@ import { decodePuzzle, encodePuzzle } from './codec';
 import { ICONS } from './icons';
 import { findLevel, levelName, PACKS, type LevelRef } from './levels';
 import { endVariants, type Puzzle } from './model';
+import { padFor, renderBoard } from './render';
 import { PlayView } from './play';
 import { allLogsText } from './solve-log';
 import { download, openShareSheet, puzzleFromHash } from './share';
@@ -183,12 +184,20 @@ function drawLevels() {
     head.append(name, count);
     const grid = el('div', 'level-grid');
     pack.levels.forEach((code, li) => {
-      // A real link, so the browser offers Open in new tab (right-click, long press, Cmd-click).
+      // A card with the level's board (and the lines of an unfinished one), and a tick when
+      // solved (its number is only in its label, for screen readers). A real link, so the browser offers Open in new tab (right-click, long press, Cmd-click).
       const b = el('a', 'level-btn') as HTMLAnchorElement;
       b.href = `#p=${code}`;
       const done = storage.isSolved(code);
       const started = !done && !!state.progress[code];
-      b.innerHTML = `<span>${li + 1}</span>${done ? ICONS.check : ''}`;
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.classList.add('board', 'level-board');
+      svg.setAttribute('aria-hidden', 'true');
+      const p = decodePuzzle(code);
+      const marks = state.progress[code];
+      renderBoard(svg, p, { coordinates: false, pad: padFor(p, false, false), segments: started ? new Set(marks.segments) : undefined, xMarks: started ? new Set(marks.xMarks) : undefined });
+      b.append(svg);
+      if (done) b.append(el('span', 'level-check', ICONS.check));
       b.classList.toggle('solved', done);
       b.classList.toggle('started', started);
       b.classList.toggle('current', current?.pack === pi && current.level === li);
