@@ -345,7 +345,7 @@ export class PacksView {
     svg.classList.add('board');
     const known = this.solutions.get(t.dataset.code!);
     const lines = known?.lines;
-    renderBoard(svg, p, { pad: padFor(p), segments: lines ?? undefined, solved: !!lines });
+    renderBoard(svg, p, { coordinates: false, pad: padFor(p, false, false), segments: lines ?? undefined, solved: !!lines });
     t.classList.toggle('pending', !known);
     t.classList.toggle('bad', known?.unique === false || !!shapeProblem(t.dataset.code!));
   }
@@ -427,7 +427,7 @@ export class PacksView {
     const drawBoard = (svg: SVGSVGElement, code: string) => {
       const p = decodePuzzle(code);
       const lines = this.solutions.get(code)?.lines;
-      renderBoard(svg, p, { pad: padFor(p), segments: lines ?? undefined, solved: !!lines });
+      renderBoard(svg, p, { coordinates: false, pad: padFor(p, false, false), segments: lines ?? undefined, solved: !!lines });
     };
     let solver: Worker | null = null;
     const asked = new Set<string>();
@@ -515,7 +515,7 @@ export class PacksView {
     const frames = this.ratings.get(code)?.frames;
     if (!frames) return;
     const p = decodePuzzle(code);
-    const pad = padFor(p);
+    const pad = padFor(p, false, false);
     // A magnified copy beside the tile (on whichever side has room), where the journey plays.
     const zoom = el('div', 'pack-zoom');
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -549,18 +549,18 @@ export class PacksView {
     const step = () => {
       let wait = STEP_MS;
       if (i === 0) {
-        renderBoard(svg, p, { pad });
+        renderBoard(svg, p, { coordinates: false, pad });
         shown = new Set();
       } else if (i <= frames.length) {
         const f = frames[i - 1];
         const segments = new Set(f.segments);
         const xMarks = new Set(f.xs);
         const fresh = new Set([...segments, ...xMarks].filter((e) => !shown.has(e)));
-        renderBoard(svg, p, { pad, segments, xMarks, highlight: fresh, focusCells: f.kind === 'hint' ? new Set(f.focus) : undefined });
+        renderBoard(svg, p, { coordinates: false, pad, segments, xMarks, highlight: fresh, focusCells: f.kind === 'hint' ? new Set(f.focus) : undefined });
         shown = new Set([...segments, ...xMarks]);
         if (f.kind === 'hint') wait = HINT_MS;
       } else {
-        renderBoard(svg, p, { pad, segments: solution, solved: !!solution });
+        renderBoard(svg, p, { coordinates: false, pad, segments: solution, solved: !!solution });
         wait = 2 * STEP_MS;
       }
       i = i > frames.length ? 0 : i + 1;

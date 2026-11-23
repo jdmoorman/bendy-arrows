@@ -47,6 +47,8 @@ export interface RenderOptions {
   focusCells?: Set<number>;
   /** Segments and X marks to draw in the highlight colour (e.g. the latest logic step). */
   highlight?: Set<number>;
+  /** Column letters and row numbers around the board (the Coordinates setting by default). */
+  coordinates?: boolean;
   /** A border to suggest a wall on, drawn dashed on top. */
   suggestWall?: number;
   /** Tiles to suggest blacking out, outlined dashed on top. */
@@ -56,9 +58,9 @@ export interface RenderOptions {
 }
 
 /** Margin to use for a puzzle: room for end arrows when it has (or may get) ends. */
-export function padFor(p: Puzzle, editing = false): number {
+export function padFor(p: Puzzle, editing = false, coordinates = showCoordinates): number {
   const base = editing || p.endpoints.some((e) => e.kind === 'port') ? PORT_PAD : PAD;
-  return base + (showCoordinates ? COORD_PAD : 0);
+  return base + (coordinates ? COORD_PAD : 0);
 }
 
 export function boardSize(p: Puzzle, pad = PAD): { width: number; height: number } {
@@ -258,7 +260,7 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
 
   // Coordinates in the outermost band of the margin, clear of end arrows: letters above the
   // columns, numbers left of the rows.
-  if (showCoordinates && pad >= COORD_PAD) {
+  if ((o.coordinates ?? showCoordinates) && pad >= COORD_PAD) {
     const mid = COORD_PAD / 2;
     parts.push('<g class="coords">');
     for (let c = 0; c < p.w; c++) parts.push(`<text x="${pad + (c + 0.5) * CELL}" y="${mid}">${columnName(c)}</text>`);
