@@ -67,14 +67,15 @@ export const THEMES = {
     'hint-edge': '#7fbf66',
     // The highlighted tiles a hint points to: strong enough to spot at a glance.
     'hint-fill': 'rgba(181, 232, 160, 0.6)',
-    xmark: '#ff8a65',
+    // The same light as the end arrows (an orange was too close to the red of a wrong mark).
+    xmark: '#e6e9f0',
     end: '#e6e9f0',
     error: '#ff5c7a',
     'error-fill': 'rgba(255, 92, 122, 0.18)',
     success: '#b5e8a0',
     ghost: 'rgba(181, 232, 160, 0.45)',
     hover: 'rgba(94, 184, 255, 0.18)',
-    // A level's difficulty dots: the success green, a warm yellow, the X marks' orange, the error red.
+    // A level's difficulty dots: the success green, a warm yellow, an orange, the error red.
     'difficulty-1': '#b5e8a0',
     'difficulty-2': '#f2d06b',
     'difficulty-3': '#ff9a4d',
