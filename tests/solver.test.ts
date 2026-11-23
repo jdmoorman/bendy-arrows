@@ -297,3 +297,20 @@ describe('tileFixes', async () => {
     expect(fixes.every((f) => (Math.floor(f.cell / 3) + (f.cell % 3)) % 2 === 0)).toBe(true);
   });
 });
+
+describe('suggestWall', async () => {
+  const { suggestWall } = await import('../src/suggest');
+  const { ALL_RULES, runLogic } = await import('../src/logic');
+  test('the suggested wall lets the rules draw more lines, and the puzzle keeps a solution', () => {
+    const p = decodePuzzle('BiouuR74XSs');
+    // Take away a couple of black tiles so the rules can't finish it.
+    for (const c of [...p.blocked].slice(0, 2)) p.blocked.delete(c);
+    const before = runLogic(p, ALL_RULES).state.segments.size;
+    const s = suggestWall(p, ALL_RULES);
+    if (!s) return; // nothing helps: fine
+    expect(s.before).toBe(before);
+    expect(s.lines).toBeGreaterThan(before);
+    const q = { ...p, walls: new Set([...p.walls, s.edge]) };
+    expect(solve(q, { maxSolutions: 1 }).status).not.toBe('none');
+  }, 60_000);
+});

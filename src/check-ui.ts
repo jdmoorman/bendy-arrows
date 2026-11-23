@@ -95,7 +95,6 @@ export function attachUniquenessCheck(editor: EditorView): void {
   const overlay = () => {
     union?.cancel();
     union = null;
-    editor.suggestWall(null);
     if (!last || (last.status !== 'unique' && last.status !== 'multiple')) return editor.showGhost(null);
     // Show the solutions found so far at once, then every line any solution uses as it's found.
     editor.showGhost(last.solutions.flat());
@@ -109,13 +108,8 @@ export function attachUniquenessCheck(editor: EditorView): void {
         if (union !== thisRun) return;
         union = null;
         editor.showGhost(r.edges);
-        // Suggest the wall that rules out the most solutions found (dashed on the board).
-        const s = r.suggestedWall;
-        editor.suggestWall(s ? s.edge : null);
         const n = r.unchecked.length;
-        const unchecked = n ? ` (${n} border${n === 1 ? '' : 's'} too slow to check.)` : '';
-        if (s) editor.setMessage(`Suggested wall (dashed): it rules out ${s.rulesOut} of the ${s.found} solutions found.${unchecked}`, 'error');
-        else if (n) editor.setMessage(`Showing every line some solution uses.${unchecked}`, 'error');
+        if (n) editor.setMessage(`Showing every line some solution uses. (${n} border${n === 1 ? '' : 's'} too slow to check.)`, 'error');
       },
       () => {},
     );
@@ -164,9 +158,20 @@ export function attachUniquenessCheck(editor: EditorView): void {
     }
   };
 
+  // Where missing ends could go: only on request (the Suggest button with the Ends tool).
+  editor.endSuggester = () => ({
+    result: findEnds(),
+    cancel: () => {
+      ends?.cancel();
+      ends = null;
+      setChip('checking', missingText());
+    },
+  });
+  const missingText = () => (editor.current.endpoints.length ? 'No second end yet' : 'No ends yet');
+
   const start = async () => {
-    // Short of ends: find where they could go instead.
-    if (missingEnds(editor.current)) return findEnds();
+    // Short of ends: nothing to check until they're placed (Suggest finds where they could go).
+    if (missingEnds(editor.current)) return setChip('checking', missingText());
     const thisRun = solveInBackground(editor.current);
     run = thisRun;
     try {
@@ -195,7 +200,6 @@ export function attachUniquenessCheck(editor: EditorView): void {
     editor.showEndOptions(null);
     last = null;
     editor.showGhost(null);
-    editor.suggestWall(null);
     stopRating();
     refreshChip();
     clearTimeout(timer);

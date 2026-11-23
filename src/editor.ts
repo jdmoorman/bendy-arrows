@@ -32,6 +32,7 @@ import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
 import { tileFixesInBackground, type FixesRun } from './solver-client';
+import { suggestWallInBackground } from './suggest-client';
 import { fillInBackground, removableInBackground, simplifyInBackground, type Removable } from './generator-client';
 import type { GoalFailure, SimplifyGoal } from './generator';
 import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from './new-puzzle-ui';
@@ -85,6 +86,12 @@ export class EditorView {
   /** A one-shot whose stroke stalls: the lines the rules find over the rest of the board, drawn faintly. */
   private faintLines = new Set<number>();
   private suggestedWall: number | null = null;
+  /** Suggest: its button, its progress bar, and the search while it runs. */
+  private suggestBtn!: HTMLButtonElement;
+  private suggestBar!: HTMLElement;
+  private suggestRun: { cancel(): void } | null = null;
+  /** Suggest with the Ends tool: where the missing ends could go (set up by the uniqueness check). */
+  endSuggester: (() => { result: Promise<void>; cancel(): void }) | null = null;
   private message = '';
   private messageKind: '' | 'success' | 'error' = '';
 
@@ -155,6 +162,7 @@ export class EditorView {
     this.el.innerHTML = `
       <div class="board-wrap"><svg class="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Puzzle editor board"></svg><div class="grid-handles"></div></div>
       <p class="status" role="status" aria-live="polite"></p>
+      <div class="suggest-progress" hidden><span></span></div>
       <div class="toolbar">
         <!-- Turns and flips: shown while editing rows and columns. -->
         <div class="toolbar-row shape-row">
@@ -172,6 +180,7 @@ export class EditorView {
           </div>
           <button class="btn icon-only" data-act="grid" aria-pressed="false" aria-label="Edit rows and columns" title="Edit rows and columns: add or delete them around the board, turn or flip it">${ICONS.grid}</button>
           <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the entrance, and hints and logic follow it">One-shot</button>
+          <button class="btn icon-only" data-act="suggest" aria-label="Suggest a wall" title="Suggest a wall: the one after which the chosen logic rules draw the most lines (takes a moment; tap again to stop)">${ICONS.bulb}</button>
         </div>
         <div class="toolbar-row simplify-row">
           <button class="btn icon-only" data-act="clear-plan" aria-label="Clear drawn lines" title="Clear the lines drawn with Draw">${ICONS.clear}</button>
@@ -249,6 +258,9 @@ export class EditorView {
       this.plan.clear();
       this.render();
     });
+    this.suggestBtn = q<HTMLButtonElement>('[data-act=suggest]');
+    this.suggestBtn.addEventListener('click', () => this.suggest());
+    this.suggestBar = this.el.querySelector<HTMLElement>('.suggest-progress')!;
     this.oneShotBtn = q<HTMLButtonElement>('[data-act=oneshot]');
     this.oneShotBtn.addEventListener('click', () => this.toggleOneShot());
     q<HTMLButtonElement>('[data-logic=step]').addEventListener('click', () => this.stepLogic());
@@ -991,8 +1003,67 @@ export class EditorView {
   }
 
   /** Show a border where a wall would help, or null to hide it (the uniqueness chip decides). */
-  suggestWall(edge: number | null): void {
-    this.suggestedWall = edge;
+  /**
+   * Suggest (or, while one is being worked out, stop): the wall after which the chosen logic
+   * rules draw the most lines, keeping a solution. Shown dashed; tapping it places it.
+   */
+  private suggest() {
+    if (this.suggestRun) return this.cancelSuggest();
+    if (this.tool === 'ends') return this.suggestEnds();
+    if (this.tool !== 'walls') return;
+    this.suggestedWall = null;
+    this.suggestBar.hidden = false;
+    const fill = this.suggestBar.querySelector('span')!;
+    fill.style.width = '0%';
+    this.setMessage('Looking for the wall that lets the logic go furthest…');
+    const run = suggestWallInBackground(this.puzzle, [...this.logicRules], this.logicOpts, (f) => (fill.style.width = `${Math.round(f * 100)}%`));
+    this.suggestRun = run;
+    this.render();
+    run.result
+      .then((s) => {
+        if (this.suggestRun !== run) return;
+        this.suggestRun = null;
+        this.suggestBar.hidden = true;
+        this.suggestedWall = s?.edge ?? null;
+        this.setMessage(
+          s
+            ? `Suggested wall (dashed): with it the chosen rules draw ${s.lines} line${s.lines === 1 ? '' : 's'}, ${s.lines - s.before} more than now.`
+            : 'No wall lets the chosen rules get further while keeping a solution.',
+        );
+      })
+      .catch((err) => {
+        if (this.suggestRun !== run) return;
+        this.suggestRun = null;
+        this.suggestBar.hidden = true;
+        this.setMessage(err instanceof Error ? err.message : String(err), 'error');
+      });
+  }
+
+  /** Suggest with the Ends tool: mark every frame spot where a missing end gives a solution. */
+  private suggestEnds() {
+    if (!missingEnds(this.puzzle) || !this.endSuggester) return;
+    this.suggestBar.hidden = false;
+    this.suggestBar.classList.add('indeterminate');
+    const run = this.endSuggester();
+    this.suggestRun = run;
+    this.render();
+    const done = () => {
+      if (this.suggestRun !== run) return;
+      this.suggestRun = null;
+      this.suggestBar.hidden = true;
+      this.suggestBar.classList.remove('indeterminate');
+      this.render();
+    };
+    run.result.then(done, done);
+  }
+
+  private cancelSuggest() {
+    if (!this.suggestRun) return;
+    this.suggestRun.cancel();
+    this.suggestRun = null;
+    this.suggestBar.hidden = true;
+    this.suggestBar.classList.remove('indeterminate');
+    this.clearMessage();
     this.render();
   }
 
@@ -1015,6 +1086,7 @@ export class EditorView {
   }
 
   private setTool(t: Tool) {
+    if (t !== this.tool) this.cancelSuggest();
     this.tool = t;
     // Picking a tool means rows and columns are done.
     this.gridEdit = false;
@@ -1053,6 +1125,8 @@ export class EditorView {
 
   private afterChange() {
     this.cancelSimplify();
+    this.cancelSuggest();
+    this.suggestedWall = null;
     this.keepPlanFitting();
     this.resetLogic();
     this.clearMessage();
@@ -1186,6 +1260,10 @@ export class EditorView {
       faint: this.faintLines.size ? this.faintLines : undefined,
     });
     this.oneShotBtn.setAttribute('aria-pressed', String(!!p.oneShot));
+    const canSuggest = this.tool === 'walls' || (this.tool === 'ends' && !!missingEnds(p));
+    this.suggestBtn.disabled = !canSuggest && !this.suggestRun;
+    this.suggestBtn.title = this.tool === 'ends' ? 'Suggest ends: mark every spot on the frame where a missing end gives a solution (tap again to stop)' : 'Suggest a wall: the one after which the chosen logic rules draw the most lines (takes a moment; tap again to stop)';
+    this.suggestBtn.classList.toggle('busy', !!this.suggestRun);
     this.gridBtn.setAttribute('aria-pressed', String(this.gridEdit));
     for (const g of ['easy', 'minimal'] as const) {
       this.goalBtns[g].setAttribute('aria-pressed', String(this.simplifyGoal === g));

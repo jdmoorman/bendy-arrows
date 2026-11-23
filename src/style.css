@@ -1918,3 +1918,39 @@ a.btn {
     left: 0;
   }
 }
+
+/* Suggest's progress while it works out the best wall. */
+.suggest-progress {
+  height: 4px;
+  margin: 0 auto 4px;
+  width: min(100%, 320px);
+  border-radius: 2px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.suggest-progress[hidden] {
+  display: none;
+}
+.suggest-progress span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.15s linear;
+}
+.tool-row .btn.busy {
+  animation: simplify-busy 1s ease-in-out infinite alternate;
+}
+/* Suggest working without a known length (where ends could go): a sliding bar. */
+.suggest-progress.indeterminate span {
+  width: 30%;
+  animation: suggest-slide 1.2s ease-in-out infinite;
+}
+@keyframes suggest-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
