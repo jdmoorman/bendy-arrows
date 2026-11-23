@@ -152,6 +152,19 @@ const KINDS = {
  * pack with its levels as numbered buttons: solved ones ticked, the current one marked.
  */
 function drawLevels() {
+  // A pack the player has completely solved folds away, once: unfolding it again keeps it open.
+  // One that gains new levels unfolds, and folds again when they're solved too.
+  for (const pack of PACKS) {
+    const done = pack.levels.every((c) => storage.isSolved(c));
+    const auto = state.autoCollapsed.includes(pack.name);
+    if (done && !auto) {
+      state.autoCollapsed.push(pack.name);
+      if (!state.collapsed.includes(pack.name)) state.collapsed.push(pack.name);
+    } else if (!done && auto) {
+      state.autoCollapsed = state.autoCollapsed.filter((n) => n !== pack.name);
+      state.collapsed = state.collapsed.filter((n) => n !== pack.name);
+    }
+  }
   const packs = PACKS.map((pack, pi) => {
     // Each pack folds away (tap its heading); the choice is remembered per pack.
     const section = el('details', 'pack');
@@ -299,7 +312,8 @@ function start() {
   if (!state.pack && valid(state.current)) state.pack = PACKS[state.current.pack].name;
   delete state.current;
   const pi = PACKS.findIndex((k) => k.name === state.pack);
-  if (pi >= 0) state.collapsed = state.collapsed.filter((n) => n !== state.pack);
+  // Unfolded, unless it's completely solved (those stay folded).
+  if (pi >= 0 && !PACKS[pi].levels.every((c) => storage.isSolved(c))) state.collapsed = state.collapsed.filter((n) => n !== state.pack);
   setTab('levels');
   if (pi >= 0) levels.querySelectorAll<HTMLElement>('.pack')[pi]?.scrollIntoView({ block: 'start' });
 }

@@ -75,6 +75,8 @@ export interface PlayerState {
   progress: Record<string, Progress>;
   /** Packs folded away in the Levels tab, by name. */
   collapsed: string[];
+  /** Packs folded away once for being completely solved, by name (unfolding one keeps it open). */
+  autoCollapsed: string[];
 }
 
 export interface KeyValueStore {
@@ -295,9 +297,11 @@ export class Storage {
     const progress = s && s.progress && typeof s.progress === 'object' ? s.progress : {};
     const c = s?.current;
     const current = c && Number.isInteger(c.pack) && Number.isInteger(c.level) ? { pack: c.pack, level: c.level } : undefined;
-    const collapsed = Array.isArray(s?.collapsed) ? s.collapsed.filter((x): x is string => typeof x === 'string') : [];
+    const names = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+    const collapsed = names(s?.collapsed);
+    const autoCollapsed = names(s?.autoCollapsed);
     const pack = typeof s?.pack === 'string' ? s.pack : undefined;
-    return { pack, current, tab: s?.tab === 'play' ? 'play' : 'levels', progress, collapsed };
+    return { pack, current, tab: s?.tab === 'play' ? 'play' : 'levels', progress, collapsed, autoCollapsed };
   }
 
   savePlayer(s: PlayerState): void {
