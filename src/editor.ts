@@ -6,6 +6,7 @@ import {
   cellEdges,
   edgeCells,
   clonePuzzle,
+  puzzlesEqual,
   createPuzzle,
   edgeTouchesBlocked,
   MAX_SIZE,
@@ -32,7 +33,7 @@ import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
 import { tileFixesInBackground, type FixesRun } from './solver-client';
-import { suggestWallInBackground } from './suggest-client';
+import { suggestInBackground } from './suggest-client';
 import { fillInBackground, removableInBackground, simplifyInBackground, type Removable } from './generator-client';
 import type { GoalFailure, SimplifyGoal } from './generator';
 import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from './new-puzzle-ui';
@@ -85,7 +86,8 @@ export class EditorView {
   private fixRun: FixesRun | null = null;
   /** A one-shot whose stroke stalls: the lines the rules find over the rest of the board, drawn faintly. */
   private faintLines = new Set<number>();
-  private suggestedWall: number | null = null;
+  /** The wall or black tile Suggest came up with (dashed on the board until the next edit). */
+  private suggested: { kind: 'wall' | 'tile'; at: number[]; base: Puzzle } | null = null;
   /** Suggest: its button, its progress bar, and the search while it runs. */
   private suggestBtn!: HTMLButtonElement;
   private suggestBar!: HTMLElement;
@@ -1002,21 +1004,22 @@ export class EditorView {
     this.render();
   }
 
-  /** Show a border where a wall would help, or null to hide it (the uniqueness chip decides). */
   /**
-   * Suggest (or, while one is being worked out, stop): the wall after which the chosen logic
-   * rules draw the most lines, keeping a solution. Shown dashed; tapping it places it.
+   * Suggest (or, while one is being worked out, stop): the wall (Walls tool) or black tile (Tiles
+   * tool) after which the chosen logic rules draw the most lines, keeping a solution. Shown
+   * dashed; tapping it places it.
    */
   private suggest() {
     if (this.suggestRun) return this.cancelSuggest();
     if (this.tool === 'ends') return this.suggestEnds();
-    if (this.tool !== 'walls') return;
-    this.suggestedWall = null;
+    if (this.tool !== 'walls' && this.tool !== 'tiles') return;
+    const kind = this.tool === 'walls' ? 'wall' : 'tile';
+    this.suggested = null;
     this.suggestBar.hidden = false;
     const fill = this.suggestBar.querySelector('span')!;
     fill.style.width = '0%';
-    this.setMessage('Looking for the wall that lets the logic go furthest…');
-    const run = suggestWallInBackground(this.puzzle, [...this.logicRules], this.logicOpts, (f) => (fill.style.width = `${Math.round(f * 100)}%`));
+    this.setMessage(`Looking for the ${kind === 'wall' ? 'wall' : 'black tile'} that lets the logic go furthest…`);
+    const run = suggestInBackground(this.puzzle, kind, [...this.logicRules], this.logicOpts, (f) => (fill.style.width = `${Math.round(f * 100)}%`));
     this.suggestRun = run;
     this.render();
     run.result
@@ -1024,11 +1027,12 @@ export class EditorView {
         if (this.suggestRun !== run) return;
         this.suggestRun = null;
         this.suggestBar.hidden = true;
-        this.suggestedWall = s?.edge ?? null;
+        this.suggested = s ? { kind: s.kind, at: s.at, base: clonePuzzle(this.puzzle) } : null;
+        const what = kind === 'wall' ? 'wall' : s && s.at.length === 2 ? 'pair of black tiles' : 'black tile';
         this.setMessage(
           s
-            ? `Suggested wall (dashed): with it the chosen rules draw ${s.lines} line${s.lines === 1 ? '' : 's'}, ${s.lines - s.before} more than now.`
-            : 'No wall lets the chosen rules get further while keeping a solution.',
+            ? `Suggested ${what} (dashed): with ${s.at.length === 2 ? 'them' : 'it'} the chosen rules draw ${s.lines} line${s.lines === 1 ? '' : 's'}, ${s.lines - s.before} more than now.`
+            : `No ${kind === 'wall' ? 'wall' : 'black tile or pair'} lets the chosen rules get further while keeping a solution.`,
         );
       })
       .catch((err) => {
@@ -1055,6 +1059,21 @@ export class EditorView {
       this.render();
     };
     run.result.then(done, done);
+  }
+
+  /**
+   * After an edit: a suggestion stays while the only changes are suggested walls or tiles being
+   * placed (the rest of a suggested pair still shows); any other edit ends it.
+   */
+  private keepSuggestion() {
+    const s = this.suggested;
+    if (!s) return;
+    const marks = (q: Puzzle) => (s.kind === 'wall' ? q.walls : q.blocked);
+    const placed = s.at.filter((x) => marks(this.puzzle).has(x));
+    const expected = clonePuzzle(s.base);
+    for (const x of placed) marks(expected).add(x);
+    const left = s.at.filter((x) => !placed.includes(x));
+    this.suggested = puzzlesEqual(this.puzzle, expected) && left.length ? { ...s, at: left, base: clonePuzzle(this.puzzle) } : null;
   }
 
   private cancelSuggest() {
@@ -1086,7 +1105,10 @@ export class EditorView {
   }
 
   private setTool(t: Tool) {
-    if (t !== this.tool) this.cancelSuggest();
+    if (t !== this.tool) {
+      this.cancelSuggest();
+      this.suggested = null;
+    }
     this.tool = t;
     // Picking a tool means rows and columns are done.
     this.gridEdit = false;
@@ -1126,7 +1148,7 @@ export class EditorView {
   private afterChange() {
     this.cancelSimplify();
     this.cancelSuggest();
-    this.suggestedWall = null;
+    this.keepSuggestion();
     this.keepPlanFitting();
     this.resetLogic();
     this.clearMessage();
@@ -1248,7 +1270,8 @@ export class EditorView {
       ghost: this.ghost ?? undefined,
       // Where ends could go: only while placing ends.
       endOptions: this.tool === 'ends' ? (this.endOptions ?? undefined) : undefined,
-      suggestWall: this.suggestedWall ?? undefined,
+      suggestWall: this.suggested?.kind === 'wall' ? this.suggested.at[0] : undefined,
+      suggestTiles: this.suggested?.kind === 'tile' ? this.suggested.at : undefined,
       removable: this.simplifyGoal && this.removable ? { ...this.removable, goal: this.simplifyGoal } : undefined,
       segments: logic ? this.logic.segments : undefined,
       plan: this.plan,
@@ -1260,9 +1283,12 @@ export class EditorView {
       faint: this.faintLines.size ? this.faintLines : undefined,
     });
     this.oneShotBtn.setAttribute('aria-pressed', String(!!p.oneShot));
-    const canSuggest = this.tool === 'walls' || (this.tool === 'ends' && !!missingEnds(p));
+    const canSuggest = this.tool === 'walls' || this.tool === 'tiles' || (this.tool === 'ends' && !!missingEnds(p));
     this.suggestBtn.disabled = !canSuggest && !this.suggestRun;
-    this.suggestBtn.title = this.tool === 'ends' ? 'Suggest ends: mark every spot on the frame where a missing end gives a solution (tap again to stop)' : 'Suggest a wall: the one after which the chosen logic rules draw the most lines (takes a moment; tap again to stop)';
+    this.suggestBtn.title =
+      this.tool === 'ends'
+        ? 'Suggest ends: mark every spot on the frame where a missing end gives a solution (tap again to stop)'
+        : `Suggest a ${this.tool === 'tiles' ? 'black tile' : 'wall'}: the one after which the chosen logic rules draw the most lines (takes a moment; tap again to stop)`;
     this.suggestBtn.classList.toggle('busy', !!this.suggestRun);
     this.gridBtn.setAttribute('aria-pressed', String(this.gridEdit));
     for (const g of ['easy', 'minimal'] as const) {

@@ -269,6 +269,14 @@ a.btn {
 .tile.blocked.removable.easy {
   fill: rgb(22 163 74);
 }
+/* A tile the editor suggests blacking out. */
+.tile-suggest {
+  fill: color-mix(in srgb, var(--tile-blocked) 35%, transparent);
+  stroke: var(--accent);
+  stroke-width: 6;
+  stroke-dasharray: 2 14;
+  stroke-linecap: round;
+}
 /* A wall the editor suggests adding. */
 .wall.suggest {
   stroke: var(--accent);

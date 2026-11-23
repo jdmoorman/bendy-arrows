@@ -1,22 +1,22 @@
 /// <reference lib="webworker" />
 import { decodePuzzle } from './codec';
 import type { LogicOptions, RuleId } from './logic';
-import { suggestWall, type WallSuggestion } from './suggest';
+import { suggest, type SuggestKind, type Suggestion } from './suggest';
 
-export type SuggestRequest = { code: string; rules: RuleId[]; opts?: LogicOptions };
+export type SuggestRequest = { code: string; kind: SuggestKind; rules: RuleId[]; opts?: LogicOptions };
 export type SuggestMessage =
   | { type: 'progress'; done: number; total: number }
-  | { type: 'done'; suggestion: WallSuggestion | null }
+  | { type: 'done'; suggestion: Suggestion | null }
   | { type: 'error'; message: string };
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
-/** Work out the editor's suggested wall off the main thread, reporting progress as it goes. */
+/** Work out the editor's suggested wall or black tile off the main thread, reporting progress as it goes. */
 ctx.onmessage = (ev: MessageEvent<SuggestRequest>) => {
   try {
-    const { code, rules, opts } = ev.data;
+    const { code, kind, rules, opts } = ev.data;
     let last = 0;
-    const suggestion = suggestWall(decodePuzzle(code), rules, opts, (done, total) => {
+    const suggestion = suggest(decodePuzzle(code), kind, rules, opts, (done, total) => {
       // A few dozen updates are plenty for a progress bar.
       if (done === total || done - last >= Math.max(1, Math.floor(total / 50))) {
         last = done;

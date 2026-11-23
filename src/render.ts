@@ -49,6 +49,8 @@ export interface RenderOptions {
   highlight?: Set<number>;
   /** A border to suggest a wall on, drawn dashed on top. */
   suggestWall?: number;
+  /** Tiles to suggest blacking out, outlined dashed on top. */
+  suggestTiles?: number[];
   /** Walls and black tiles that could go without losing the unique solution, drawn in their own colour. */
   removable?: { walls: Set<number>; blocked: Set<number>; goal?: 'easy' | 'minimal' };
 }
@@ -267,6 +269,11 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   if (o.suggestWall !== undefined) {
     const [x1, y1, x2, y2] = borderLine(o.suggestWall);
     parts.push(line(x1, y1, x2, y2, 'wall suggest'));
+  }
+  for (const cell of o.suggestTiles ?? []) {
+    const [r, c] = cellRC(p, cell);
+    const inset = CELL * 0.12;
+    parts.push(`<rect class="tile-suggest" x="${pad + c * CELL + inset}" y="${pad + r * CELL + inset}" width="${CELL - 2 * inset}" height="${CELL - 2 * inset}" rx="8"/>`);
   }
 
   svg.innerHTML = parts.join('');
