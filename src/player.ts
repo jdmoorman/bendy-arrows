@@ -5,6 +5,7 @@ import { findLevel, levelName, PACKS, type LevelRef } from './levels';
 import { endVariants, type Puzzle } from './model';
 import { padFor, renderBoard } from './render';
 import { RATING_VERSION } from './library-table';
+import { DIFFICULTIES, DIFFICULTY_NAMES, difficultyOf, type HintCount } from './difficulty';
 import type { RatingMessage, RatingRequest } from './rating.worker';
 import { PlayView } from './play';
 import { allLogsText } from './solve-log';
@@ -114,33 +115,20 @@ function showTitle() {
 // (green, yellow, orange, red), the rest grey.
 
 const ratings = storage.loadRatings();
-type Hints = { hints: number; stuck: boolean; maxArea: number };
 /** Hints a level needs, whether hints alone get stuck, and the biggest area a hint reasons about (if worked out with today's rules). */
-function hintsFor(code: string): Hints | null {
+function hintsFor(code: string): HintCount | null {
   const r = ratings[code];
   return r && r.v === RATING_VERSION && typeof r.hints === 'number' ? { hints: r.hints, stuck: !!r.hintsStuck, maxArea: r.maxArea ?? 0 } : null;
 }
-/**
- * Difficulty from 1 to 4:
- *   1  no hints;
- *   2  a few (up to 3), none about a big area;
- *   3  more (up to 7), or a hint about an area of more than 12 tiles;
- *   4  an unreasonable number (8 or more), a hint about an area of more than 24 tiles, or hints
- *      alone get stuck.
- */
-function difficulty(h: Hints): number {
-  if (h.stuck || h.hints >= 8 || h.maxArea > 24) return 4;
-  if (h.hints >= 4 || h.maxArea > 12) return 3;
-  return h.hints ? 2 : 1;
-}
-const DIFFICULTY_NAMES = ['', 'Easy', 'Medium', 'Hard', 'Very hard'];
+/** Difficulty from 1 to 4 (see difficulty.ts, which the generator uses too). */
+const difficulty = (h: HintCount) => DIFFICULTIES.indexOf(difficultyOf(h)) + 1;
 /** Four dots, the first `difficulty` coloured in; null until it's worked out. */
 function difficultyBadge(code: string): HTMLElement | null {
   const h = hintsFor(code);
   if (!h) return null;
   const d = difficulty(h);
   const badge = el('span', `difficulty d${d}`, Array.from({ length: 4 }, (_, i) => `<i${i < d ? ' class="on"' : ''}></i>`).join(''));
-  const label = `${DIFFICULTY_NAMES[d]} (${h.hints ? `${h.hints} hint${h.hints === 1 ? '' : 's'}` : 'no hints'})`;
+  const label = `${DIFFICULTY_NAMES[DIFFICULTIES[d - 1]]} (${h.hints ? `${h.hints} hint${h.hints === 1 ? '' : 's'}` : 'no hints'})`;
   badge.title = label;
   badge.setAttribute('role', 'img');
   badge.setAttribute('aria-label', `Difficulty: ${label}`);

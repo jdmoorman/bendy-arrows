@@ -6,7 +6,7 @@ export type SampleLevel = 'easy' | 'medium' | 'hard' | 'veryhard';
 /**
  * A corpus of puzzles for the tests and research scripts (they were the app's built-in
  * samples before the level packs), each with a unique solution. The level is the logic
- * rating (see rateDifficulty): easy without Checkerboard balance, medium
+ * rating (see rulesNeeded): easy without Checkerboard balance, medium
  * with small balance areas, hard with bigger ones, very hard beyond every rule.
  */
 /** Special collections shown in their own library section. */

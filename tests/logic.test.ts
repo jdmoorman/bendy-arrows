@@ -252,7 +252,7 @@ describe('findHint', async () => {
 describe('sample difficulty', async () => {
   const { SAMPLES } = await import('./samples');
   const { decodePuzzle } = await import('../src/codec');
-  const { rateDifficulty } = await import('../src/generator');
+  const { rulesNeeded: rateDifficulty } = await import('../src/generator');
   // The sparse big-board collections are left out: they are slow to rate.
   // Their uniqueness is still checked in solver.test.ts.
   for (const s of SAMPLES.filter((x) => x.group !== 'fewest' && x.group !== 'hardsparse')) {
@@ -326,7 +326,7 @@ describe('runLogic', async () => {
 
 describe('orientation', async () => {
   const { decodePuzzle } = await import('../src/codec');
-  const { rateDifficulty } = await import('../src/generator');
+  const { rulesNeeded: rateDifficulty } = await import('../src/generator');
   const { transformPuzzle } = await import('../src/model');
   test('rooms for Checkerboard balance do not depend on which way the board faces', () => {
     // This 7×7 once rated very hard one way and hard mirrored: a tie in growing a

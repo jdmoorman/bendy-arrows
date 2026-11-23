@@ -1,3 +1,4 @@
+import { countHints, difficultyOf, DIFFICULTIES, type Difficulty } from './difficulty';
 import { ADVANCED_RULES, ALL_RULES, applyStep, fastStep, runLogic, runStroke, type LogicOptions, type LogicState, type RuleId } from './logic';
 import {
   cellCount,
@@ -27,7 +28,7 @@ import { solutionUnion, solve } from './solver';
  * give the same puzzle.
  */
 
-export type Difficulty = 'easy' | 'medium' | 'hard' | 'veryhard';
+export type { Difficulty } from './difficulty';
 /** Which clues may be used: walls and black tiles, only walls, or only black tiles. */
 export type ClueKind = 'mixed' | 'walls' | 'tiles';
 
@@ -65,7 +66,7 @@ export interface GenResult {
   attempts: number;
 }
 
-export const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard', 'veryhard'];
+export { DIFFICULTIES };
 
 /** Search budget for each uniqueness check. */
 const NODE_LIMIT = 300_000;
@@ -109,15 +110,20 @@ export const EASY_RULES: RuleId[] = RATING_RULES.filter((r) => r !== 'balance');
 export const MEDIUM_BALANCE_AREA = 8;
 
 /**
- * Easy: solved without Checkerboard balance. Medium: needs it, but only on
- * areas of up to MEDIUM_BALANCE_AREA tiles. Hard: needs bigger areas. Very
- * hard: beyond all the rules.
+ * Which rules a puzzle needs, for checking the rules themselves (the test samples): easy without
+ * Checkerboard balance, medium with it on areas of up to MEDIUM_BALANCE_AREA tiles, hard with
+ * bigger areas, very hard beyond all the rules. (Not the difficulty players see: see rateDifficulty.)
  */
-export function rateDifficulty(p: Puzzle, opts: LogicOptions = {}): Difficulty {
+export function rulesNeeded(p: Puzzle, opts: LogicOptions = {}): Difficulty {
   if (logicSolves(p, EASY_RULES, opts)) return 'easy';
   if (logicSolves(p, RATING_RULES, { ...opts, balanceMaxArea: MEDIUM_BALANCE_AREA })) return 'medium';
   if (logicSolves(p, RATING_RULES, opts)) return 'hard';
   return 'veryhard';
+}
+
+/** A generated puzzle's difficulty: the one players see on its level card (see difficulty.ts). */
+export function rateDifficulty(p: Puzzle): Difficulty {
+  return difficultyOf(countHints(p));
 }
 
 /**

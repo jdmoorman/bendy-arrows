@@ -1,5 +1,6 @@
 import { generateInBackground, type GeneratorRun } from './generator-client';
-import { DIFFICULTIES, randomSeed, type ClueKind, type Difficulty, type GenOptions } from './generator';
+import { randomSeed, type ClueKind, type GenOptions } from './generator';
+import { DIFFICULTIES, DIFFICULTY_NAMES, type Difficulty } from './difficulty';
 import { ICONS } from './icons';
 import type { Puzzle } from './model';
 import type { Storage } from './storage';
@@ -18,12 +19,8 @@ export interface NewPuzzleContext {
   onGenerated(p: Puzzle, info: { options: GenOptions; difficulty: Difficulty }): void;
 }
 
-const DIFFS: [Difficulty, string][] = [
-  ['easy', 'Easy'],
-  ['medium', 'Medium'],
-  ['hard', 'Hard'],
-  ['veryhard', 'Very hard'],
-];
+/** The difficulties as players see them on level cards (see difficulty.ts). */
+const DIFFS: [Difficulty, string][] = DIFFICULTIES.map((d) => [d, DIFFICULTY_NAMES[d]]);
 const CLUES: [ClueKind, string][] = [
   ['mixed', 'Walls & tiles'],
   ['walls', 'Walls only'],
