@@ -361,9 +361,13 @@ export class EditorView {
     return this.puzzle;
   }
 
-  /** The logic helper's lines and X marks, if it has taken any steps on this puzzle. */
+  /**
+   * The logic helper's lines and X marks, if it has taken any steps on this puzzle (none if
+   * they draw the whole path: Play then starts on a clean board).
+   */
   get logicMarks(): { segments: number[]; xMarks: number[] } | null {
     if (!this.logicSteps) return null;
+    if (this.logic.segments.size >= openCells(this.puzzle).length - 1) return null;
     return { segments: [...this.logic.segments], xMarks: [...this.logic.xs] };
   }
 
