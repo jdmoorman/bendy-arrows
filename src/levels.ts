@@ -3,7 +3,8 @@
  * lists each pack as a collection).
  *
  * To publish a level:
- *   1. Make it in the creator (create.html). The checker must say Unique.
+ *   1. Make it in the creator (create.html). It must have exactly one solution (the hint count
+ *      shows under the board).
  *   2. Running locally, tap "Copy level entry" beside the hint count, and paste the
  *      line into a pack's `levels` below (or write the code by hand: everything after
  *      `#p=` in the puzzle's share link). Levels play in the order listed.
@@ -106,6 +107,12 @@ export const PACKS: LevelPack[] = [
     ],
   },
   {
+    name: 'Misc Classic',
+    levels: [
+      'BjnpjZZFzQA',
+    ],
+  },
+  {
     name: 'One-Shot Minis',
     oneShot: true,
     levels: [
@@ -176,6 +183,13 @@ export const PACKS: LevelPack[] = [
       'Bkq1wkEuRWVCQ6Zjkqg',
       'Blr3RUFWGoAmo7r4ftdDtg',
       'Bkp1xUP4A5nYedIKgA',
+    ],
+  },
+  {
+    name: 'Misc One-Shots',
+    oneShot: true,
+    levels: [
+      'BjI5EZzkl2zA',
     ],
   },
 ];

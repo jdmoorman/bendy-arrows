@@ -85,9 +85,11 @@ export function attachUniquenessCheck(editor: EditorView): void {
   };
   const refreshChip = () => {
     if (!last) return setChip('checking', 'Checking…');
-    if (last.status === 'unique') setChip('unique', 'Unique');
+    // One solution or several: the overlay already shows which (the solution, or every line some
+    // solution uses), so no label; for one, the hint count follows.
+    if (last.status === 'unique') setChip('unique', '');
     else if (last.status === 'none') setChip('none', 'No solution');
-    else if (last.status === 'multiple') setChip('multiple', 'Multiple solutions');
+    else if (last.status === 'multiple') setChip('multiple', '');
     else setChip('aborted', 'Too big');
   };
 
