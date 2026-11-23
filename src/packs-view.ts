@@ -3,7 +3,8 @@ import { PACKS } from './levels';
 import type { PackRating, PacksMessage, PacksRequest } from './packs.worker';
 import { isOneShot, levelKey, pathKey } from './model';
 import { boardSize, padFor, renderBoard } from './render';
-import type { Storage } from './storage';
+import type { PackCacheEntry, Storage } from './storage';
+import { RATING_VERSION } from './library-table';
 import { ICONS } from './icons';
 import { el, openSheet, toast } from './ui';
 
@@ -71,6 +72,11 @@ export class PacksView {
   /** The tile whose hint journey is playing (while the mouse is over it), and its next step. */
   private playing: { tile: HTMLElement; timer: number; off: () => void } | null = null;
   private worker: Worker | null = null;
+  /** What's been worked out, kept in this browser (a Save reloads the page): saved a moment after it changes. */
+  private cache: Record<string, PackCacheEntry>;
+  private cacheTimer = 0;
+  /** A hint journey being worked out for playback (cached ratings keep only the count). */
+  private framesWorker: Worker | null = null;
   private drag: {
     tile: HTMLElement;
     ghost: HTMLElement | null;
@@ -88,6 +94,8 @@ export class PacksView {
   constructor(private storage: Storage) {
     this.marks = storage.loadPackMarks();
     this.folded = storage.loadPacksFolded();
+    this.cache = {};
+    this.loadCache();
     this.el = el('section', 'view packs-view hidden');
     this.el.innerHTML = `
       <div class="packs-top">
@@ -113,6 +121,25 @@ export class PacksView {
     });
   }
 
+  /** Take in what this browser worked out before (with today's rating rules). */
+  private loadCache() {
+    this.cache = this.storage.loadPackCache();
+    for (const [code, c] of Object.entries(this.cache)) {
+      if (c.v !== RATING_VERSION || (c.unique && c.hints === undefined)) {
+        delete this.cache[code];
+        continue;
+      }
+      this.solutions.set(code, { lines: c.segments ? new Set(c.segments) : null, unique: c.unique });
+      this.ratings.set(code, c.unique ? { hints: c.hints!, stuck: !!c.stuck, frames: [] } : null);
+    }
+  }
+
+  private remember(code: string, entry: Partial<PackCacheEntry>) {
+    this.cache[code] = { ...(this.cache[code] ?? { v: RATING_VERSION, segments: null, unique: false }), ...entry, v: RATING_VERSION };
+    clearTimeout(this.cacheTimer);
+    this.cacheTimer = window.setTimeout(() => this.storage.savePackCache(this.cache), 500);
+  }
+
   /** Show the view: draw the packs, and solve any levels not solved yet. */
   show(): void {
     this.draw();
@@ -121,7 +148,7 @@ export class PacksView {
 
   /** Send levels not solved (or being solved) yet to the solver. */
   private solveNew() {
-    const todo = this.packs.flatMap((k) => k.levels).filter((c) => !this.solutions.has(c) && !this.solving.has(c));
+    const todo = this.packs.flatMap((k) => k.levels).filter((c) => !(this.solutions.has(c) && this.ratings.has(c)) && !this.solving.has(c));
     if (!todo.length) return;
     for (const c of todo) this.solving.add(c);
     if (!this.worker) {
@@ -129,10 +156,13 @@ export class PacksView {
       this.worker.onmessage = (ev: MessageEvent<PacksMessage>) => {
         const m = ev.data;
         const code = m.code;
-        if (m.kind === 'solved') this.solutions.set(code, { lines: m.segments ? new Set(m.segments) : null, unique: m.unique });
-        else {
+        if (m.kind === 'solved') {
+          this.solutions.set(code, { lines: m.segments ? new Set(m.segments) : null, unique: m.unique });
+          this.remember(code, { segments: m.segments, unique: m.unique });
+        } else {
           this.solving.delete(code);
           this.ratings.set(code, m.rating);
+          this.remember(code, m.rating ? { hints: m.rating.hints, stuck: m.rating.stuck } : {});
         }
         for (const t of this.body.querySelectorAll<HTMLElement>(`.pack-tile[data-code="${code}"]`)) this.drawTile(t);
         this.update();
@@ -232,6 +262,12 @@ export class PacksView {
       }
       k.name = name.value;
       this.update();
+    });
+    // Enter (or Escape) finishes editing the name.
+    name.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== 'Escape') return;
+      ev.preventDefault();
+      name.blur();
     });
     const button = (cls: string, icon: string, label: string, enabled: boolean, run: () => void) => {
       const b = el('button', `pack-tool ${cls}`, icon);
@@ -502,6 +538,23 @@ export class PacksView {
     }
   }
 
+  /** Work out a level's hint journey for playback (if the tile is still being looked at when it's done, play it). */
+  private journeyFor(t: HTMLElement, code: string) {
+    this.framesWorker?.terminate();
+    const worker = new Worker(new URL('./packs.worker.ts', import.meta.url), { type: 'module' });
+    this.framesWorker = worker;
+    worker.onmessage = (ev: MessageEvent<PacksMessage>) => {
+      const m = ev.data;
+      if (m.kind !== 'rated') return;
+      worker.terminate();
+      if (this.framesWorker === worker) this.framesWorker = null;
+      if (!m.rating) return;
+      this.ratings.set(code, m.rating);
+      if (t.isConnected && t.matches(':hover')) this.playJourney(t);
+    };
+    worker.postMessage([code] satisfies PacksRequest);
+  }
+
   // --- Dragging ------------------------------------------------------------
 
   /**
@@ -514,6 +567,8 @@ export class PacksView {
     const code = t.dataset.code!;
     const frames = this.ratings.get(code)?.frames;
     if (!frames) return;
+    // A cached rating has only the count: work the journey out again, then play it.
+    if (!frames.length && this.ratings.get(code)?.hints !== undefined) return this.journeyFor(t, code);
     const p = decodePuzzle(code);
     const pad = padFor(p, false, false);
     // A magnified copy beside the tile (on whichever side has room), where the journey plays.
