@@ -632,7 +632,7 @@ function movePlaces(ds: Deduction[], state: LogicState): number {
 }
 
 /** Simplest rules first: the order hints are chosen in. */
-export const HINT_ORDER: RuleId[] = ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'noSeal', 'bottlenecks', 'balance'];
+export const HINT_ORDER: RuleId[] = ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'bottlenecks', 'noSeal', 'balance'];
 /** A one-shot's hints: HINT_ORDER, then the One-step trial as a last resort at the stroke's head. */
 export const STROKE_HINT_ORDER: RuleId[] = [...HINT_ORDER, 'trial'];
 /** HINT_ORDER with Checkerboard imbalance last, used only when it is passed in explicitly. */
