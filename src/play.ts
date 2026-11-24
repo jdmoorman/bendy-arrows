@@ -32,8 +32,21 @@ export interface Progress {
   checked?: boolean;
 }
 
+/**
+ * The marks that don't fit the solution: the wrong lines and wrong X's as first pointed out
+ * (those still on the board are shown), and the board as last seen, to tell what a change deleted.
+ */
+interface WrongHint {
+  kind: 'wrong';
+  lines: number[];
+  xs: number[];
+  edges: number[];
+  text: string;
+  seen: { segments: Set<number>; xs: Set<number> };
+}
+
 /** A hint, or the marks that don't fit the solution. */
-type PlayHint = Hint | { kind: 'wrong'; edges: number[]; text: string };
+type PlayHint = Hint | WrongHint;
 
 export class PlayView {
   readonly el: HTMLElement;
@@ -486,7 +499,7 @@ export class PlayView {
 
   private afterChange() {
     this.changeCount++;
-    this.shownHint = null;
+    this.shownHint = this.shownHint?.kind === 'wrong' ? this.stillWrong(this.shownHint) : null;
     const wasSolved = this.solved;
     this.solved = checkSolution(this.puzzle, this.segments).solved;
     this.render();
@@ -496,6 +509,29 @@ export class PlayView {
       this.log.note(`solved with ${this.hintsUsed} hint${this.hintsUsed === 1 ? '' : 's'}${this.strokeMode ? ` and ${this.backtracks} backtrack${this.backtracks === 1 ? '' : 's'}` : ''}${this.gold ? ' (gold star)' : ''}`);
       this.onSolved?.();
     }
+  }
+
+  /**
+   * After a change, the wrong marks still to show: those pointed out that are still on the board,
+   * until none are left. Adding a new mark ends it (the player has moved on), and so does deleting
+   * one that wasn't pointed out (they're clearly fixing something else), except a one-shot's
+   * lines, which come off the stroke's end on the way back to the wrong ones.
+   */
+  private stillWrong(h: WrongHint): WrongHint | null {
+    const flaggedLines = new Set(h.lines);
+    const flaggedXs = new Set(h.xs);
+    const deletedLine = [...h.seen.segments].some((e) => !this.segments.has(e) && !flaggedLines.has(e));
+    const deletedX = [...h.seen.xs].some((e) => !this.xMarks.has(e) && !flaggedXs.has(e));
+    // (A wrong mark put back, by Undo say, is shown again rather than ending it.)
+    const added =
+      [...this.segments].some((e) => !h.seen.segments.has(e) && !flaggedLines.has(e)) ||
+      [...this.xMarks].some((e) => !h.seen.xs.has(e) && !flaggedXs.has(e));
+    if (added || (deletedLine && !this.strokeMode) || deletedX) return null;
+    const lines = h.lines.filter((e) => this.segments.has(e));
+    const xs = h.xs.filter((e) => this.xMarks.has(e));
+    if (!lines.length && !xs.length) return null;
+    const seen = { segments: new Set(this.segments), xs: new Set(this.xMarks) };
+    return { ...h, edges: [...lines, ...xs], text: wrongText(lines.length, xs.length), seen };
   }
 
   private undo() {
@@ -569,7 +605,14 @@ export class PlayView {
       if (changes !== this.changeCount) return; // the board changed meanwhile
       const best = closestWrong(solutions, this.segments, this.xMarks);
       if (best && best.lines.length + best.xs.length) {
-        this.shownHint = { kind: 'wrong', edges: [...best.lines, ...best.xs], text: wrongText(best.lines.length, best.xs.length) };
+        this.shownHint = {
+          kind: 'wrong',
+          lines: best.lines,
+          xs: best.xs,
+          edges: [...best.lines, ...best.xs],
+          text: wrongText(best.lines.length, best.xs.length),
+          seen: { segments: new Set(this.segments), xs: new Set(this.xMarks) },
+        };
         this.hintsUsed++;
         this.log.note(`hint: wrong ${this.shownHint.edges.map((e) => edgeName(this.puzzle, e)).join(', ')}`);
         this.render();
