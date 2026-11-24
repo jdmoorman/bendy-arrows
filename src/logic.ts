@@ -891,9 +891,14 @@ function simplest(ds: Deduction[], order: RuleId[] = HINT_ORDER): Deduction | un
     const exits = (x: Deduction) => x.exitTiles ?? 0;
     const size = (x: Deduction) => x.cells?.length ?? x.size ?? 1;
     const marks = (x: Deduction) => x.segments.length + x.xs.length;
-    const d = ds
-      .filter((x) => x.rule === rule)
-      .sort((a, b) => size(a) - size(b) || exits(a) - exits(b) || marks(a) - marks(b) || a.cell - b.cell)[0];
+    const sorted = ds.filter((x) => x.rule === rule).sort((a, b) => size(a) - size(b) || exits(a) - exits(b) || marks(a) - marks(b) || a.cell - b.cell);
+    const d = sorted[0];
+    // A checkerboard area that puts down X marks gives way to one a little bigger (up to two
+    // tiles more) that only draws lines: lines are easier to see and to follow.
+    if (d && (rule === 'balance' || rule === 'imbalance') && d.xs.length) {
+      const lines = sorted.find((x) => !x.xs.length && x.segments.length && size(x) <= size(d) + 2);
+      if (lines) return lines;
+    }
     if (d) return d;
   }
   return undefined;
