@@ -1,5 +1,6 @@
 import { decodePuzzle, encodePuzzle } from './codec';
 import { PACKS } from './levels';
+import { pageId } from './levels-sync';
 import type { PackRating, PacksMessage, PacksRequest } from './packs.worker';
 import { isOneShot, levelKey, pathKey } from './model';
 import { boardSize, padFor, renderBoard } from './render';
@@ -202,27 +203,21 @@ export class PacksView {
 
   /**
    * Levels whose solution path is an earlier level's, turned or mirrored: which level that is,
-   * keyed by place ("pack:level", both from 0). A review pack ("Review …") may repeat other packs'
-   * levels, so it's only checked against itself.
+   * keyed by place ("pack:level", both from 0).
    */
   private repeats(): Map<string, string> {
+    const first = new Map<string, string>();
     const out = new Map<string, string>();
-    const check = (packs: number[]) => {
-      const first = new Map<string, string>();
-      for (const pi of packs)
-        this.packs[pi].levels.forEach((code, i) => {
-          const lines = this.solutions.get(code)?.lines;
-          if (!lines) return;
-          const key = pathKey(decodePuzzle(code), lines);
-          const earlier = first.get(key);
-          if (earlier) out.set(`${pi}:${i}`, earlier);
-          else first.set(key, `${this.packs[pi].name} ${i + 1}`);
-        });
-    };
-    const all = this.packs.map((_, i) => i);
-    const review = (i: number) => this.packs[i].name.trim().startsWith('Review ');
-    check(all.filter((i) => !review(i)));
-    for (const i of all.filter(review)) check([i]);
+    this.packs.forEach((k, pi) =>
+      k.levels.forEach((code, i) => {
+        const lines = this.solutions.get(code)?.lines;
+        if (!lines) return;
+        const key = pathKey(decodePuzzle(code), lines);
+        const earlier = first.get(key);
+        if (earlier) out.set(`${pi}:${i}`, earlier);
+        else first.set(key, `${k.name} ${i + 1}`);
+      }),
+    );
     return out;
   }
 
@@ -818,6 +813,7 @@ export class PacksView {
         body: JSON.stringify({
           packs: this.packs.map((k) => ({ name: k.name.trim(), oneShot: k.oneShot, levels: k.levels })),
           was: PACKS.map((p) => ({ name: p.name, oneShot: !!p.oneShot, levels: p.levels })),
+          page: pageId,
         }),
       });
       const reply = (await res.json()) as { error?: string };
