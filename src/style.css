@@ -259,6 +259,7 @@ a.btn {
   dominant-baseline: central;
   pointer-events: none;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 .wall {
@@ -424,6 +425,15 @@ a.btn {
   text-align: center;
   color: var(--text-muted);
   font-size: 0.92rem;
+}
+
+/* Nothing in Play is selected as text: stray long presses and double taps (around the board,
+   between the buttons, on the status line under them) would highlight it on phones. */
+.play-view {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Play's order under the board: the toolbar, then Reset (always usable) and Next level (always
