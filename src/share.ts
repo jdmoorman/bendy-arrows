@@ -56,12 +56,8 @@ export function download(filename: string, text: string, type = 'text/plain') {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-/**
- * The share / import sheet. Two small links at the bottom: download the solve log of the puzzle
- * being played (`onExportLog`), and every puzzle's (`onExportLogs`). Each is greyed out when
- * there's nothing to download (its handler missing).
- */
-export function openShareSheet(opts: { puzzle: Puzzle; name?: string; onOpen: (p: Puzzle) => void; onExportLog?: () => void; onExportLogs?: () => void }): void {
+/** The share / import sheet. */
+export function openShareSheet(opts: { puzzle: Puzzle; name?: string; onOpen: (p: Puzzle) => void }): void {
   const { puzzle } = opts;
   const url = shareUrl(puzzle);
   const body = el('div', 'sheet-stack');
@@ -118,15 +114,5 @@ export function openShareSheet(opts: { puzzle: Puzzle; name?: string; onOpen: (p
   openRow.append(openInput, openBtn);
 
   body.append(linkBox, shareRow, el('hr', 'sheet-sep'), openLabel, openRow);
-  const exportLink = (label: string, run?: () => void) => {
-    const link = el('button', 'link-btn export-logs') as HTMLButtonElement;
-    link.type = 'button';
-    link.textContent = label;
-    link.disabled = !run;
-    if (run) link.addEventListener('click', run);
-    body.append(link);
-  };
-  exportLink('Export this puzzle’s solve log', opts.onExportLog);
-  exportLink('Export all solve logs', opts.onExportLogs);
   const sheet = openSheet('Share puzzle', body);
 }

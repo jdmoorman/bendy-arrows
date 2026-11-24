@@ -233,7 +233,7 @@ function exportSolveLogs() {
 /** Whether any solve log is kept. */
 const hasLogs = () => !!allLogsText(() => undefined);
 
-/** The puzzle being played's solve log as a download, if it has one (for the share sheet). */
+/** The puzzle being played's solve log as a download, if it has one (for Settings). */
 function exportPuzzleLog(): (() => void) | undefined {
   const name = puzzleName;
   const text = playingCode ? puzzleLogText(playingCode, name) : '';
@@ -251,7 +251,7 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
     play.setAutoCheck(s.autoCheck);
     play.setHintMoves(s.hintMoves);
     storage.saveSettings(s);
-  });
+  }, hasLogs() ? exportSolveLogs : undefined, exportPuzzleLog());
 });
 
 app.querySelector('[data-act=share]')!.addEventListener('click', () => {
@@ -259,8 +259,6 @@ app.querySelector('[data-act=share]')!.addEventListener('click', () => {
     puzzle: tab === 'edit' ? editor.current : playing,
     name: tab === 'edit' ? undefined : puzzleName,
     onOpen: (p) => loadPuzzle(p),
-    onExportLog: exportPuzzleLog(),
-    onExportLogs: hasLogs() ? exportSolveLogs : undefined,
   });
 });
 

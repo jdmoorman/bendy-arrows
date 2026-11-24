@@ -19,7 +19,12 @@ const SWITCHES: { key: keyof Settings; label: string }[] = [
 ];
 
 /** The settings sheet: one switch per setting, saved as soon as it changes. */
-export function openSettingsSheet(current: Settings, onChange: (s: Settings) => void): void {
+/**
+ * Two small links at the bottom: download the solve log of the puzzle being played
+ * (`onExportLog`), and every puzzle's (`onExportLogs`). Each is greyed out when there's nothing
+ * to download (its handler missing).
+ */
+export function openSettingsSheet(current: Settings, onChange: (s: Settings) => void, onExportLogs?: () => void, onExportLog?: () => void): void {
   const body = el('div', 'sheet-stack');
   for (const { key, label } of SWITCHES) {
     const row = el('label', 'switch-row');
@@ -36,5 +41,15 @@ export function openSettingsSheet(current: Settings, onChange: (s: Settings) => 
     row.append(text, input);
     body.append(row);
   }
+  const exportLink = (label: string, run?: () => void) => {
+    const link = el('button', 'link-btn export-logs') as HTMLButtonElement;
+    link.type = 'button';
+    link.textContent = label;
+    link.disabled = !run;
+    if (run) link.addEventListener('click', run);
+    body.append(link);
+  };
+  exportLink('Export this puzzle’s solve log', onExportLog);
+  exportLink('Export all solve logs', onExportLogs);
   openSheet('Settings', body);
 }
