@@ -186,7 +186,16 @@ export const PACKS: LevelPack[] = [
       'BjI5EZzkl2zA',
       'Bkp2BENAmcXj9qpQ',
       'Blr3RUFWGoAmo7r4ftdDtg',
-      'Bkp1xUP4A5nYedIKgA',
+    ],
+  },
+  {
+    name: 'XL Keepers',
+    oneShot: true,
+    levels: [
+      'Bjn_SQuW4kn-gg',
+      'Bjo3zEPnhDQVsILY',
+      'Bjo3iUPQ7ZdwDhDQ',
+      'Bjo4UENmZiIpHsQA',
     ],
   },
 ];
