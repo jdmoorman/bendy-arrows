@@ -92,6 +92,8 @@ export class EditorView {
   private suggestBtn!: HTMLButtonElement;
   private suggestBar!: HTMLElement;
   private suggestRun: { cancel(): void } | null = null;
+  /** Suggest was asked where ends could go: it looks again after each end is placed, until both are. */
+  private endsSuggested = false;
   /** Suggest with the Ends tool: where the missing ends could go (set up by the uniqueness check). */
   endSuggester: (() => { result: Promise<void>; cancel(): void }) | null = null;
   private message = '';
@@ -1025,7 +1027,11 @@ export class EditorView {
    * dashed; tapping it places it.
    */
   private suggest() {
-    if (this.suggestRun) return this.cancelSuggest();
+    if (this.suggestRun) {
+      // Stopped by hand: no more looking again after each end, either.
+      this.endsSuggested = false;
+      return this.cancelSuggest();
+    }
     if (this.tool === 'ends') return this.suggestEnds();
     if (this.tool !== 'walls' && this.tool !== 'tiles') return;
     const kind = this.tool === 'walls' ? 'wall' : 'tile';
@@ -1070,6 +1076,7 @@ export class EditorView {
   /** Suggest with the Ends tool: mark every frame spot where a missing end gives a solution. */
   private suggestEnds() {
     if (!missingEnds(this.puzzle) || !this.endSuggester) return;
+    this.endsSuggested = true;
     this.suggestBar.hidden = false;
     this.suggestBar.classList.add('indeterminate');
     const run = this.endSuggester();
@@ -1135,6 +1142,7 @@ export class EditorView {
     if (t !== this.tool) {
       this.cancelSuggest();
       this.suggested = null;
+      this.endsSuggested = false;
     }
     this.tool = t;
     // Picking a tool means rows and columns are done.
@@ -1183,6 +1191,10 @@ export class EditorView {
     if (this.autoLogic) this.runAutoLogic();
     if (this.simplifyGoal) this.checkRemovable();
     for (const fn of this.changeListeners) fn(this.puzzle);
+    // Where ends could go was asked for: after placing (or moving) an end, look again for the
+    // other, so its spots show (and the dots fit the end now placed), until both are placed.
+    if (this.endsSuggested && this.tool === 'ends' && missingEnds(this.puzzle)) this.suggestEnds();
+    else this.endsSuggested = false;
   }
 
   private undo() {
