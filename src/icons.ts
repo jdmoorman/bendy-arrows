@@ -40,4 +40,6 @@ export const ICONS = {
   arrowUp: svg('<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>'),
   arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
   close: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
+  /** An arrow leaving through a door. */
+  exit: svg('<path d="M15 21h4a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-4"/><path d="m8 17-5-5 5-5"/><path d="M3 12h12"/>'),
 };

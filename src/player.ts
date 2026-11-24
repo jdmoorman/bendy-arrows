@@ -44,10 +44,7 @@ const app = document.getElementById('app')!;
 app.innerHTML = `
   <header class="app-header">
     <h1 class="app-title">BendyArrows</h1>
-    <div class="segmented tabs" role="tablist" aria-label="View">
-      <button class="seg-btn" role="tab" data-tab="play">Play</button>
-      <button class="seg-btn" role="tab" data-tab="levels">Levels</button>
-    </div>
+    <button class="btn icon" data-act="exit" aria-label="Exit to the levels" title="Exit to the levels">${ICONS.exit}</button>
     <button class="btn icon" data-act="share" aria-label="Share or open a puzzle">${ICONS.share}</button>
     <button class="btn icon" data-act="settings" aria-label="Settings">${ICONS.settings}</button>
   </header>
@@ -108,7 +105,8 @@ function setTab(t: Tab) {
   play.el.classList.toggle('hidden', t !== 'play');
   levels.classList.toggle('hidden', t !== 'levels');
   if (t === 'levels') drawLevels();
-  for (const b of app.querySelectorAll<HTMLButtonElement>('[data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === t));
+  // No tabs: a level is opened from the list, and Exit (shown while playing) goes back to it.
+  for (const a of ['exit', 'share']) app.querySelector(`[data-act=${a}]`)!.classList.toggle('hidden', t !== 'play');
   showTitle();
   save();
 }
@@ -317,26 +315,7 @@ function drawLevels() {
   levels.replaceChildren(...out);
 }
 
-for (const b of app.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
-  b.addEventListener('click', () => {
-    // Play with nothing chosen yet starts on the first unsolved level (of the pack last played, if any).
-    if (b.dataset.tab === 'play' && !currentCode) openLevel(firstUnsolved(PACKS.findIndex((k) => k.name === state.pack)));
-    else setTab(b.dataset.tab as Tab);
-  });
-}
-
-/** The first unsolved level, in pack `from` if it has one, else in any pack. */
-function firstUnsolved(from = -1): LevelRef {
-  if (PACKS[from]) {
-    const level = PACKS[from].levels.findIndex((c) => !storage.isSolved(c));
-    if (level >= 0) return { pack: from, level };
-  }
-  for (let pack = 0; pack < PACKS.length; pack++) {
-    const level = PACKS[pack].levels.findIndex((c) => !storage.isSolved(c));
-    if (level >= 0) return { pack, level };
-  }
-  return { pack: 0, level: 0 };
-}
+app.querySelector('[data-act=exit]')!.addEventListener('click', () => setTab('levels'));
 
 // Share the puzzle on the board (or open one), or download solve logs.
 app.querySelector('[data-act=share]')!.addEventListener('click', () => {

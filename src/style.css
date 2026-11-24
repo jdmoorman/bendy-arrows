@@ -523,7 +523,7 @@ a.btn {
 }
 /* No room left for the puzzle's name beside the tabs. */
 @media (max-width: 359px) {
-  .app-title {
+  .app-header:has(.tabs) .app-title {
     display: none;
   }
 }
