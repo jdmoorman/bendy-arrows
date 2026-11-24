@@ -124,14 +124,18 @@ export class PacksView {
   /** Take in what this browser worked out before (with today's rating rules). */
   private loadCache() {
     this.cache = this.storage.loadPackCache();
+    // Results from other rating versions are dropped.
+    let dropped = false;
     for (const [code, c] of Object.entries(this.cache)) {
       if (c.v !== RATING_VERSION || (c.unique && c.hints === undefined)) {
         delete this.cache[code];
+        dropped = true;
         continue;
       }
       this.solutions.set(code, { lines: c.segments ? new Set(c.segments) : null, unique: c.unique });
-      this.ratings.set(code, c.unique ? { hints: c.hints!, stuck: !!c.stuck, frames: [] } : null);
+      this.ratings.set(code, c.unique ? { hints: c.hints!, stuck: !!c.stuck, frames: c.frames ?? [] } : null);
     }
+    if (dropped) this.storage.savePackCache(this.cache);
   }
 
   private remember(code: string, entry: Partial<PackCacheEntry>) {
@@ -162,7 +166,7 @@ export class PacksView {
         } else {
           this.solving.delete(code);
           this.ratings.set(code, m.rating);
-          this.remember(code, m.rating ? { hints: m.rating.hints, stuck: m.rating.stuck } : {});
+          this.remember(code, m.rating ? { hints: m.rating.hints, stuck: m.rating.stuck, frames: m.rating.frames } : {});
         }
         for (const t of this.body.querySelectorAll<HTMLElement>(`.pack-tile[data-code="${code}"]`)) this.drawTile(t);
         this.update();
@@ -538,7 +542,7 @@ export class PacksView {
     }
   }
 
-  /** Work out a level's hint journey for playback (if the tile is still being looked at when it's done, play it). */
+  /** Work out a level's hint journey for playback, missing from what was kept (if the tile is still being looked at when it's ready, play it). */
   private journeyFor(t: HTMLElement, code: string) {
     this.framesWorker?.terminate();
     const worker = new Worker(new URL('./packs.worker.ts', import.meta.url), { type: 'module' });
@@ -550,6 +554,7 @@ export class PacksView {
       if (this.framesWorker === worker) this.framesWorker = null;
       if (!m.rating) return;
       this.ratings.set(code, m.rating);
+      this.remember(code, { hints: m.rating.hints, stuck: m.rating.stuck, frames: m.rating.frames });
       if (t.isConnected && t.matches(':hover')) this.playJourney(t);
     };
     worker.postMessage([code] satisfies PacksRequest);
@@ -567,7 +572,7 @@ export class PacksView {
     const code = t.dataset.code!;
     const frames = this.ratings.get(code)?.frames;
     if (!frames) return;
-    // A cached rating has only the count: work the journey out again, then play it.
+    // A kept rating without its replay (from before replays were kept): work it out, then play it.
     if (!frames.length && this.ratings.get(code)?.hints !== undefined) return this.journeyFor(t, code);
     const p = decodePuzzle(code);
     const pad = padFor(p, false, false);
@@ -585,6 +590,10 @@ export class PacksView {
     Object.assign(zoom.style, { left: `${x}px`, top: `${y}px`, width: `${zw}px`, height: `${zh}px` });
     document.body.append(zoom);
     const solution = this.solutions.get(code)?.lines ?? undefined;
+    // Hints that get stuck: the replay ends where they do (not on the solution), saying so.
+    const stuck = !!this.ratings.get(code)?.stuck;
+    const note = el('div', 'pack-zoom-note hidden', 'Hints get stuck here');
+    zoom.append(note);
     let i = 0;
     let shown = new Set<number>();
     // Stop once the mouse moves off the tile, or out of the window.
@@ -603,6 +612,7 @@ export class PacksView {
     };
     const step = () => {
       let wait = STEP_MS;
+      note.classList.toggle('hidden', !(stuck && i > frames.length));
       if (i === 0) {
         renderBoard(svg, p, { coordinates: false, pad });
         shown = new Set();
@@ -611,9 +621,22 @@ export class PacksView {
         const segments = new Set(f.segments);
         const xMarks = new Set(f.xs);
         const fresh = new Set([...segments, ...xMarks].filter((e) => !shown.has(e)));
-        renderBoard(svg, p, { coordinates: false, pad, segments, xMarks, highlight: fresh, focusCells: f.kind === 'hint' ? new Set(f.focus) : undefined });
+        renderBoard(svg, p, {
+          coordinates: false,
+          pad,
+          segments,
+          xMarks,
+          highlight: fresh,
+          focusCells: f.kind === 'hint' ? new Set(f.focus) : undefined,
+          faint: f.phantom?.length ? new Set(f.phantom) : undefined,
+          errorCells: f.broken?.length ? new Set(f.broken) : undefined,
+        });
         shown = new Set([...segments, ...xMarks]);
         if (f.kind === 'hint') wait = HINT_MS;
+      } else if (stuck) {
+        const f = frames[frames.length - 1];
+        renderBoard(svg, p, { coordinates: false, pad, segments: f ? new Set(f.segments) : undefined, xMarks: f ? new Set(f.xs) : undefined });
+        wait = 2 * STEP_MS;
       } else {
         renderBoard(svg, p, { coordinates: false, pad, segments: solution, solved: !!solution });
         wait = 2 * STEP_MS;

@@ -1,3 +1,4 @@
+import type { JourneyFrame } from './logic';
 import type { Rating, TableState } from './library-table';
 import type { Progress } from './play';
 
@@ -49,13 +50,14 @@ const TABLE_KEY = 'bendyarrows.libtable.v1';
 const RATINGS_KEY = 'bendyarrows.ratings.v1';
 const PACK_CACHE_KEY = 'bendyarrows.packcache.v1';
 
-/** A level as the Packs tab worked it out: its solution, whether it's the only one, and its hints (RATING_VERSION v). */
+/** A level as the Packs tab worked it out: its solution, whether it's the only one, its hints and their replay (RATING_VERSION v). */
 export interface PackCacheEntry {
   v: number;
   segments: number[] | null;
   unique: boolean;
   hints?: number;
   stuck?: boolean;
+  frames?: JourneyFrame[];
 }
 const SHOW_SOLUTION_KEY = 'bendyarrows.showsolution.v1';
 const PLAYER_KEY = 'bendyarrows.player.v1';

@@ -1740,6 +1740,20 @@ a.btn {
   color: var(--error);
 }
 /* A hovered level, magnified beside it while its hint journey plays. */
+/* Under a replay whose hints get stuck, at the end. */
+.pack-zoom-note {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6px;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--error);
+}
+.pack-zoom-note.hidden {
+  display: none;
+}
 .pack-zoom {
   position: fixed;
   z-index: 50;
