@@ -28,6 +28,8 @@ export interface Progress {
   backtracks?: number;
   /** Hints shown so far on this board. */
   hints?: number;
+  /** Auto-check has shown a mistake on this board (no gold star then). */
+  checked?: boolean;
 }
 
 /** A hint, or the marks that don't fit the solution. */
@@ -64,6 +66,8 @@ export class PlayView {
   private strokeWay: 'on' | 'back' | null = null;
   /** Hints shown on this board (a hint pointing out wrong marks counts too). */
   private hintsUsed = 0;
+  /** Auto-check has shown a mistake on this board: like a hint, it costs the gold star. */
+  private caught = false;
   /** The Hints show the move setting. */
   private hintMoves = false;
   /** Solutions of the puzzle, found once in the background when Hint first needs them. */
@@ -209,6 +213,7 @@ export class PlayView {
     this.backtracks = progress?.backtracks ?? 0;
     this.strokeWay = null;
     this.hintsUsed = progress?.hints ?? 0;
+    this.caught = !!progress?.checked;
     this.history.clear();
     this.shownHint = null;
     this.solved = checkSolution(p, this.segments).solved;
@@ -225,6 +230,7 @@ export class PlayView {
     // A fresh start: the hint and backtrack counts start over too (and a perfect solve is possible again).
     this.hintsUsed = 0;
     this.backtracks = 0;
+    this.caught = false;
     const before = this.snapshot();
     this.history.push(before);
     this.segments.clear();
@@ -326,13 +332,17 @@ export class PlayView {
 
   /** The player's marks, for saving. */
   get progress(): Progress {
-    const counts = { ...(this.hintsUsed ? { hints: this.hintsUsed } : {}), ...(this.strokeMode ? { backtracks: this.backtracks } : {}) };
+    const counts = {
+      ...(this.hintsUsed ? { hints: this.hintsUsed } : {}),
+      ...(this.strokeMode ? { backtracks: this.backtracks } : {}),
+      ...(this.caught ? { checked: true } : {}),
+    };
     return { ...this.snapshot(), ...counts };
   }
 
-  /** Solved with a gold star: no hints (and, for a one-shot, no backtracks). */
+  /** Solved with a gold star: no hints, no mistake shown by auto-check (and, for a one-shot, no backtracks). */
   get gold(): boolean {
-    return this.solved && !this.hintsUsed && (!this.strokeMode || !this.backtracks);
+    return this.solved && !this.hintsUsed && !this.caught && (!this.strokeMode || !this.backtracks);
   }
 
   /** One-shots: how many times the stroke has been taken back on this board. */
@@ -587,6 +597,8 @@ export class PlayView {
     if (!this.puzzle) return;
     const errorCells = new Set<number>();
     const errorEdges = new Set<number>(this.autoCheck ? this.autoCheckEdges() : []);
+    // A mistake auto-check shows (whenever it shows one) costs the gold star, as a hint does.
+    if (errorEdges.size && !this.solved) this.caught = true;
     if (this.shownHint?.kind === 'wrong') for (const e of this.shownHint.edges) errorEdges.add(e);
     // A shown hint highlights where to look and says what reasoning applies there; it doesn't
     // draw the move (that's the player's to find).
@@ -624,7 +636,7 @@ export class PlayView {
         : this.gold
           ? '★ Solved perfectly!'
           : this.solved
-            ? `Solved with ${[this.hintsUsed ? `${this.hintsUsed} hint${this.hintsUsed === 1 ? '' : 's'}` : this.strokeMode ? 'no hints' : '', this.strokeMode ? (this.backtracks ? `${this.backtracks} backtrack${this.backtracks === 1 ? '' : 's'}` : 'no backtracks') : ''].filter(Boolean).join(' and ')}.`
+            ? `Solved with ${[this.hintsUsed ? `${this.hintsUsed} hint${this.hintsUsed === 1 ? '' : 's'}` : this.strokeMode ? 'no hints' : '', this.caught ? 'auto-check' : '', this.strokeMode ? (this.backtracks ? `${this.backtracks} backtrack${this.backtracks === 1 ? '' : 's'}` : 'no backtracks') : ''].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1')}.`
             : '';
 
     this.undoBtn.disabled = !this.history.canUndo;
