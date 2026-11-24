@@ -1,4 +1,4 @@
-import { decodePuzzle, encodePuzzle, puzzleFromJson, puzzleToJson } from './codec';
+import { decodePuzzle, encodePuzzle, puzzleFromJson } from './codec';
 import { ICONS } from './icons';
 import type { Puzzle } from './model';
 import { el, openSheet, toast } from './ui';
@@ -45,7 +45,7 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export function download(filename: string, text: string, type = 'application/json') {
+export function download(filename: string, text: string, type = 'text/plain') {
   const blob = new Blob([text], { type });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -56,13 +56,12 @@ export function download(filename: string, text: string, type = 'application/jso
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-function fileName(p: Puzzle, name?: string) {
-  const base = (name || `path-${p.w}x${p.h}`).replace(/[^\w.-]+/g, '-').toLowerCase();
-  return `${base}.json`;
-}
-
-/** The share / import sheet. */
-export function openShareSheet(opts: { puzzle: Puzzle; name?: string; onOpen: (p: Puzzle) => void }): void {
+/**
+ * The share / import sheet. Two small links at the bottom: download the solve log of the puzzle
+ * being played (`onExportLog`), and every puzzle's (`onExportLogs`). Each is greyed out when
+ * there's nothing to download (its handler missing).
+ */
+export function openShareSheet(opts: { puzzle: Puzzle; name?: string; onOpen: (p: Puzzle) => void; onExportLog?: () => void; onExportLogs?: () => void }): void {
   const { puzzle } = opts;
   const url = shareUrl(puzzle);
   const body = el('div', 'sheet-stack');
@@ -94,31 +93,6 @@ export function openShareSheet(opts: { puzzle: Puzzle; name?: string; onOpen: (p
     shareRow.append(copyBtn);
   }
 
-  const fileRow = el('div', 'sheet-row');
-  const exportBtn = el('button', 'btn', '<span>Export JSON</span>');
-  exportBtn.addEventListener('click', () => {
-    download(fileName(puzzle, opts.name), JSON.stringify({ name: opts.name, ...puzzleToJson(puzzle) }, null, 2));
-  });
-  const importBtn = el('button', 'btn', '<span>Import JSON</span>');
-  const fileInput = el('input') as HTMLInputElement;
-  fileInput.type = 'file';
-  fileInput.accept = '.json,application/json';
-  fileInput.hidden = true;
-  importBtn.addEventListener('click', () => fileInput.click());
-  fileInput.addEventListener('change', async () => {
-    const file = fileInput.files?.[0];
-    if (!file) return;
-    try {
-      const p = puzzleFromJson(JSON.parse(await file.text()));
-      sheet.close();
-      opts.onOpen(p);
-      toast('Puzzle imported');
-    } catch (err) {
-      toast(`Import failed: ${(err as Error).message}`, 'error');
-    }
-  });
-  fileRow.append(exportBtn, importBtn, fileInput);
-
   const openLabel = el('p', 'field-label', 'Open a puzzle from a link or code');
   const openRow = el('div', 'sheet-row');
   const openInput = el('input', 'text-input') as HTMLInputElement;
@@ -143,6 +117,16 @@ export function openShareSheet(opts: { puzzle: Puzzle; name?: string; onOpen: (p
   });
   openRow.append(openInput, openBtn);
 
-  body.append(linkBox, shareRow, fileRow, el('hr', 'sheet-sep'), openLabel, openRow);
+  body.append(linkBox, shareRow, el('hr', 'sheet-sep'), openLabel, openRow);
+  const exportLink = (label: string, run?: () => void) => {
+    const link = el('button', 'link-btn export-logs') as HTMLButtonElement;
+    link.type = 'button';
+    link.textContent = label;
+    link.disabled = !run;
+    if (run) link.addEventListener('click', run);
+    body.append(link);
+  };
+  exportLink('Export this puzzle’s solve log', opts.onExportLog);
+  exportLink('Export all solve logs', opts.onExportLogs);
   const sheet = openSheet('Share puzzle', body);
 }

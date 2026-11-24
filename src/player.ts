@@ -338,13 +338,15 @@ function firstUnsolved(from = -1): LevelRef {
   return { pack: 0, level: 0 };
 }
 
-// Share the puzzle on the board (or open one); while playing, copy or clear its solve log.
+// Share the puzzle on the board (or open one), or download solve logs.
 app.querySelector('[data-act=share]')!.addEventListener('click', () => {
   if (!currentCode) return toast('Open a level first.');
   openShareSheet({
     puzzle: decodePuzzle(currentCode),
     name: title(),
     onOpen: (p) => load(p, encodePuzzle(p), findLevel(encodePuzzle(p)) ?? undefined),
+    onExportLog: exportPuzzleLog(),
+    onExportLogs: hasLogs() ? exportSolveLogs : undefined,
   });
 });
 
@@ -361,7 +363,7 @@ function exportSolveLogs() {
 /** Whether any solve log is kept. */
 const hasLogs = () => !!allLogsText(() => undefined);
 
-/** The puzzle being played's solve log as a download, if it has one (for Settings). */
+/** The puzzle being played's solve log as a download, if it has one (for the share sheet). */
 function exportPuzzleLog(): (() => void) | undefined {
   const name = current ? levelName(current) : undefined;
   const text = currentCode ? puzzleLogText(currentCode, name) : '';
@@ -377,7 +379,7 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
     play.setAutoCheck(s.autoCheck);
     play.setHintMoves(s.hintMoves);
     storage.saveSettings(s);
-  }, hasLogs() ? exportSolveLogs : undefined, exportPuzzleLog());
+  });
 });
 
 document.addEventListener('keydown', (ev) => {
