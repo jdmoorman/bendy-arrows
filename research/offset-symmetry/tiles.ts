@@ -31,6 +31,11 @@ const OUT = process.env.OUT ?? 'tiles2';
  */
 export type Sym = 'mirror' | 'turn';
 const SYM: Sym = process.env.SYM === 'turn' ? 'turn' : 'mirror';
+/**
+ * STRIP=0: fully symmetric black tiles (no spare strip), only the ends breaking the symmetry;
+ * boards can then be wider than tall too, so the mirror runs either way. Unset: a strip of 1–2 rows.
+ */
+const STRIP = process.env.STRIP === undefined ? null : Number(process.env.STRIP);
 
 export function mirrorFor(w: number, h: number, strip: number, sym: Sym = SYM): Mirror {
   return (cell) => {
@@ -121,9 +126,9 @@ export function build(run: number, minutes = env('RESEARCH_MINUTES', 3)) {
   while (Date.now() < end) {
     log.tick();
     const w = env('MIN_W', 6) + pick(env('MAX_W', 8) - env('MIN_W', 6) + 1);
-    const minH = Math.max(w + 1, env('MIN_H', 8));
+    const minH = STRIP === null ? Math.max(w + 1, env('MIN_H', 8)) : env('MIN_H', 6);
     const h = minH + pick(Math.max(1, Math.min(2 * w, env('MAX_H', 12)) - minH + 1));
-    const strip = 1 + pick(2);
+    const strip = STRIP ?? 1 + pick(2);
     const m = mirrorFor(w, h, strip);
     const p = createPuzzle(w, h);
     const pairs = 2 + pick(Math.max(2, Math.floor(w / 2)));
@@ -166,12 +171,13 @@ export function mutate(run: number, minutes = env('RESEARCH_MINUTES', 3)) {
   const seeds = () => {
     const dir = outPath('offset-symmetry');
     const found = readdirSync(dir)
-      .filter((f) => new RegExp(SYM === 'mirror' ? `^(${OUT}|tiles|seven|found)-\\d+\\.tsv$` : `^${OUT}-\\d+\\.tsv$`).test(f))
+      .filter((f) => new RegExp(SYM === 'mirror' && STRIP === null ? `^(${OUT}|tiles|seven|found)-\\d+\\.tsv$` : `^${OUT}-\\d+\\.tsv$`).test(f))
       .flatMap((f) => readFileSync(`${dir}/${f}`, 'utf8').trim().split('\n'))
       .map((l) => l.split('\t'))
       .filter((x) => +x[3] >= minEcho && +x[2] >= 2)
       .map((x) => x[0]);
     // Seeds of the right symmetry only (mirror finds don't turn, and the other way round).
+    if (STRIP !== null) return found;
     return [...(SYM === 'mirror' ? ['BiouuR74XSs', 'BjIpNQnoIdhA', 'BjHuORU_6YA', 'BjJnz0deFWtA'] : []), ...found];
   };
   let pool = seeds();
@@ -191,7 +197,7 @@ export function mutate(run: number, minutes = env('RESEARCH_MINUTES', 3)) {
     }
     if (p.walls.size) continue;
     const mm = mirrorOf(p);
-    if (!mm) {
+    if (!mm || (STRIP !== null && mm.strip !== STRIP)) {
       log.drop('no mirror');
       continue;
     }

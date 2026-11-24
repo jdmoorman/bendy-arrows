@@ -18,6 +18,8 @@ import { mirrorOf as symOf } from './tiles';
 // Output: offset-symmetry/pick.txt (code, then the facts).
 
 const COUNT = Number(process.env.COUNT ?? 50);
+/** Output file in research/out/offset-symmetry (PICK_OUT, default pick.txt). */
+const PICK_OUT = `offset-symmetry/${process.env.PICK_OUT ?? 'pick.txt'}`;
 
 /** The symmetry the black tiles follow (mirrored or turned 180°, below a spare strip), as a cell map. */
 function mirrorOf(p: Puzzle) {
@@ -174,6 +176,6 @@ test('pick offset symmetry', () => {
       if (c && picks.length < COUNT) picks.push(c);
     }
   }
-  record('offset-symmetry/pick.txt', `# ${cands.length} candidates, ${families.length} families not in a pack`);
-  for (const c of picks.sort((a, b) => a.hints - b.hints || a.code.length - b.code.length)) record('offset-symmetry/pick.txt', `${c.code}\t${c.facts}`);
+  record(PICK_OUT, `# ${cands.length} candidates, ${families.length} families not in a pack`);
+  for (const c of picks.sort((a, b) => a.hints - b.hints || a.code.length - b.code.length)) record(PICK_OUT, `${c.code}\t${c.facts}`);
 });
