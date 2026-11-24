@@ -1,3 +1,4 @@
+import './levels-sync';
 import './style.css';
 import { decodePuzzle, encodePuzzle } from './codec';
 import { ICONS } from './icons';

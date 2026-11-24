@@ -1,3 +1,4 @@
+import './levels-sync';
 import './style.css';
 import { attachUniquenessCheck } from './check-ui';
 import { checkSolution } from './rules';

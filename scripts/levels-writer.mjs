@@ -12,13 +12,29 @@ const quote = (s) => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
  * Dev server only: lets the creator change src/levels.ts.
  * POST /__levels with {"from": oldCode, "to": newCode} replaces a pack level's code. The old
  * code must appear exactly once and the new one not at all. POST /__packs replaces the whole list of
- * packs (see below). Vite then reloads the page with the changed packs.
+ * packs (see below). Vite then reloads the page with the changed packs, except after /__packs: there
+ * every other open page reloads (by the "levels:saved" message), but not the pack editor that
+ * saved, which has the new packs already and would lose its place on the page.
  */
 export function levelsWriter() {
+  /** What /__packs last wrote, and which page sent it, so that page isn't reloaded. */
+  let written = null;
+  let writtenBy = '';
+  let dev;
   return {
     name: 'levels-writer',
     apply: 'serve',
+    async handleHotUpdate({ file, read }) {
+      if (written === null || fileURLToPath(new URL(`file://${file}`)) !== FILE) return;
+      const text = await read();
+      const ours = text === written;
+      written = null;
+      if (!ours) return;
+      dev.ws.send({ type: 'custom', event: 'levels:saved', data: { by: writtenBy } });
+      return [];
+    },
     configureServer(server) {
+      dev = server;
       server.middlewares.use('/__levels', (req, res) => {
         const reply = (status, body) => {
           res.statusCode = status;
@@ -57,7 +73,7 @@ export function levelsWriter() {
         req.on('data', (chunk) => (body += chunk));
         req.on('end', () => {
           try {
-            const { packs, was } = JSON.parse(body);
+            const { packs, was, page } = JSON.parse(body);
             const text1 = (x) => typeof x === 'string' && x.trim() !== '' && !/[\n\r]/.test(x);
             const codes = (xs) => Array.isArray(xs) && xs.every((c) => typeof c === 'string' && CODE.test(c));
             const isPacks = (ps) => Array.isArray(ps) && ps.every((p) => p && text1(p.name) && codes(p.levels) && (p.oneShot === undefined || typeof p.oneShot === 'boolean'));
@@ -84,7 +100,9 @@ export function levelsWriter() {
             const list = packs
               .map((p) => `  {\n    name: ${quote(p.name.trim())},\n${p.oneShot ? '    oneShot: true,\n' : ''}    levels: [\n${p.levels.map((c) => `      '${c}',\n`).join('')}    ],\n  },\n`)
               .join('');
-            writeFileSync(FILE, text.slice(0, open) + '\n' + list + text.slice(end + 1));
+            writtenBy = typeof page === 'string' ? page : '';
+            written = text.slice(0, open) + '\n' + list + text.slice(end + 1);
+            writeFileSync(FILE, written);
             reply(200, { ok: true });
           } catch (err) {
             reply(400, { error: err instanceof Error ? err.message : String(err) });
