@@ -181,21 +181,17 @@ export const PACKS: LevelPack[] = [
     name: 'Misc One-Shots',
     oneShot: true,
     levels: [
+      'BjG4EQkJVaxA',
+      'Bjn_SQuW4kn-gg',
+      'Bjo3zEPnhDQVsILY',
+      'Bjo3iUPQ7ZdwDhDQ',
+      'Bjo4UENmZiIpHsQA',
+      'BkI1hENFDab4mNI',
       'Bko2BGLJKxdbIVg',
       'Bkq1wkEuRWVCQ6Zjkqg',
       'BjI5EZzkl2zA',
       'Bkp2BENAmcXj9qpQ',
       'Blr3RUFWGoAmo7r4ftdDtg',
-    ],
-  },
-  {
-    name: 'XL Keepers',
-    oneShot: true,
-    levels: [
-      'Bjn_SQuW4kn-gg',
-      'Bjo3zEPnhDQVsILY',
-      'Bjo3iUPQ7ZdwDhDQ',
-      'Bjo4UENmZiIpHsQA',
     ],
   },
 ];
