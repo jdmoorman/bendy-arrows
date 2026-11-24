@@ -6,6 +6,7 @@ import { ADVANCED_RULES, ALL_RULES, findStrokeHint, runLogic, runStroke, strokeF
 import { cellAt, clonePuzzle, createPuzzle, edgeCount, isUsableEdge, openCells, orientTail, portCell, portCount, portEnd, type Puzzle } from '../../src/model';
 import { solve } from '../../src/solver';
 import { symmetryOf } from '../../src/symmetry';
+import { playThrough } from '../../src/suggest';
 import { outPath, record } from '../out';
 
 // Large one-shots with black tiles only, whose stroke can be finished with hints that never
@@ -18,7 +19,10 @@ import { outPath, record } from '../out';
 // through the rest, then a climb (moving a tile, adding or taking away a pair, moving an end,
 // with now and then a step back) towards boards the rules decide more of, until the solver
 // finds just one solution; then as few black tiles as keep it unique.
-// Env: RUN (seed), MINUTES (480), MIN, MAX (the short side, 9 to 11; the long side up to 2 more),
+// Then each find is polished: tiles moved, pairs taken away and ends moved, kept when the hints
+// needed don't go down (the climb above counts the rules with checkerboard rules drawing lines
+// only, so it steers towards boards that pass). Output adds the hints before polishing.
+// Env: POLISH_SECONDS (60), RUN (seed), MINUTES (480), MIN, MAX (the short side, 9 to 11; the long side up to 2 more),
 // TILES (black tiles to start with, as a share of the board, 0.06), CLIMB_SECONDS (90), CHECK_AT (20).
 // Output: xl-strokes/found-<RUN>.tsv: code, size, open tiles, black tiles, hints, hint rules;
 // xl-strokes/log-<RUN>.txt: how tries ended.
@@ -76,7 +80,9 @@ test('xl tile strokes', () => {
   };
   // Borders the rules leave undecided (+1), 1 when they decide all, 0 for a contradiction.
   const count = (p: Puzzle) => {
-    const r = runLogic(p, ALL_RULES);
+    // (Checkerboard rules drawing lines only, as the final check allows: the climb is rewarded
+    // only for what the hints could do without checkerboard Xs.)
+    const r = runLogic(p, ALL_RULES, undefined, { checkerboardLinesOnly: true });
     if (r.contradiction) return 0;
     let n = 0;
     for (let e = 0; e < edgeCount(p); e++) if (isUsableEdge(p, e) && !r.state.segments.has(e) && !r.state.xs.has(e)) n++;
@@ -159,7 +165,46 @@ test('xl tile strokes', () => {
       drop('needs checkerboard Xs or stuck');
       continue;
     }
-    drop('kept');
-    record(`xl-strokes/found-${RUN}.tsv`, [code, `${q.w}x${q.h}`, openCells(q).length, q.blocked.size, rules.length, rules.join(' ')].join('\t'));
+    // Polish: move a tile (to one of the same colour), take a pair away, or move an end, keeping
+    // the puzzle unique and the stroke finishable without checkerboard Xs; keep a change that
+    // needs at least as many hints (more is better), for POLISH_SECONDS.
+    let best = q;
+    let bestHints = rules.length;
+    const polishUntil = Date.now() + env('POLISH_SECONDS', 60) * 1000;
+    while (Date.now() < polishUntil) {
+      const t = clonePuzzle(best);
+      const tiles = [...t.blocked];
+      const k = pick(3);
+      if (k === 0 && tiles.length) {
+        const c = tiles[pick(tiles.length)];
+        t.blocked.delete(c);
+        if (addOne(t, odd(t, c)) < 0) continue;
+      } else if (k === 1 && tiles.length >= 2) {
+        const a = tiles[pick(tiles.length)];
+        const others = tiles.filter((c) => odd(t, c) !== odd(t, a));
+        if (!others.length) continue;
+        t.blocked.delete(a);
+        t.blocked.delete(others[pick(others.length)]);
+        if (!openTilesOk(t)) continue;
+      } else {
+        const i = pick(2);
+        const cell = portCell(t, t.endpoints[i].port);
+        const port = pick(portCount(t));
+        const to = portCell(t, port);
+        if (t.blocked.has(to) || odd(t, to) !== odd(t, cell) || t.endpoints.some((e) => e.port === port)) continue;
+        t.endpoints[i] = portEnd(port);
+      }
+      if (t.endpoints.some((e) => t.blocked.has(portCell(t, e.port))) || symmetryOf(t)) continue;
+      const h = playThrough(t, STROKE_HINT_ORDER, { checkerboardLinesOnly: true });
+      if (h.stuck || h.hints < bestHints) continue;
+      if (status(t).status !== 'unique') continue;
+      best = orientTail(t);
+      bestHints = h.hints;
+    }
+    const final = best === q ? rules : journey(best);
+    if (!final) continue;
+    const finalCode = encodePuzzle(best);
+    drop(best === q ? 'kept' : 'kept, polished');
+    record(`xl-strokes/found-${RUN}.tsv`, [finalCode, `${best.w}x${best.h}`, openCells(best).length, best.blocked.size, final.length, final.join(' '), `from ${rules.length}`].join('\t'));
   }
 });
