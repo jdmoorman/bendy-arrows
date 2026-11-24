@@ -15,6 +15,22 @@ import { Storage, type PlayerState } from './storage';
 import { applyTheme, DEFAULT_THEME } from './themes';
 import { el, toast } from './ui';
 
+// --- Back button ---------------------------------------------------------------
+// Each change of tab is a browser history entry, so Back returns to the previous tab. While
+// starting up or going back, tabs change without adding entries.
+let restoringTab = true;
+function rememberTab(t: string) {
+  if (restoringTab || (history.state as { tab?: string } | null)?.tab === t) return;
+  history.pushState({ tab: t }, '', location.href);
+}
+window.addEventListener('popstate', (ev) => {
+  const t = (ev.state as { tab?: Tab } | null)?.tab;
+  if (!t) return;
+  restoringTab = true;
+  goBackTo(t);
+  restoringTab = false;
+});
+
 /**
  * The player's app: just Play and the level packs. (The creator's app, with the editor and
  * the Library, is create.html.)
@@ -87,6 +103,7 @@ function save() {
 }
 
 function setTab(t: Tab) {
+  rememberTab(t);
   tab = t;
   play.el.classList.toggle('hidden', t !== 'play');
   levels.classList.toggle('hidden', t !== 'levels');
@@ -378,7 +395,7 @@ function openLink(): boolean {
   } catch {
     toast("This link doesn't contain a valid puzzle.", 'error');
   }
-  history.replaceState(null, '', location.pathname + location.search);
+  history.replaceState(history.state, '', location.pathname + location.search);
   if (!p) return false;
   const code = encodePuzzle(p);
   const ref = findLevel(code);
@@ -393,6 +410,11 @@ window.addEventListener('hashchange', () => void openLink());
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') save();
 });
+
+/** Back to a tab: Play only with a level on the board (else the Levels tab). */
+function goBackTo(t: Tab) {
+  setTab(t === 'play' && !currentCode ? 'levels' : t);
+}
 
 /**
  * Opening the app: a link's puzzle, or else the Levels tab at the pack last played (open, and
@@ -412,3 +434,6 @@ function start() {
 }
 
 start();
+// The first history entry is the tab the app opened on.
+history.replaceState({ tab }, '', location.href);
+restoringTab = false;

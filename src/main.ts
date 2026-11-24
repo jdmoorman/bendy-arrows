@@ -18,6 +18,22 @@ import { applyTheme, DEFAULT_THEME } from './themes';
 import { solveInBackground } from './solver-client';
 import { el, openSheet, toast } from './ui';
 
+// --- Back button ---------------------------------------------------------------
+// Each change of tab is a browser history entry, so Back returns to the previous tab. While
+// starting up or going back, tabs change without adding entries.
+let restoringTab = true;
+function rememberTab(t: string) {
+  if (restoringTab || (history.state as { tab?: string } | null)?.tab === t) return;
+  history.pushState({ tab: t }, '', location.href);
+}
+window.addEventListener('popstate', (ev) => {
+  const t = (ev.state as { tab?: Tab } | null)?.tab;
+  if (!t) return;
+  restoringTab = true;
+  goBackTo(t);
+  restoringTab = false;
+});
+
 applyTheme(DEFAULT_THEME);
 
 type Tab = 'play' | 'edit' | 'library' | 'packs';
@@ -139,7 +155,7 @@ function updateHeader() {
   titleEl.textContent = unnamed ? 'New puzzle' : (puzzleName ?? 'BendyArrows');
   const code = encodePuzzle(playing);
   const hash = `#p=${code}`;
-  if (location.hash !== hash) history.replaceState(null, '', hash);
+  if (location.hash !== hash) history.replaceState(history.state, '', hash);
 }
 
 function saveSession() {
@@ -160,6 +176,7 @@ function saveSession() {
 function setTab(t: Tab) {
   // E.g. a session saved on the dev server, opened where there's no pack organiser.
   if (t === 'packs' && !packs) t = 'library';
+  rememberTab(t);
   tab = t;
   if (t === 'play' && !puzzlesEqual(playing, editor.current)) {
     // Keep whatever progress still fits the edited puzzle; it is a new puzzle now.
@@ -378,6 +395,11 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') saveSession();
 });
 
+/** Back to a tab, as it was left. */
+function goBackTo(t: Tab) {
+  setTab(t);
+}
+
 function start() {
   const fromLink = puzzleFromLocation();
   // Read before loading: loading writes the plain "#p=CODE" back to the address.
@@ -424,3 +446,6 @@ function start() {
 }
 
 start();
+// The first history entry is the tab the app opened on.
+history.replaceState({ tab }, '', location.href);
+restoringTab = false;
