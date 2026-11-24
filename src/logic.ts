@@ -71,8 +71,8 @@ export const IMBALANCE_RULE: RuleInfo = {
  * One-step trial: suppose a line (or an X) on a border and let the quick rules run; if that
  * breaks the puzzle, the border gets the opposite. It's trial and error, so like Checkerboard
  * imbalance it is left out of RULES (and so of ALL_RULES and classic hints, ratings and logic
- * runs); one-shot hints use it as a last resort at the head (STROKE_HINT_ORDER), and elsewhere
- * it must be passed explicitly. Only a last resort, when nothing else applies.
+ * runs); one-shot hints use it at the head before the checkerboard rules (STROKE_HINT_ORDER),
+ * and elsewhere it must be passed explicitly.
  */
 export const TRIAL_RULE: RuleInfo = {
   id: 'trial',
@@ -711,10 +711,12 @@ function movePlaces(ds: Deduction[], state: LogicState): number {
 
 /** Simplest rules first: the order hints are chosen in. */
 export const HINT_ORDER: RuleId[] = ['continue', 'corners', 'passages', 'noLoops', 'noFinish', 'bottlenecks', 'noSeal', 'balance'];
-/** A one-shot's hints: HINT_ORDER, then the One-step trial as a last resort at the stroke's head. */
-export const STROKE_HINT_ORDER: RuleId[] = [...HINT_ORDER, 'trial'];
+/** A one-shot's hints: HINT_ORDER, with the One-step trial at the stroke's head before the checkerboard rules. */
+export const STROKE_HINT_ORDER: RuleId[] = [...HINT_ORDER.filter((r) => r !== 'balance'), 'trial', 'balance'];
 /** HINT_ORDER with Checkerboard imbalance last, used only when it is passed in explicitly. */
 const HINT_ORDER_ALL: RuleId[] = [...HINT_ORDER, 'imbalance', 'trial'];
+/** The same for a one-shot: the trial before the checkerboard rules. */
+const STROKE_HINT_ORDER_ALL: RuleId[] = [...STROKE_HINT_ORDER, 'imbalance'];
 
 const TOO_MANY = 'Something is off: the highlighted tile has more lines than the path can use there.';
 const TOO_FEW = 'Something is off: the highlighted tile has too few ways in or out left — check the X marks around it.';
@@ -770,7 +772,7 @@ export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opt
   // The one-step trial looks at the head first: only a move there carries the stroke on.
   opts = { ...opts, focus: head };
   const allowed = new Set(rules);
-  const order = HINT_ORDER_ALL.filter((r) => allowed.has(r));
+  const order = STROKE_HINT_ORDER_ALL.filter((r) => allowed.has(r));
   const all = analyse(p, base, new Set(order), opts);
   if (all.kind === 'contradiction') return { kind: 'mistake', cell: all.cell, cells: all.cells, fixCells: all.fixCells, reason: all.reason, text: all.hint };
   if (all.kind === 'solved') return { kind: 'solved', text: 'Every tile already has its lines.' };
