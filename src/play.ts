@@ -52,6 +52,8 @@ export class PlayView {
   private strokeWay: 'on' | 'back' | null = null;
   /** Hints shown on this board (a hint pointing out wrong marks counts too). */
   private hintsUsed = 0;
+  /** The Hints show the move setting. */
+  private hintMoves = false;
   /** Solutions of the puzzle, found once in the background when Hint first needs them. */
   private solutions: Promise<number[][]> | null = null;
   private solutionsRun: SolverRun | null = null;
@@ -208,7 +210,9 @@ export class PlayView {
   /** Reset: empty the board, as one undoable step. */
   private reset() {
     if (!this.segments.size && !this.xMarks.size) return;
-    if (this.strokeMode && this.segments.size) this.noteBacktrack();
+    // A fresh start: the hint and backtrack counts start over too (and a perfect solve is possible again).
+    this.hintsUsed = 0;
+    this.backtracks = 0;
     const before = this.snapshot();
     this.history.push(before);
     this.segments.clear();
@@ -297,6 +301,12 @@ export class PlayView {
   }
 
   /** Whether mistakes are highlighted as the player draws. */
+  /** Whether a hint draws the move it leads to, as hints once did (otherwise it only points and explains). */
+  setHintMoves(on: boolean): void {
+    this.hintMoves = on;
+    this.render();
+  }
+
   setAutoCheck(on: boolean): void {
     this.autoCheck = on;
     this.render();
@@ -532,19 +542,21 @@ export class PlayView {
     // draw the move (that's the player's to find).
     const hint = this.shownHint;
     const d = hint?.kind === 'deduction' ? hint.deduction : null;
-    const prompt = d ? hintPrompt(this.puzzle, { segments: this.segments, xs: this.xMarks }, d) : null;
-    const focus = prompt ? prompt.cells : hint?.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
+    // (With Hints show the move: the old way, the move drawn and the rule's full explanation.)
+    const prompt = d && !this.hintMoves ? hintPrompt(this.puzzle, { segments: this.segments, xs: this.xMarks }, d) : null;
+    const focus = prompt ? prompt.cells : d ? (d.cells ?? [d.cell]) : hint?.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
     // A One-step trial hint: the lines its supposition leads to, faintly, and where that breaks.
     // In a one-shot, only those carrying the stroke on from its head (the path from the tail)
     // (and those where it breaks; the tiles the hint is about stay green even where it breaks).
-    const trial = d?.rule === 'trial' ? trialPreview(this.puzzle, this.segments, d) : null;
+    const trial = d?.rule === 'trial' && !this.hintMoves ? trialPreview(this.puzzle, this.segments, d) : null;
     for (const c of trial?.broken ?? []) if (!focus.includes(c)) errorCells.add(c);
     const phantom = new Set(trial?.phantom ?? []);
     renderBoard(this.svg, this.puzzle, {
       pad: padFor(this.puzzle),
-      segments: this.segments,
-      xMarks: this.xMarks,
-      faint: phantom.size ? phantom : undefined,
+      segments: d && this.hintMoves ? new Set([...this.segments, ...d.segments]) : this.segments,
+      xMarks: d && this.hintMoves ? new Set([...this.xMarks, ...d.xs]) : this.xMarks,
+      highlight: d && this.hintMoves ? new Set([...d.segments, ...d.xs]) : undefined,
+      faint: phantom.size && !this.hintMoves ? phantom : undefined,
       focusCells: focus.length ? new Set(focus) : undefined,
       errorCells,
       errorEdges,

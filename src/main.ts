@@ -55,6 +55,7 @@ if (packs) {
   packs.onOpen = (code) => loadPuzzle(decodePuzzle(code), {}, 'edit');
 }
 play.setAutoCheck(settings.autoCheck);
+play.setHintMoves(settings.hintMoves);
 
 /** The puzzle currently loaded in the play view, and where it came from. */
 let playing: Puzzle = createPuzzle(6, 6);
@@ -231,6 +232,7 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
     play.render();
     editor.render();
     play.setAutoCheck(s.autoCheck);
+    play.setHintMoves(s.hintMoves);
     storage.saveSettings(s);
   }, hasLogs() ? exportSolveLogs : undefined, exportPuzzleLog());
 });
