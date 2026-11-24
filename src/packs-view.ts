@@ -200,20 +200,29 @@ export class PacksView {
     return '';
   }
 
-  /** Levels whose solution path is an earlier level's, turned or mirrored: which level that is. */
+  /**
+   * Levels whose solution path is an earlier level's, turned or mirrored: which level that is,
+   * keyed by place ("pack:level", both from 0). A review pack ("Review …") may repeat other packs'
+   * levels, so it's only checked against itself.
+   */
   private repeats(): Map<string, string> {
-    const first = new Map<string, string>();
     const out = new Map<string, string>();
-    this.packs.forEach((k) =>
-      k.levels.forEach((code, i) => {
-        const lines = this.solutions.get(code)?.lines;
-        if (!lines) return;
-        const key = pathKey(decodePuzzle(code), lines);
-        const earlier = first.get(key);
-        if (earlier) out.set(code, earlier);
-        else first.set(key, `${k.name} ${i + 1}`);
-      }),
-    );
+    const check = (packs: number[]) => {
+      const first = new Map<string, string>();
+      for (const pi of packs)
+        this.packs[pi].levels.forEach((code, i) => {
+          const lines = this.solutions.get(code)?.lines;
+          if (!lines) return;
+          const key = pathKey(decodePuzzle(code), lines);
+          const earlier = first.get(key);
+          if (earlier) out.set(`${pi}:${i}`, earlier);
+          else first.set(key, `${this.packs[pi].name} ${i + 1}`);
+        });
+    };
+    const all = this.packs.map((_, i) => i);
+    const review = (i: number) => this.packs[i].name.trim().startsWith('Review ');
+    check(all.filter((i) => !review(i)));
+    for (const i of all.filter(review)) check([i]);
     return out;
   }
 
@@ -400,7 +409,7 @@ export class PacksView {
         const p = decodePuzzle(t.dataset.code!);
         const label = t.querySelector('.pack-tile-label')!;
         const code = t.dataset.code!;
-        const repeat = repeats.get(code);
+        const repeat = repeats.get(`${pi}:${i}`);
         const kind = isOneShot(p) !== this.packs[pi].oneShot ? (isOneShot(p) ? 'one-shot' : 'not a one-shot') : '';
         const bad = kind || shapeProblem(code) || (this.solutions.get(code)?.unique === false ? 'not unique' : repeat ? `same path as ${repeat}` : '');
         label.textContent = `${i + 1} · ${p.w}×${p.h}${bad ? ` · ${bad}` : ''}`;

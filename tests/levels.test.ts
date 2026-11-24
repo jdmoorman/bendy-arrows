@@ -7,6 +7,9 @@ import { solve } from '../src/solver';
 
 // Every official level must be a good puzzle before it ships: GitHub runs these before
 // publishing, and a failure stops the deploy.
+// A review pack ("Review …", a shortlist to play through) may repeat levels of other packs.
+const isReview = (name: string) => name.startsWith('Review ');
+
 describe('level packs', () => {
   test('each pack has a name and at least one level; names and codes are all different', () => {
     for (const pack of PACKS) {
@@ -14,8 +17,9 @@ describe('level packs', () => {
       expect(pack.levels.length, `${pack.name}: levels`).toBeGreaterThan(0);
     }
     expect(new Set(PACKS.map((p) => p.name)).size).toBe(PACKS.length);
-    const codes = PACKS.flatMap((p) => p.levels);
+    const codes = PACKS.filter((p) => !isReview(p.name)).flatMap((p) => p.levels);
     expect(new Set(codes).size).toBe(codes.length);
+    for (const p of PACKS) expect(new Set(p.levels).size, p.name).toBe(p.levels.length);
   });
 
   test('one-shot packs hold one-shots, and the other packs none', () => {
@@ -38,18 +42,22 @@ describe('level packs', () => {
 
   test('no two levels have the same solution path, even turned or mirrored', () => {
     // (This covers repeats of a whole level too, turned, mirrored or with its ends swapped.)
-    const seen = new Map<string, string>();
     const same: string[] = [];
-    PACKS.forEach((pack) =>
-      pack.levels.forEach((code, i) => {
-        const name = `${pack.name} ${i + 1}`;
-        const p = decodePuzzle(code);
-        const key = pathKey(p, solve(p, { maxSolutions: 1 }).solutions[0]);
-        const hit = seen.get(key);
-        if (hit) same.push(`${name} has the same path as ${hit}`);
-        else seen.set(key, name);
-      }),
-    );
+    const check = (packs: typeof PACKS) => {
+      const seen = new Map<string, string>();
+      packs.forEach((pack) =>
+        pack.levels.forEach((code, i) => {
+          const name = `${pack.name} ${i + 1}`;
+          const p = decodePuzzle(code);
+          const key = pathKey(p, solve(p, { maxSolutions: 1 }).solutions[0]);
+          const hit = seen.get(key);
+          if (hit) same.push(`${name} has the same path as ${hit}`);
+          else seen.set(key, name);
+        }),
+      );
+    };
+    check(PACKS.filter((k) => !isReview(k.name)));
+    for (const k of PACKS.filter((k) => isReview(k.name))) check([k]);
     expect(same).toEqual([]);
   }, 120_000);
 
