@@ -504,6 +504,13 @@ a.btn {
   flex: none;
 }
 
+/* Only on touch screens (the player's Share: elsewhere the address bar shows the puzzle's link). */
+@media (hover: hover) and (pointer: fine) {
+  .touch-only {
+    display: none;
+  }
+}
+
 /* ---------- Header tabs ---------- */
 .tabs {
   flex: none;

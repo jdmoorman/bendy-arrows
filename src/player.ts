@@ -15,19 +15,27 @@ import { Storage, type PlayerState } from './storage';
 import { applyTheme, DEFAULT_THEME } from './themes';
 import { el, toast } from './ui';
 
-// --- Back button ---------------------------------------------------------------
-// Each change of tab is a browser history entry, so Back returns to the previous tab. While
-// starting up or going back, tabs change without adding entries.
+// --- Address and Back button ----------------------------------------------------
+// The address follows the view: "#p=CODE" while playing (so it can be copied to share the
+// puzzle), bare on the level list. Each change of view or puzzle is a browser history entry, so
+// Back returns to the previous one. While starting up, going back, or opening a typed-in
+// address, the view changes without adding an entry.
+type HistoryState = { tab?: Tab; code?: string };
 let restoringTab = true;
-function rememberTab(t: string) {
-  if (restoringTab || (history.state as { tab?: string } | null)?.tab === t) return;
-  history.pushState({ tab: t }, '', location.href);
+function rememberTab(t: Tab) {
+  const code = t === 'play' ? currentCode : '';
+  const url = location.pathname + location.search + (code ? `#p=${code}` : '');
+  const s = history.state as HistoryState | null;
+  const entry: HistoryState = { tab: t, ...(code ? { code } : {}) };
+  if (restoringTab || (s?.tab === t && (s.code ?? '') === code)) history.replaceState(entry, '', url);
+  else history.pushState(entry, '', url);
 }
 window.addEventListener('popstate', (ev) => {
-  const t = (ev.state as { tab?: Tab } | null)?.tab;
-  if (!t) return;
+  const s = ev.state as HistoryState | null;
+  if (!s?.tab) return;
   restoringTab = true;
-  goBackTo(t);
+  if (s.tab === 'play' && s.code && s.code !== currentCode) openCode(s.code);
+  else goBackTo(s.tab);
   restoringTab = false;
 });
 
@@ -45,7 +53,7 @@ app.innerHTML = `
   <header class="app-header">
     <h1 class="app-title">BendyArrows</h1>
     <button class="btn icon" data-act="exit" aria-label="Exit to the levels" title="Exit to the levels">${ICONS.exit}</button>
-    <button class="btn icon" data-act="share" aria-label="Share or open a puzzle">${ICONS.share}</button>
+    <button class="btn icon touch-only" data-act="share" aria-label="Share or open a puzzle">${ICONS.share}</button>
     <button class="btn icon" data-act="settings" aria-label="Settings">${ICONS.settings}</button>
   </header>
   <main class="views"></main>
@@ -374,16 +382,29 @@ function openLink(): boolean {
   } catch {
     toast("This link doesn't contain a valid puzzle.", 'error');
   }
-  history.replaceState(history.state, '', location.pathname + location.search);
-  if (!p) return false;
-  const code = encodePuzzle(p);
-  const ref = findLevel(code);
-  if (ref) openLevel(ref);
-  else load(p, code, undefined);
+  if (!p) {
+    history.replaceState(history.state, '', location.pathname + location.search);
+    return false;
+  }
+  openCode(encodePuzzle(p));
   return true;
 }
 
-window.addEventListener('hashchange', () => void openLink());
+/** Play a puzzle by its code: as its level if it is one. */
+function openCode(code: string) {
+  const ref = findLevel(code);
+  if (ref) openLevel(ref);
+  else load(decodePuzzle(code), code, undefined);
+}
+
+// A puzzle address typed or pasted into the address bar (Back and Forward are handled above, and
+// the address already shows the puzzle on the board).
+window.addEventListener('hashchange', () => {
+  if (!location.hash || (tab === 'play' && location.hash === `#p=${currentCode}`)) return;
+  restoringTab = true;
+  openLink();
+  restoringTab = false;
+});
 
 // Save the board when the page is hidden (phones often discard background tabs).
 document.addEventListener('visibilitychange', () => {
@@ -412,7 +433,6 @@ function start() {
   if (pi >= 0) levels.querySelectorAll<HTMLElement>('.pack')[pi]?.scrollIntoView({ block: 'start' });
 }
 
+// The first history entry is the view the app opened on (start sets it).
 start();
-// The first history entry is the tab the app opened on.
-history.replaceState({ tab }, '', location.href);
 restoringTab = false;
