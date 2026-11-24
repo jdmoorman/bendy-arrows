@@ -1,0 +1,10 @@
+#!/bin/sh
+# Review packs ("Review …") are shortlists to play through, not for release: stop a commit
+# whose src/levels.ts has a pack with "review" in its name.
+names=$(git show :src/levels.ts 2>/dev/null | grep -i -E "^[[:space:]]*name: '[^']*review" | sed -E "s/^[[:space:]]*name: '([^']*)'.*/  \1/")
+if [ -n "$names" ]; then
+  echo "Commit blocked: src/levels.ts has review packs:"
+  echo "$names"
+  echo "Take them out (or unstage src/levels.ts) and commit again."
+  exit 1
+fi

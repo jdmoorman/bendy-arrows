@@ -4,6 +4,7 @@
   "version": "0.5.0",
   "type": "module",
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "dev": "vite",
     "dev:phone": "vite --host",
     "build": "tsc --noEmit && vite build",
