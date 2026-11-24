@@ -169,7 +169,8 @@ export function tilePairs(p: Puzzle, singles: TileScore[], candidates: number[])
 }
 
 /**
- * From the singles (best first) and every pair's score: each single's best partner (a single
+ * From the singles (best first) and every pair's score (none if nothing improves on the puzzle
+ * as it is): each single's best partner (a single
  * that keeps the colours right counting on its own too; a partner may instead be a black tile of
  * the same colour cleared), best first, and the first with a solution.
  */
@@ -197,7 +198,10 @@ export function finishTiles(
     if (bestPair) options.push(bestPair);
   }
   options.sort(order);
+  // Only a change that improves on the puzzle as it is (by the same ranking) is suggested.
+  const now: TileScore = { at: [], ...before };
   for (const o of options) {
+    if (order(o, now) >= 0) break;
     const q = clonePuzzle(p);
     for (const c of o.at) if (c >= 0) q.blocked.add(c);
     else q.blocked.delete(-c - 1);

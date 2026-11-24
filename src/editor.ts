@@ -1049,7 +1049,9 @@ export class EditorView {
             ? s.hints !== undefined
               ? `Suggested ${what} (dashed): with ${s.at.length === 2 ? 'them' : 'it'} a player needs ${s.hints} hint${s.hints === 1 ? '' : 's'}${s.stuck ? ', then gets stuck' : ''}${s.hintsBefore !== undefined ? ` (${s.hintsBefore} now)` : ''}.`
               : `Suggested ${what} (dashed): with ${s.at.length === 2 ? 'them' : 'it'} the chosen rules draw ${s.lines} line${s.lines === 1 ? '' : 's'}, ${s.lines - s.before} more than now.`
-            : `No ${kind === 'wall' ? 'wall' : 'black tile or pair'} ${kind === 'wall' ? 'lets the chosen rules get further' : 'works'} while keeping a solution.`,
+            : kind === 'wall'
+              ? 'No wall lets the chosen rules get further while keeping a solution.'
+              : 'No black tile, pair or swap makes this puzzle need more hints (or get further with them) while keeping a solution.',
         );
       })
       .catch((err) => {
