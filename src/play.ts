@@ -3,7 +3,19 @@ import { solveInBackground, type SolverRun } from './solver-client';
 import { findHint, findStrokeHint, hintPrompt, strokeFrom, trialPreview, type Hint } from './logic';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
-import { cellEdges, edgeBetween, isOneShot, isUsableEdge, type Puzzle } from './model';
+import { cellAt, cellEdges, cellRC, edgeBetween, isOneShot, isUsableEdge, type Puzzle } from './model';
+
+/** One-shot mode's keys that move the stroke's head: row and column steps. */
+const KEY_STEPS: Record<string, [number, number]> = {
+  ArrowUp: [-1, 0],
+  ArrowDown: [1, 0],
+  ArrowLeft: [0, -1],
+  ArrowRight: [0, 1],
+  w: [-1, 0],
+  s: [1, 0],
+  a: [0, -1],
+  d: [0, 1],
+};
 import { padFor, renderBoard } from './render';
 import { canPlace, checkSolution } from './rules';
 import { edgeName, SolveLog } from './solve-log';
@@ -342,7 +354,28 @@ export class PlayView {
       this.redo();
       return true;
     }
+    // One-shot mode: the arrow keys (or WASD) move the stroke's head, back over the stroke to take it back.
+    const step = KEY_STEPS[ev.key.length === 1 ? ev.key.toLowerCase() : ev.key];
+    if (!mod && !ev.altKey && step && this.strokeMode && this.puzzle.endpoints.length) {
+      this.strokeKey(step[0], step[1]);
+      return true;
+    }
     return false;
+  }
+
+  /** One-shot mode: move the stroke's head a tile (row, column steps), or back along the stroke. */
+  private strokeKey(dr: number, dc: number) {
+    const s = this.strokeCells();
+    const head = s[s.length - 1];
+    const [r, c] = cellRC(this.puzzle, head);
+    if (r + dr < 0 || c + dc < 0 || r + dr >= this.puzzle.h || c + dc >= this.puzzle.w) return;
+    const to = cellAt(this.puzzle, r + dr, c + dc);
+    if (s.length > 1 && to === s[s.length - 2]) this.cutStroke(s, s.length - 2);
+    else if (s.includes(to) || !this.step(head, to)) return;
+    else this.strokeWay = 'on';
+    // (Unlike a drag, the direction is kept between key presses: going back several tiles in a row is one backtrack.)
+    if (this.changed) this.afterChange();
+    this.changed = false;
   }
 
   private snapshot(): Progress {
