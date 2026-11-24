@@ -3,7 +3,7 @@ import { test } from 'vitest';
 import { decodePuzzle, encodePuzzle } from '../../src/codec';
 import { PACKS } from '../../src/levels';
 import { hintJourney } from '../../src/logic';
-import { cellAt, cellRC, edgeBetween, edgeCells, levelKey, neighbors, orientTail, transformPuzzle, type Puzzle, type Transform } from '../../src/model';
+import { cellAt, cellRC, portCell, edgeBetween, edgeCells, levelKey, neighbors, orientTail, transformPuzzle, type Puzzle, type Transform } from '../../src/model';
 import { solve } from '../../src/solver';
 import { outPath, record } from '../out';
 import { mirrorOf as symOf } from './tiles';
@@ -66,6 +66,17 @@ test('pick offset symmetry', () => {
     if (short < Number(process.env.MIN_W ?? 0) || long < Number(process.env.MIN_H ?? 0)) continue;
     const key = levelKey(p);
     if (taken.has(key) && !process.env.ANY_PACK) continue;
+    // ADJACENT_ENDS=no: no ends in the same or neighbouring tiles (their paths nearly always echo).
+    const [ea, eb] = p.endpoints.map((e) => portCell(p, e.port));
+    if (process.env.ADJACENT_ENDS === 'no' && (ea === eb || neighbors(p, ea).includes(eb))) continue;
+    // DOUBLE=only / DOUBLE=no: just the boards whose black tiles are symmetric both turned 180° and
+    // mirrored (so every way), or none of them.
+    if (process.env.DOUBLE) {
+      const same = (f: (r: number, c: number) => [number, number]) => [...p.blocked].every((x) => p.blocked.has(cellAt(p, ...f(...cellRC(p, x)))));
+      const turn = same((r, c) => [p.h - 1 - r, p.w - 1 - c]);
+      const mirror = same((r, c) => [p.h - 1 - r, c]) || same((r, c) => [r, p.w - 1 - c]);
+      if ((turn && mirror) !== (process.env.DOUBLE === 'only')) continue;
+    }
     // The mirror runs across the rows with the spare strip at the top; a puzzle already turned
     // as a pack level may have it at the bottom or across the columns, so try those ways too.
     let m = mirrorOf(p);
@@ -121,7 +132,17 @@ test('pick offset symmetry', () => {
       if (ns.length === 2 && cellRC(p, ns[0])[0] !== cellRC(p, ns[1])[0] && cellRC(p, ns[0])[1] !== cellRC(p, ns[1])[1]) turns++;
     }
     const run = path.size / (turns + 1);
-    const score = Math.min(j.steps.length, 8) + Number(process.env.ECHO_WEIGHT ?? 12) * echo - Number(process.env.CORNER_WEIGHT ?? 20) * cornerCost(turns / path.size) - Number(process.env.DIR_WEIGHT ?? 0) * dirCost(horizontal / path.size) - 10 * density - 0.5 * p.walls.size + Number(process.env.TOUCH_WEIGHT ?? 1.5) * (p.blocked.size ? touching / p.blocked.size : 0);
+    // ECHO_WEIGHT below 0 (for fully symmetric boards): a path that doesn't echo is the more interesting.
+    const parts: Record<string, number> = {
+      hints: Math.min(j.steps.length, 8),
+      echo: Number(process.env.ECHO_WEIGHT ?? 12) * echo,
+      corners: -Number(process.env.CORNER_WEIGHT ?? 20) * cornerCost(turns / path.size),
+      direction: -Number(process.env.DIR_WEIGHT ?? 0) * dirCost(horizontal / path.size),
+      density: -10 * density,
+      walls: -0.5 * p.walls.size,
+      touch: Number(process.env.TOUCH_WEIGHT ?? 1.5) * (p.blocked.size ? touching / p.blocked.size : 0),
+    };
+    const score = Object.values(parts).reduce((a, b) => a + b, 0);
     let q = p.w > p.h ? transformPuzzle(p, 'rotateRight') : p;
     q = orientTail(q);
     taken.add(key);
@@ -131,7 +152,7 @@ test('pick offset symmetry', () => {
       size: `${q.w}x${q.h}`,
       hints: j.steps.length,
       score,
-      facts: `${q.w}×${q.h} · ${j.steps.length} hints (${j.steps.map((s) => s.area).join(' ')}) · echo ${echo.toFixed(2)} · corners ${(turns / path.size).toFixed(2)} · across ${(horizontal / path.size).toFixed(2)} · ${p.blocked.size} black ${p.walls.size} walls · score ${score.toFixed(1)}`,
+      facts: `${q.w}×${q.h} · ${j.steps.length} hints (${j.steps.map((s) => s.area).join(' ')}) · echo ${echo.toFixed(2)} · corners ${(turns / path.size).toFixed(2)} · across ${(horizontal / path.size).toFixed(2)} · ${p.blocked.size} black ${p.walls.size} walls · score ${score.toFixed(1)} = ${Object.entries(parts).filter(([, v]) => v).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' + ')}`,
     });
   }
   // Families of cousins: the same board with a pair or two of black tiles moved, or its ends moved
