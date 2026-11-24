@@ -1,7 +1,7 @@
 import { encodePuzzle } from './codec';
 import type { LogicOptions, RuleId } from './logic';
 import type { Puzzle } from './model';
-import { keepSingles, pairMap, tileCandidates, tilePairs, type SuggestKind, type Suggestion, type TileScore } from './suggest';
+import { changeCandidates, changePairs, keepSingles, pairMap, singleChanges, type SuggestKind, type Suggestion, type TileScore } from './suggest';
 import type { SuggestMessage, SuggestRequest } from './suggest.worker';
 
 export interface SuggestRun {
@@ -9,7 +9,7 @@ export interface SuggestRun {
   cancel(): void;
 }
 
-/** Workers for black tiles: one per core but one (for the page), at least one and at most eight. */
+/** Workers: one per core but one (for the page), at least one and at most eight. */
 const WORKERS = Math.max(1, Math.min(8, (navigator.hardwareConcurrency || 2) - 1));
 
 const newWorker = () => new Worker(new URL('./suggest.worker.ts', import.meta.url), { type: 'module' });
@@ -29,9 +29,9 @@ function ask(worker: Worker, req: SuggestRequest, onProgress?: (done: number) =>
 }
 
 /**
- * The editor's suggested wall or black tile, worked out in background workers; `onProgress` sees
- * how far it is (0 to 1). Black tiles are split across several workers (see suggestTiles for the
- * search): first every single tile, then every pair, then one worker picks.
+ * The editor's suggested walls or black tiles, worked out in background workers; `onProgress`
+ * sees how far it is (0 to 1). The work is split across several workers (see suggestChanges for
+ * the search): first every single change, then every pair, then one worker picks.
  */
 export function suggestInBackground(p: Puzzle, kind: SuggestKind, rules: RuleId[], opts: LogicOptions, onProgress: (fraction: number) => void): SuggestRun {
   const code = encodePuzzle(p);
@@ -39,11 +39,6 @@ export function suggestInBackground(p: Puzzle, kind: SuggestKind, rules: RuleId[
   let cancelled = false;
   const stop = () => workers.forEach((w) => w.terminate());
   const run = async (): Promise<Suggestion | null> => {
-    if (kind === 'wall') {
-      workers.push(newWorker());
-      const m = await ask(workers[0], { task: 'suggest', code, kind, rules, opts }, (done) => onProgress(done / 1000));
-      return m.type === 'done' ? m.suggestion : null;
-    }
     for (let i = 0; i < WORKERS; i++) workers.push(newWorker());
     /** Score sets of tiles across the workers, keeping their order; progress runs from `from` to `to`. */
     const score = async (sets: number[][], from: number, to: number) => {
@@ -51,7 +46,7 @@ export function suggestInBackground(p: Puzzle, kind: SuggestKind, rules: RuleId[
       const done = workers.map(() => 0);
       const results = await Promise.all(
         workers.map((w, i) =>
-          ask(w, { task: 'score', code, sets: chunks[i], rules, opts }, (d) => {
+          ask(w, { task: 'score', code, kind, sets: chunks[i], rules, opts }, (d) => {
             done[i] = d;
             onProgress(from + ((to - from) * done.reduce((a, b) => a + b, 0)) / Math.max(1, sets.length));
           }),
@@ -65,11 +60,11 @@ export function suggestInBackground(p: Puzzle, kind: SuggestKind, rules: RuleId[
       });
       return out;
     };
-    const candidates = tileCandidates(p);
-    const singles = keepSingles(await score(candidates.map((c) => [c]), 0, 0.1));
-    const pairs = tilePairs(p, singles, candidates);
+    const candidates = changeCandidates(p, kind);
+    const singles = keepSingles(await score(singleChanges(p, kind, candidates), 0, 0.1));
+    const pairs = changePairs(p, kind, singles, candidates);
     const pairScores = pairMap(pairs, await score(pairs, 0.1, 0.95));
-    const m = await ask(workers[0], { task: 'finish', code, candidates, singles, pairs: [...pairScores], rules, opts });
+    const m = await ask(workers[0], { task: 'finish', code, kind, candidates, singles, pairs: [...pairScores], rules, opts });
     onProgress(1);
     return m.type === 'done' ? m.suggestion : null;
   };

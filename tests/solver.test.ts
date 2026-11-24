@@ -299,20 +299,25 @@ describe('tileFixes', async () => {
 });
 
 describe('suggest', async () => {
-  const { suggest } = await import('../src/suggest');
-  const { ALL_RULES, runLogic } = await import('../src/logic');
-  test('the suggested wall or black tile lets the rules draw more lines, and the puzzle keeps a solution', () => {
+  const { suggest, playThrough } = await import('../src/suggest');
+  const { ALL_RULES } = await import('../src/logic');
+  test('a suggested change of walls or black tiles makes a player need more hints (or get further), and the puzzle keeps a solution', () => {
     const p = decodePuzzle('BiouuR74XSs');
-    // Take away a couple of black tiles so the rules can't finish it.
+    // Take away a couple of black tiles so there's something to improve.
     for (const c of [...p.blocked].slice(0, 2)) p.blocked.delete(c);
-    const before = runLogic(p, ALL_RULES).state.segments.size;
+    const before = playThrough(p, ALL_RULES, {});
     for (const kind of ['wall', 'tile'] as const) {
       const s = suggest(p, kind, ALL_RULES);
-      if (!s) continue; // nothing helps: fine
-      expect(s.before).toBe(before);
-      expect(s.lines).toBeGreaterThan(before);
-      const q = kind === 'wall' ? { ...p, walls: new Set([...p.walls, ...s.at]) } : { ...p, blocked: new Set([...p.blocked, ...s.at]) };
+      if (!s) continue; // nothing improves it: fine
+      expect(s.hintsBefore).toBe(before.hints);
+      const better = (before.stuck && !s.stuck) || (s.stuck === before.stuck && (s.hints! > before.hints || (s.hints === before.hints && s.lines > before.lines)));
+      expect(better).toBe(true);
+      const q = decodePuzzle('BiouuR74XSs');
+      for (const c of [...q.blocked].slice(0, 2)) q.blocked.delete(c);
+      const set = kind === 'wall' ? q.walls : q.blocked;
+      for (const x of s.at) set.add(x);
+      for (const x of s.remove ?? []) set.delete(x);
       expect(solve(q, { maxSolutions: 1 }).status).not.toBe('none');
     }
-  }, 120_000);
+  }, 300_000);
 });

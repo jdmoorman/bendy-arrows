@@ -293,6 +293,10 @@ a.btn {
   fill: none;
   stroke: var(--error);
 }
+/* A wall the editor suggests taking away. */
+.wall.suggest.clear {
+  stroke: var(--error);
+}
 /* A wall the editor suggests adding. */
 .wall.suggest {
   stroke: var(--accent);

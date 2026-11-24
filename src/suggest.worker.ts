@@ -1,18 +1,18 @@
 /// <reference lib="webworker" />
 import { decodePuzzle } from './codec';
 import type { LogicOptions, RuleId } from './logic';
-import { finishTiles, scoreTiles, suggest, type SuggestKind, type Suggestion, type TileScore } from './suggest';
+import { finishChanges, scoreChanges, suggest, type SuggestKind, type Suggestion, type TileScore } from './suggest';
 
 /**
  * Work for the editor's Suggest, off the main thread:
- *  - suggest: the whole search in this worker (walls);
- *  - score: play some sets of black tiles through (black tiles are split across several workers);
- *  - finish: pick the black tiles from every score (see finishTiles).
+ *  - suggest: the whole search in this one worker;
+ *  - score: play some sets of changes through (the editor splits these across several workers);
+ *  - finish: pick the change from every score (see finishChanges).
  */
 export type SuggestRequest =
   | { task: 'suggest'; code: string; kind: SuggestKind; rules: RuleId[]; opts?: LogicOptions }
-  | { task: 'score'; code: string; sets: number[][]; rules: RuleId[]; opts?: LogicOptions }
-  | { task: 'finish'; code: string; candidates: number[]; singles: TileScore[]; pairs: [string, TileScore | null][]; rules: RuleId[]; opts?: LogicOptions };
+  | { task: 'score'; code: string; kind: SuggestKind; sets: number[][]; rules: RuleId[]; opts?: LogicOptions }
+  | { task: 'finish'; code: string; kind: SuggestKind; candidates: number[]; singles: TileScore[]; pairs: [string, TileScore | null][]; rules: RuleId[]; opts?: LogicOptions };
 export type SuggestMessage =
   | { type: 'progress'; done: number; total: number }
   | { type: 'scores'; scores: (TileScore | null)[] }
@@ -28,12 +28,12 @@ ctx.onmessage = (ev: MessageEvent<SuggestRequest>) => {
     const opts = m.opts ?? {};
     if (m.task === 'score') {
       let done = 0;
-      const scores = scoreTiles(p, m.sets, m.rules, opts, () => ctx.postMessage({ type: 'progress', done: ++done, total: m.sets.length } satisfies SuggestMessage));
+      const scores = scoreChanges(p, m.kind, m.sets, m.rules, opts, () => ctx.postMessage({ type: 'progress', done: ++done, total: m.sets.length } satisfies SuggestMessage));
       ctx.postMessage({ type: 'scores', scores } satisfies SuggestMessage);
       return;
     }
     if (m.task === 'finish') {
-      ctx.postMessage({ type: 'done', suggestion: finishTiles(p, m.candidates, m.singles, new Map(m.pairs), m.rules, opts) } satisfies SuggestMessage);
+      ctx.postMessage({ type: 'done', suggestion: finishChanges(p, m.kind, m.candidates, m.singles, new Map(m.pairs), m.rules, opts) } satisfies SuggestMessage);
       return;
     }
     let last = 0;

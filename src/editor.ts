@@ -182,7 +182,7 @@ export class EditorView {
           </div>
           <button class="btn icon-only" data-act="grid" aria-pressed="false" aria-label="Edit rows and columns" title="Edit rows and columns: add or delete them around the board, turn or flip it">${ICONS.grid}</button>
           <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the entrance, and hints and logic follow it">One-shot</button>
-          <button class="btn icon-only" data-act="suggest" aria-label="Suggest a wall" title="Suggest a wall: the one after which the chosen logic rules draw the most lines (takes a moment; tap again to stop)">${ICONS.bulb}</button>
+          <button class="btn icon-only" data-act="suggest" aria-label="Suggest a wall" title="Suggest walls: the change (a wall added, taken away or moved) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)">${ICONS.bulb}</button>
         </div>
         <div class="toolbar-row simplify-row">
           <button class="btn icon-only" data-act="clear-plan" aria-label="Clear drawn lines" title="Clear the lines drawn with Draw">${ICONS.clear}</button>
@@ -1033,7 +1033,7 @@ export class EditorView {
     this.suggestBar.hidden = false;
     const fill = this.suggestBar.querySelector('span')!;
     fill.style.width = '0%';
-    this.setMessage(`Looking for the ${kind === 'wall' ? 'wall' : 'black tile'} that lets the logic go furthest…`);
+    this.setMessage(`Looking for the ${kind === 'wall' ? 'walls' : 'black tiles'} that make a player need the most hints…`);
     const run = suggestInBackground(this.puzzle, kind, [...this.logicRules], this.logicOpts, (f) => (fill.style.width = `${Math.round(f * 100)}%`));
     this.suggestRun = run;
     this.render();
@@ -1043,15 +1043,20 @@ export class EditorView {
         this.suggestRun = null;
         this.suggestBar.hidden = true;
         this.suggested = s ? { kind: s.kind, at: s.at, remove: s.remove ?? [], base: clonePuzzle(this.puzzle) } : null;
-        const what = kind === 'wall' ? 'wall' : s?.remove?.length ? 'black tile (dashed), clearing the red-ringed one' : s && s.at.length === 2 ? 'pair of black tiles' : 'black tile';
+        const thing = kind === 'wall' ? 'wall' : 'black tile';
+        const what = !s
+          ? ''
+          : !s.at.length
+            ? `taking away the red ${thing}`
+            : s.remove?.length
+              ? `${thing} (dashed), taking away the red one`
+              : s.at.length === 2
+                ? `pair of ${thing}s (dashed)`
+                : `${thing} (dashed)`;
         this.setMessage(
           s
-            ? s.hints !== undefined
-              ? `Suggested ${what} (dashed): with ${s.at.length === 2 ? 'them' : 'it'} a player needs ${s.hints} hint${s.hints === 1 ? '' : 's'}${s.stuck ? ', then gets stuck' : ''}${s.hintsBefore !== undefined ? ` (${s.hintsBefore} now)` : ''}.`
-              : `Suggested ${what} (dashed): with ${s.at.length === 2 ? 'them' : 'it'} the chosen rules draw ${s.lines} line${s.lines === 1 ? '' : 's'}, ${s.lines - s.before} more than now.`
-            : kind === 'wall'
-              ? 'No wall lets the chosen rules get further while keeping a solution.'
-              : 'No black tile, pair or swap makes this puzzle need more hints (or get further with them) while keeping a solution.',
+            ? `Suggested: ${what}. With it a player needs ${s.hints} hint${s.hints === 1 ? '' : 's'}${s.stuck ? ', then gets stuck' : ''}${s.hintsBefore !== undefined ? ` (${s.hintsBefore} now)` : ''}.`
+            : `No ${kind === 'wall' ? 'wall added, taken away or moved' : 'black tile, pair or swap'} makes this puzzle need more hints (or get further with them) while keeping a solution.`,
         );
       })
       .catch((err) => {
@@ -1089,10 +1094,10 @@ export class EditorView {
     if (!s) return;
     const marks = (q: Puzzle) => (s.kind === 'wall' ? q.walls : q.blocked);
     const placed = s.at.filter((x) => marks(this.puzzle).has(x));
-    const cleared = s.remove.filter((x) => !this.puzzle.blocked.has(x));
+    const cleared = s.remove.filter((x) => !marks(this.puzzle).has(x));
     const expected = clonePuzzle(s.base);
     for (const x of placed) marks(expected).add(x);
-    for (const x of cleared) expected.blocked.delete(x);
+    for (const x of cleared) marks(expected).delete(x);
     const left = s.at.filter((x) => !placed.includes(x));
     const leftClear = s.remove.filter((x) => !cleared.includes(x));
     this.suggested = puzzlesEqual(this.puzzle, expected) && left.length + leftClear.length ? { ...s, at: left, remove: leftClear, base: clonePuzzle(this.puzzle) } : null;
@@ -1292,7 +1297,8 @@ export class EditorView {
       ghost: this.ghost ?? undefined,
       // Where ends could go: only while placing ends.
       endOptions: this.tool === 'ends' ? (this.endOptions ?? undefined) : undefined,
-      suggestWall: this.suggested?.kind === 'wall' ? this.suggested.at[0] : undefined,
+      suggestWalls: this.suggested?.kind === 'wall' ? this.suggested.at : undefined,
+      suggestClearWalls: this.suggested?.kind === 'wall' && this.suggested.remove.length ? this.suggested.remove : undefined,
       suggestTiles: this.suggested?.kind === 'tile' ? this.suggested.at : undefined,
       suggestClear: this.suggested?.kind === 'tile' && this.suggested.remove.length ? this.suggested.remove : undefined,
       removable: this.simplifyGoal && this.removable ? { ...this.removable, goal: this.simplifyGoal } : undefined,
@@ -1311,7 +1317,7 @@ export class EditorView {
     this.suggestBtn.title =
       this.tool === 'ends'
         ? 'Suggest ends: mark every spot on the frame where a missing end gives a solution (tap again to stop)'
-        : `Suggest a ${this.tool === 'tiles' ? 'black tile' : 'wall'}: the one after which the chosen logic rules draw the most lines (takes a moment; tap again to stop)`;
+        : `Suggest ${this.tool === 'tiles' ? 'black tiles' : 'walls'}: the change (${this.tool === 'tiles' ? 'a tile or pair added, or a tile moved' : 'a wall added, taken away or moved'}) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)`;
     this.suggestBtn.classList.toggle('busy', !!this.suggestRun);
     this.gridBtn.setAttribute('aria-pressed', String(this.gridEdit));
     for (const g of ['easy', 'minimal'] as const) {

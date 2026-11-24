@@ -51,8 +51,9 @@ export interface RenderOptions {
   highlight?: Set<number>;
   /** Column letters and row numbers around the board (the Coordinates setting by default). */
   coordinates?: boolean;
-  /** A border to suggest a wall on, drawn dashed on top. */
-  suggestWall?: number;
+  /** Borders to suggest walls on, drawn dashed on top; and walls to suggest taking away, in red. */
+  suggestWalls?: number[];
+  suggestClearWalls?: number[];
   /** Tiles to suggest blacking out, outlined dashed on top; and black tiles to suggest clearing, ringed. */
   suggestTiles?: number[];
   suggestClear?: number[];
@@ -272,9 +273,13 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
     parts.push('</g>');
   }
 
-  if (o.suggestWall !== undefined) {
-    const [x1, y1, x2, y2] = borderLine(o.suggestWall);
+  for (const e of o.suggestWalls ?? []) {
+    const [x1, y1, x2, y2] = borderLine(e);
     parts.push(line(x1, y1, x2, y2, 'wall suggest'));
+  }
+  for (const e of o.suggestClearWalls ?? []) {
+    const [x1, y1, x2, y2] = borderLine(e);
+    parts.push(line(x1, y1, x2, y2, 'wall suggest clear'));
   }
   for (const cell of o.suggestClear ?? []) {
     const [r, c] = cellRC(p, cell);
