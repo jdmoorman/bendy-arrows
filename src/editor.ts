@@ -87,7 +87,7 @@ export class EditorView {
   /** A one-shot whose stroke stalls: the lines the rules find over the rest of the board, drawn faintly. */
   private faintLines = new Set<number>();
   /** The wall or black tile Suggest came up with (dashed on the board until the next edit). */
-  private suggested: { kind: 'wall' | 'tile'; at: number[]; base: Puzzle } | null = null;
+  private suggested: { kind: 'wall' | 'tile'; at: number[]; remove: number[]; base: Puzzle } | null = null;
   /** Suggest: its button, its progress bar, and the search while it runs. */
   private suggestBtn!: HTMLButtonElement;
   private suggestBar!: HTMLElement;
@@ -1042,8 +1042,8 @@ export class EditorView {
         if (this.suggestRun !== run) return;
         this.suggestRun = null;
         this.suggestBar.hidden = true;
-        this.suggested = s ? { kind: s.kind, at: s.at, base: clonePuzzle(this.puzzle) } : null;
-        const what = kind === 'wall' ? 'wall' : s && s.at.length === 2 ? 'pair of black tiles' : 'black tile';
+        this.suggested = s ? { kind: s.kind, at: s.at, remove: s.remove ?? [], base: clonePuzzle(this.puzzle) } : null;
+        const what = kind === 'wall' ? 'wall' : s?.remove?.length ? 'black tile (dashed), clearing the red-ringed one' : s && s.at.length === 2 ? 'pair of black tiles' : 'black tile';
         this.setMessage(
           s
             ? s.hints !== undefined
@@ -1087,10 +1087,13 @@ export class EditorView {
     if (!s) return;
     const marks = (q: Puzzle) => (s.kind === 'wall' ? q.walls : q.blocked);
     const placed = s.at.filter((x) => marks(this.puzzle).has(x));
+    const cleared = s.remove.filter((x) => !this.puzzle.blocked.has(x));
     const expected = clonePuzzle(s.base);
     for (const x of placed) marks(expected).add(x);
+    for (const x of cleared) expected.blocked.delete(x);
     const left = s.at.filter((x) => !placed.includes(x));
-    this.suggested = puzzlesEqual(this.puzzle, expected) && left.length ? { ...s, at: left, base: clonePuzzle(this.puzzle) } : null;
+    const leftClear = s.remove.filter((x) => !cleared.includes(x));
+    this.suggested = puzzlesEqual(this.puzzle, expected) && left.length + leftClear.length ? { ...s, at: left, remove: leftClear, base: clonePuzzle(this.puzzle) } : null;
   }
 
   private cancelSuggest() {
@@ -1289,6 +1292,7 @@ export class EditorView {
       endOptions: this.tool === 'ends' ? (this.endOptions ?? undefined) : undefined,
       suggestWall: this.suggested?.kind === 'wall' ? this.suggested.at[0] : undefined,
       suggestTiles: this.suggested?.kind === 'tile' ? this.suggested.at : undefined,
+      suggestClear: this.suggested?.kind === 'tile' && this.suggested.remove.length ? this.suggested.remove : undefined,
       removable: this.simplifyGoal && this.removable ? { ...this.removable, goal: this.simplifyGoal } : undefined,
       segments: logic ? this.logic.segments : undefined,
       plan: this.plan,

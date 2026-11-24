@@ -16,8 +16,10 @@ export type SuggestKind = 'wall' | 'tile';
 
 export interface Suggestion {
   kind: SuggestKind;
-  /** The border (wall) or tiles (one black tile, or a pair: one of each checkerboard colour). */
+  /** The border (wall) or tiles to make black (one, or a pair: one of each checkerboard colour). */
   at: number[];
+  /** Black tiles to clear instead of adding a second (one of the same colour as the tile added). */
+  remove?: number[];
   /** Lines the rules draw with it, and without it. */
   lines: number;
   before: number;
@@ -97,7 +99,7 @@ export function suggest(p: Puzzle, kind: SuggestKind, rules: RuleId[], opts: Log
  * How far a player alternating the chosen easy rules and hints (from the chosen rules) gets: the
  * hints, whether they get stuck, and the lines drawn by then.
  */
-function playThrough(p: Puzzle, rules: RuleId[], opts: LogicOptions): { hints: number; stuck: boolean; lines: number } {
+export function playThrough(p: Puzzle, rules: RuleId[], opts: LogicOptions): { hints: number; stuck: boolean; lines: number } {
   let lines = 0;
   const watch = (f: JourneyFrame) => (lines = f.segments.length);
   const j = isOneShot(p) ? strokeJourney(p, opts, watch, rules) : hintJourney(p, opts, watch, rules);
@@ -106,6 +108,7 @@ function playThrough(p: Puzzle, rules: RuleId[], opts: LogicOptions): { hints: n
 
 /** How far a player gets with hints after some black tiles are added (see playThrough). */
 export interface TileScore {
+  /** Tiles to make black, and (as -(tile + 1)) black tiles to clear. */
   at: number[];
   hints: number;
   stuck: boolean;
@@ -121,11 +124,15 @@ export function tileCandidates(p: Puzzle): number[] {
   return openCells(p).filter((c) => !ends.has(c));
 }
 
-/** Each set of tiles made black, played through (null where they cut the board up or leave a dead end). */
+/**
+ * Each set of changes (tiles made black, and as -(tile + 1) black tiles cleared), played through
+ * (null where they cut the board up or leave a dead end).
+ */
 export function scoreTiles(p: Puzzle, sets: number[][], rules: RuleId[], opts: LogicOptions, onEach?: () => void): (TileScore | null)[] {
   return sets.map((at) => {
     const q = clonePuzzle(p);
-    for (const c of at) q.blocked.add(c);
+    for (const c of at) if (c >= 0) q.blocked.add(c);
+    else q.blocked.delete(-c - 1);
     const s = openTilesOk(q) ? { at, ...playThrough(q, rules, opts) } : null;
     onEach?.();
     return s;
@@ -141,14 +148,19 @@ export function keepSingles(scores: (TileScore | null)[]): TileScore[] {
   return scores.filter((s): s is TileScore => !!s && s.lines > 0).sort(order);
 }
 
-/** Every pair to try (each once): a kept single and a tile of the other colour. */
+/** A kept single's partners: a tile of the other colour to make black, or (as -(tile + 1)) a black tile of its own colour to clear. */
+function partners(p: Puzzle, a: number, candidates: number[]): number[] {
+  return [...candidates.filter((b) => b !== a && odd(p, b) !== odd(p, a)), ...[...p.blocked].filter((r) => odd(p, r) === odd(p, a)).map((r) => -r - 1)];
+}
+
+/** Every pair to try (each once): a kept single and a partner (see partners). */
 export function tilePairs(p: Puzzle, singles: TileScore[], candidates: number[]): number[][] {
   const seen = new Set<string>();
   const out: number[][] = [];
   for (const s of singles) {
     const [a] = s.at;
-    for (const b of candidates) {
-      if (b === a || odd(p, b) === odd(p, a) || seen.has(pairKey(a, b))) continue;
+    for (const b of partners(p, a, candidates)) {
+      if (seen.has(pairKey(a, b))) continue;
       seen.add(pairKey(a, b));
       out.push([a, b]);
     }
@@ -158,7 +170,8 @@ export function tilePairs(p: Puzzle, singles: TileScore[], candidates: number[])
 
 /**
  * From the singles (best first) and every pair's score: each single's best partner (a single
- * that keeps the colours right counting on its own too), best first, and the first with a solution.
+ * that keeps the colours right counting on its own too; a partner may instead be a black tile of
+ * the same colour cleared), best first, and the first with a solution.
  */
 export function finishTiles(
   p: Puzzle,
@@ -176,8 +189,7 @@ export function finishTiles(
     q.blocked.add(a);
     if (!boardParity(q)) options.push(s);
     let bestPair: TileScore | null = null;
-    for (const b of candidates) {
-      if (b === a || odd(p, b) === odd(p, a)) continue;
+    for (const b of partners(p, a, candidates)) {
       const scored = pairScores.get(pairKey(a, b));
       const pair = scored ? { ...scored, at: [a, b] } : null;
       if (pair && (!bestPair || order(pair, bestPair) < 0)) bestPair = pair;
@@ -187,9 +199,11 @@ export function finishTiles(
   options.sort(order);
   for (const o of options) {
     const q = clonePuzzle(p);
-    for (const c of o.at) q.blocked.add(c);
+    for (const c of o.at) if (c >= 0) q.blocked.add(c);
+    else q.blocked.delete(-c - 1);
     if (solve(q, { maxSolutions: 1, nodeLimit: 200_000 }).status === 'none') continue;
-    return { kind: 'tile', at: o.at, lines: o.lines, before: before.lines, hints: o.hints, stuck: o.stuck, hintsBefore: before.hints };
+    const remove = o.at.filter((c) => c < 0).map((c) => -c - 1);
+    return { kind: 'tile', at: o.at.filter((c) => c >= 0), ...(remove.length ? { remove } : {}), lines: o.lines, before: before.lines, hints: o.hints, stuck: o.stuck, hintsBefore: before.hints };
   }
   return null;
 }

@@ -288,6 +288,11 @@ a.btn {
   stroke-dasharray: 2 14;
   stroke-linecap: round;
 }
+/* A black tile the editor suggests clearing. */
+.tile-suggest.clear {
+  fill: none;
+  stroke: var(--error);
+}
 /* A wall the editor suggests adding. */
 .wall.suggest {
   stroke: var(--accent);
