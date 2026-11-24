@@ -354,6 +354,23 @@ export class PlayView {
       this.redo();
       return true;
     }
+    // Z or U undoes the last move; H gets a hint (like the Hint button).
+    const plain = !mod && !ev.altKey && ev.key.length === 1 ? ev.key.toLowerCase() : '';
+    if (plain === 'z' || plain === 'u') {
+      this.undo();
+      return true;
+    }
+    if (plain === 'h') {
+      if (!this.solved) void this.showHint();
+      return true;
+    }
+    // Solved: Enter goes on to the next level (or whatever the Next level button does).
+    if (ev.key === 'Enter' && !mod && !ev.altKey && this.solved) {
+      const action = this.solvedAction();
+      if (!action) return false;
+      action.run();
+      return true;
+    }
     // One-shot mode: the arrow keys (or WASD) move the stroke's head, back over the stroke to take it back.
     const step = KEY_STEPS[ev.key.length === 1 ? ev.key.toLowerCase() : ev.key];
     if (!mod && !ev.altKey && step && this.strokeMode && this.puzzle.endpoints.length) {
