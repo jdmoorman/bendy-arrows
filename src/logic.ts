@@ -240,6 +240,8 @@ export interface LogicOptions {
   threeCuts?: 'labels' | 'search';
   /** A tile to look near first: the one-step trial tries the borders closest to it first (a one-shot's head). */
   focus?: number;
+  /** Checkerboard balance and imbalance only draw lines: no X marks from them. */
+  checkerboardLinesOnly?: boolean;
 }
 
 function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: LogicOptions = {}): Analysis {
@@ -280,15 +282,25 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
   const colours = colourRules(enabled);
   if (enabled.has('bottlenecks') || colours.size) {
     // Areas cut off by three borders are slow to find, so they wait for the pass below.
-    const found = areaRules(p, state, need, closed, enabled, maxArea, new Set([...sources].filter((x) => x !== 'cuts3')));
+    const found = areaRulesCached(p, state, need, closed, enabled, maxArea, new Set([...sources].filter((x) => x !== 'cuts3')));
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
   }
   // Last resort: areas cut off by three borders, only when nothing else applies.
   if (colours.size && sources.has('cuts3') && !deductions.length) {
-    const found = areaRules(p, state, need, closed, colours, maxArea, new Set<AreaSource>(['cuts3']), opts.threeCuts ?? 'labels');
+    const found = areaRulesCached(p, state, need, closed, colours, maxArea, new Set<AreaSource>(['cuts3']), opts.threeCuts ?? 'labels');
     if ('reason' in found) return { kind: 'contradiction', ...found };
     deductions.push(...found);
+  }
+  // Checkerboard rules that may only draw lines: their X marks are dropped (and a deduction with
+  // nothing else goes).
+  if (opts.checkerboardLinesOnly) {
+    for (let i = deductions.length - 1; i >= 0; i--) {
+      const d = deductions[i];
+      if (d.rule !== 'balance' && d.rule !== 'imbalance') continue;
+      if (d.segments.length) deductions[i] = { ...d, xs: [] };
+      else deductions.splice(i, 1);
+    }
   }
   // The board's colours rule out a path: said once the other rules have nothing left to draw,
   // so the logic still gets as far as it can first.
@@ -591,8 +603,10 @@ export function trialPreview(p: Puzzle, drawn: Set<number>, d: Deduction): { pha
  * asks for a hint, and repeats: the hints they'd need, in order, and whether that finishes
  * the puzzle or leaves them stuck with no hint to give.
  */
-export function hintJourney(p: Puzzle, opts: LogicOptions = {}, watch?: JourneyWatcher): { steps: HintStep[]; outcome: 'solved' | 'stuck' } {
-  const easy = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
+export function hintJourney(p: Puzzle, opts: LogicOptions = {}, watch?: JourneyWatcher, rules?: RuleId[]): { steps: HintStep[]; outcome: 'solved' | 'stuck' } {
+  // (With `rules`, only those: its easy ones drawn freely, all of them for hints.)
+  const easy = (rules ?? ALL_RULES).filter((r) => !ADVANCED_RULES.includes(r));
+  const hintRules = rules ?? HINT_ORDER;
   const steps: HintStep[] = [];
   let state: LogicState = { segments: new Set(), xs: new Set() };
   for (let i = 0; i <= edgeCount(p); i++) {
@@ -602,7 +616,7 @@ export function hintJourney(p: Puzzle, opts: LogicOptions = {}, watch?: JourneyW
     if (run.solved) return { steps, outcome: 'solved' };
     if (run.contradiction) return { steps, outcome: 'stuck' };
     // Stuck on the easy rules: take the hint the Hint button would give.
-    const h = findHint(p, state, HINT_ORDER, opts);
+    const h = findHint(p, state, hintRules, opts);
     if (h.kind === 'solved') return { steps, outcome: 'solved' };
     if (h.kind !== 'deduction') return { steps, outcome: 'stuck' };
     const d = h.deduction;
@@ -842,8 +856,10 @@ export function runStroke(p: Puzzle, rules: Iterable<RuleId>, start: LogicState 
  * `hintJourney` for a one-shot: the stroke goes on as far as the easy rules force it; where they
  * can't, a hint (all the rules) takes it one step further.
  */
-export function strokeJourney(p: Puzzle, opts: LogicOptions = {}, watch?: JourneyWatcher): { steps: HintStep[]; outcome: 'solved' | 'stuck' } {
-  const easy = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
+export function strokeJourney(p: Puzzle, opts: LogicOptions = {}, watch?: JourneyWatcher, rules?: RuleId[]): { steps: HintStep[]; outcome: 'solved' | 'stuck' } {
+  // (With `rules`, only those: its easy ones drawn freely, all of them for hints.)
+  const easy = (rules ?? ALL_RULES).filter((r) => !ADVANCED_RULES.includes(r));
+  const hintRules = rules ?? STROKE_HINT_ORDER;
   const steps: HintStep[] = [];
   let state: LogicState = { segments: new Set(), xs: new Set() };
   for (let i = 0; i <= 2 * edgeCount(p); i++) {
@@ -853,7 +869,7 @@ export function strokeJourney(p: Puzzle, opts: LogicOptions = {}, watch?: Journe
     if (run.solved) return { steps, outcome: 'solved' };
     if (run.contradiction) return { steps, outcome: 'stuck' };
     const { tiles, lines } = strokeFrom(p, state.segments);
-    const h = findStrokeHint(p, lines, tiles[tiles.length - 1], opts, STROKE_HINT_ORDER, state.xs);
+    const h = findStrokeHint(p, lines, tiles[tiles.length - 1], opts, hintRules, state.xs);
     if (h.kind === 'solved') return { steps, outcome: 'solved' };
     if (h.kind !== 'deduction') return { steps, outcome: 'stuck' };
     const d = h.deduction;
@@ -1231,6 +1247,39 @@ const GROW_AREA = 30;
  * Rules about areas of the board: the borders into an area (bottlenecks),
  * and its count of shaded and white tiles (checkerboard balance).
  */
+/**
+ * `areaRules`, remembered per puzzle: it's a pure function of the board's marks and of which area
+ * rules are on (the others don't matter to it), and a hint search asks it the same question many
+ * times over (once for each set of rules it tries, the simplest first). Its answers are shared,
+ * so they mustn't be changed.
+ */
+const areaCache = new WeakMap<Puzzle, Map<string, Deduction[] | Contradiction>>();
+const AREA_CACHE_SIZE = 4000;
+const AREA_RULES: RuleId[] = ['bottlenecks', 'balance', 'imbalance'];
+function areaRulesCached(
+  p: Puzzle,
+  state: LogicState,
+  need: Int8Array,
+  closed: Set<number>,
+  enabled: Set<RuleId>,
+  balanceMaxArea: number,
+  use: Set<AreaSource>,
+  threeCuts: 'labels' | 'search' = 'labels',
+): Deduction[] | Contradiction {
+  let cache = areaCache.get(p);
+  if (!cache) areaCache.set(p, (cache = new Map()));
+  const sorted = (xs: Iterable<number | string>) => [...xs].sort().join(',');
+  // (The board itself is in the key too: some callers change a puzzle in place.)
+  const board = `${p.w}x${p.h}:${sorted(p.blocked)}:${sorted(p.walls)}:${p.endpoints.map((e) => e.port).join(',')}`;
+  const key = [board, AREA_RULES.filter((r) => enabled.has(r)).join(','), sorted(use), balanceMaxArea, threeCuts, sorted(state.segments), sorted(state.xs)].join('|');
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const found = areaRules(p, state, need, closed, enabled, balanceMaxArea, use, threeCuts);
+  if (cache.size >= AREA_CACHE_SIZE) cache.clear();
+  cache.set(key, found);
+  return found;
+}
+
 function areaRules(
   p: Puzzle,
   state: LogicState,

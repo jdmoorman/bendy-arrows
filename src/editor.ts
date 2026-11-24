@@ -789,6 +789,7 @@ export class EditorView {
         autoGroups: [...this.autoGroups],
         // Saved as the ones switched off, so a newly added kind of area starts on.
         areaSourcesOff: AREA_SOURCES.filter((x) => !(this.logicOpts.areaSources ?? AREA_SOURCES).includes(x)),
+        checkerboardLinesOnly: !!this.logicOpts.checkerboardLinesOnly,
       });
       // A different choice of rules gets a fresh automatic run.
       if (this.autoLogic) this.runAutoLogic();
@@ -915,6 +916,16 @@ export class EditorView {
         render();
       });
       autoRow('imbalance');
+      switchRow(
+        'Checkerboard rules draw lines only',
+        'Checkerboard balance and imbalance never put down X marks (as when looking for one-shots whose hints never hand the player a checkerboard X).',
+        !!this.logicOpts.checkerboardLinesOnly,
+        (on) => {
+          this.logicOpts = { ...this.logicOpts, checkerboardLinesOnly: on || undefined };
+          save();
+          render();
+        },
+      );
       const tr = ruleChoice(TRIAL_RULE);
       switchRow(tr.label, `${tr.hint} Slow, and only on boards of up to 150 tiles.`, tr.on, (on) => {
         tr.set(on);
@@ -1035,8 +1046,10 @@ export class EditorView {
         const what = kind === 'wall' ? 'wall' : s && s.at.length === 2 ? 'pair of black tiles' : 'black tile';
         this.setMessage(
           s
-            ? `Suggested ${what} (dashed): with ${s.at.length === 2 ? 'them' : 'it'} the chosen rules draw ${s.lines} line${s.lines === 1 ? '' : 's'}, ${s.lines - s.before} more than now.`
-            : `No ${kind === 'wall' ? 'wall' : 'black tile or pair'} lets the chosen rules get further while keeping a solution.`,
+            ? s.hints !== undefined
+              ? `Suggested ${what} (dashed): with ${s.at.length === 2 ? 'them' : 'it'} a player needs ${s.hints} hint${s.hints === 1 ? '' : 's'}${s.stuck ? ', then gets stuck' : ''}${s.hintsBefore !== undefined ? ` (${s.hintsBefore} now)` : ''}.`
+              : `Suggested ${what} (dashed): with ${s.at.length === 2 ? 'them' : 'it'} the chosen rules draw ${s.lines} line${s.lines === 1 ? '' : 's'}, ${s.lines - s.before} more than now.`
+            : `No ${kind === 'wall' ? 'wall' : 'black tile or pair'} ${kind === 'wall' ? 'lets the chosen rules get further' : 'works'} while keeping a solution.`,
         );
       })
       .catch((err) => {
@@ -1335,7 +1348,7 @@ function loadLogicOptions(storage: Storage): LogicOptions {
   const saved = storage.loadLogicRules();
   const off = new Set(saved?.areaSourcesOff ?? []);
   const sources = AREA_SOURCES.filter((x) => !off.has(x));
-  return { areaSources: sources.length < AREA_SOURCES.length ? sources : undefined };
+  return { areaSources: sources.length < AREA_SOURCES.length ? sources : undefined, ...(saved?.checkerboardLinesOnly ? { checkerboardLinesOnly: true } : {}) };
 }
 
 type AutoGroup = 'easy' | 'balance' | 'imbalance' | 'trial';

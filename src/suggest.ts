@@ -1,14 +1,14 @@
-import { runLogic, runStroke, type LogicOptions, type RuleId } from './logic';
+import { boardParity, hintJourney, runLogic, runStroke, strokeJourney, type JourneyFrame, type LogicOptions, type RuleId } from './logic';
 import { openTilesOk } from './generator';
 import { clonePuzzle, edgeCells, edgeCount, endpointCells, isOneShot, openCells, type Puzzle } from './model';
 import { solve } from './solver';
 
 /**
- * The editor's Suggest: the wall (or black tile) to add that lets the logic go furthest. Each
- * border between two open tiles without a wall (or each open tile but the ends') gets one in
- * turn; the chosen rules then run to the end (for a one-shot, its stroke), and the one after
- * which they draw the most lines (then put down the most X marks) wins, as long as the puzzle
- * keeps a solution.
+ * The editor's Suggest.
+ *  - A wall: the one after which the chosen rules (run to the end; for a one-shot, its stroke)
+ *    draw the most lines (then put down the most X marks), as long as the puzzle keeps a solution.
+ *  - Black tiles (usually a pair, one of each colour): see suggestTiles. Scoring tiles by lines
+ *    drawn favoured tight zigzags that force the whole board, which need no hints at all.
  */
 
 /** What to suggest: a wall, or a black tile. */
@@ -21,10 +21,12 @@ export interface Suggestion {
   /** Lines the rules draw with it, and without it. */
   lines: number;
   before: number;
+  /** Black tiles: the hints a player needs with them (and whether hints get stuck), and before. */
+  hints?: number;
+  stuck?: boolean;
+  hintsBefore?: number;
 }
 
-/** How many of the best single tiles of each colour are tried together as pairs. */
-const PAIR_POOL = 12;
 
 /** How far the rules get: lines drawn, then X marks, and whether they found the puzzle has no solution. */
 function reach(p: Puzzle, rules: RuleId[], opts: LogicOptions): { lines: number; xs: number; broken: boolean } {
@@ -63,12 +65,17 @@ export function suggest(p: Puzzle, kind: SuggestKind, rules: RuleId[], opts: Log
     if (kind === 'tile' && !openTilesOk(q)) return null;
     return { at, ...reach(q, rules, opts) };
   };
-  const total = kind === 'tile' ? 2 * candidates.length : candidates.length;
+  const total = candidates.length;
+  // Progress as a share of the work: for black tiles, this first pass is quick and the hint
+  // counts below take most of the time.
+  const progress = (f: number) => onProgress?.(Math.round(f * 1000), 1000);
+  if (kind === 'tile') return suggestTiles(p, candidates, rules, opts, progress);
   const singles: Scored[] = [];
   candidates.forEach((x, i) => {
     const s = score([x]);
     if (s) singles.push(s);
-    onProgress?.(i + 1, total);
+    if (kind === 'wall') onProgress?.(i + 1, total);
+    else progress((0.15 * (i + 1)) / total);
   });
   const better = (s: Scored) => !base || s.lines > base.lines || (s.lines === base.lines && s.xs > base.xs);
   const best = (list: Scored[]): Suggestion | null => {
@@ -79,24 +86,139 @@ export function suggest(p: Puzzle, kind: SuggestKind, rules: RuleId[], opts: Log
     }
     return null;
   };
-  const one = best(singles);
-  if (one || kind === 'wall') {
+  if (kind === 'wall') {
     onProgress?.(total, total);
-    return one;
+    return best(singles);
   }
-  // Pairs, one of each colour, from the best singles.
-  const odd = (c: number) => (Math.floor(c / p.w) + (c % p.w)) % 2 === 1;
-  const top = (o: boolean) => singles.filter((s) => odd(s.at[0]) === o).sort((x, y) => y.lines - x.lines || y.xs - x.xs).slice(0, PAIR_POOL).map((s) => s.at[0]);
-  const [shaded, white] = [top(true), top(false)];
-  const pairs: Scored[] = [];
-  let done = 0;
-  for (const a of shaded) {
-    for (const b of white) {
-      const s = score([a, b]);
-      if (s) pairs.push(s);
-      onProgress?.(candidates.length + Math.round((++done / (shaded.length * white.length)) * candidates.length), total);
+  return suggestTiles(p, candidates, rules, opts, progress);
+}
+
+/**
+ * How far a player alternating the chosen easy rules and hints (from the chosen rules) gets: the
+ * hints, whether they get stuck, and the lines drawn by then.
+ */
+function playThrough(p: Puzzle, rules: RuleId[], opts: LogicOptions): { hints: number; stuck: boolean; lines: number } {
+  let lines = 0;
+  const watch = (f: JourneyFrame) => (lines = f.segments.length);
+  const j = isOneShot(p) ? strokeJourney(p, opts, watch, rules) : hintJourney(p, opts, watch, rules);
+  return { hints: j.steps.length, stuck: j.outcome === 'stuck', lines };
+}
+
+/** How far a player gets with hints after some black tiles are added (see playThrough). */
+export interface TileScore {
+  at: number[];
+  hints: number;
+  stuck: boolean;
+  lines: number;
+}
+
+/** Best first: hints that finish before those that get stuck, then most hints, then most lines. */
+const order = (x: TileScore, y: TileScore) => Number(x.stuck) - Number(y.stuck) || y.hints - x.hints || y.lines - x.lines;
+
+/** The tiles that could go black: open, and not an end. */
+export function tileCandidates(p: Puzzle): number[] {
+  const ends = new Set(endpointCells(p));
+  return openCells(p).filter((c) => !ends.has(c));
+}
+
+/** Each set of tiles made black, played through (null where they cut the board up or leave a dead end). */
+export function scoreTiles(p: Puzzle, sets: number[][], rules: RuleId[], opts: LogicOptions, onEach?: () => void): (TileScore | null)[] {
+  return sets.map((at) => {
+    const q = clonePuzzle(p);
+    for (const c of at) q.blocked.add(c);
+    const s = openTilesOk(q) ? { at, ...playThrough(q, rules, opts) } : null;
+    onEach?.();
+    return s;
+  });
+}
+
+const odd = (p: Puzzle, c: number) => (Math.floor(c / p.w) + (c % p.w)) % 2 === 1;
+/** A pair's key, whichever tile comes first. */
+const pairKey = (a: number, b: number) => (a < b ? `${a},${b}` : `${b},${a}`);
+
+/** The single tiles worth keeping (they let the player draw something), best first. */
+export function keepSingles(scores: (TileScore | null)[]): TileScore[] {
+  return scores.filter((s): s is TileScore => !!s && s.lines > 0).sort(order);
+}
+
+/** Every pair to try (each once): a kept single and a tile of the other colour. */
+export function tilePairs(p: Puzzle, singles: TileScore[], candidates: number[]): number[][] {
+  const seen = new Set<string>();
+  const out: number[][] = [];
+  for (const s of singles) {
+    const [a] = s.at;
+    for (const b of candidates) {
+      if (b === a || odd(p, b) === odd(p, a) || seen.has(pairKey(a, b))) continue;
+      seen.add(pairKey(a, b));
+      out.push([a, b]);
     }
   }
-  onProgress?.(total, total);
-  return best(pairs);
+  return out;
+}
+
+/**
+ * From the singles (best first) and every pair's score: each single's best partner (a single
+ * that keeps the colours right counting on its own too), best first, and the first with a solution.
+ */
+export function finishTiles(
+  p: Puzzle,
+  candidates: number[],
+  singles: TileScore[],
+  pairScores: Map<string, TileScore | null>,
+  rules: RuleId[],
+  opts: LogicOptions,
+): Suggestion | null {
+  const before = playThrough(p, rules, opts);
+  const options: TileScore[] = [];
+  for (const s of singles) {
+    const [a] = s.at;
+    const q = clonePuzzle(p);
+    q.blocked.add(a);
+    if (!boardParity(q)) options.push(s);
+    let bestPair: TileScore | null = null;
+    for (const b of candidates) {
+      if (b === a || odd(p, b) === odd(p, a)) continue;
+      const scored = pairScores.get(pairKey(a, b));
+      const pair = scored ? { ...scored, at: [a, b] } : null;
+      if (pair && (!bestPair || order(pair, bestPair) < 0)) bestPair = pair;
+    }
+    if (bestPair) options.push(bestPair);
+  }
+  options.sort(order);
+  for (const o of options) {
+    const q = clonePuzzle(p);
+    for (const c of o.at) q.blocked.add(c);
+    if (solve(q, { maxSolutions: 1, nodeLimit: 200_000 }).status === 'none') continue;
+    return { kind: 'tile', at: o.at, lines: o.lines, before: before.lines, hints: o.hints, stuck: o.stuck, hintsBefore: before.hints };
+  }
+  return null;
+}
+
+/** Store a pair's score under its key. */
+export function pairMap(pairs: number[][], scores: (TileScore | null)[]): Map<string, TileScore | null> {
+  return new Map(pairs.map(([a, b], i) => [pairKey(a, b), scores[i]]));
+}
+
+/**
+ * Black tiles to add, scored by how far a player gets with hints afterwards:
+ *  1. Every single tile (not an end, not cutting the board up or leaving a dead end), played
+ *     through whatever the colour balance (it only stops the rules once they're stuck anyway);
+ *     those that let the player draw no line at all are dropped.
+ *  2. For each, every partner of the other colour, the pair played through (each pair once):
+ *     each tile's best partner by hints, then lines. A single tile that keeps the colours right
+ *     counts on its own too.
+ *  3. All of these, best first (finished before stuck, then most hints, then most lines): the
+ *     first that has a solution.
+ * (The editor runs steps 1 and 2 split across several workers: see suggest-client.)
+ */
+function suggestTiles(p: Puzzle, _candidates: number[], rules: RuleId[], opts: LogicOptions, progress: (f: number) => void): Suggestion | null {
+  const candidates = tileCandidates(p);
+  let done = 0;
+  const singles = keepSingles(scoreTiles(p, candidates.map((c) => [c]), rules, opts, () => progress((0.1 * ++done) / candidates.length)));
+  const pairs = tilePairs(p, singles, candidates);
+  done = 0;
+  const pairScores = pairMap(pairs, scoreTiles(p, pairs, rules, opts, () => progress(0.1 + (0.85 * ++done) / pairs.length)));
+  const s = finishTiles(p, candidates, singles, pairScores, rules, opts);
+  progress(1);
+  return s;
 }
