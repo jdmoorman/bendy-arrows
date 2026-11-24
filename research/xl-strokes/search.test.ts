@@ -22,7 +22,8 @@ import { outPath, record } from '../out';
 // Then each find is polished: tiles moved, pairs taken away and ends moved, kept when the hints
 // needed don't go down (the climb above counts the rules with checkerboard rules drawing lines
 // only, so it steers towards boards that pass). Output adds the hints before polishing.
-// Env: POLISH_SECONDS (60), RUN (seed), MINUTES (480), MIN, MAX (the short side, 9 to 11; the long side up to 2 more),
+// Env: POLISH (random, systematic or hybrid), POLISH_SECONDS (random: 180), POLISH_MAX_SECONDS
+// (systematic and hybrid: at most 1800 per find), RUN (seed), MINUTES (480), MIN, MAX (the short side, 9 to 11; the long side up to 2 more),
 // TILES (black tiles to start with, as a share of the board, 0.06), CLIMB_SECONDS (90), CHECK_AT (20).
 // Output: xl-strokes/found-<RUN>.tsv: code, size, open tiles, black tiles, hints, hint rules;
 // xl-strokes/log-<RUN>.txt: how tries ended.
@@ -165,46 +166,117 @@ test('xl tile strokes', () => {
       drop('needs checkerboard Xs or stuck');
       continue;
     }
-    // Polish: move a tile (to one of the same colour), take a pair away, or move an end, keeping
-    // the puzzle unique and the stroke finishable without checkerboard Xs; keep a change that
-    // needs at least as many hints (more is better), for POLISH_SECONDS.
-    let best = q;
-    let bestHints = rules.length;
-    const polishUntil = Date.now() + env('POLISH_SECONDS', 60) * 1000;
-    while (Date.now() < polishUntil) {
-      const t = clonePuzzle(best);
-      const tiles = [...t.blocked];
-      const k = pick(3);
-      if (k === 0 && tiles.length) {
-        const c = tiles[pick(tiles.length)];
-        t.blocked.delete(c);
-        if (addOne(t, odd(t, c)) < 0) continue;
-      } else if (k === 1 && tiles.length >= 2) {
-        const a = tiles[pick(tiles.length)];
-        const others = tiles.filter((c) => odd(t, c) !== odd(t, a));
-        if (!others.length) continue;
-        t.blocked.delete(a);
-        t.blocked.delete(others[pick(others.length)]);
-        if (!openTilesOk(t)) continue;
-      } else {
-        const i = pick(2);
-        const cell = portCell(t, t.endpoints[i].port);
-        const port = pick(portCount(t));
-        const to = portCell(t, port);
-        if (t.blocked.has(to) || odd(t, to) !== odd(t, cell) || t.endpoints.some((e) => e.port === port)) continue;
-        t.endpoints[i] = portEnd(port);
-      }
-      if (t.endpoints.some((e) => t.blocked.has(portCell(t, e.port))) || symmetryOf(t)) continue;
+    // Polish (POLISH): 'random' tries random small changes for POLISH_SECONDS; 'systematic'
+    // tries every small change and takes the one needing the most hints, again until none needs
+    // more; 'hybrid' does that, then random changes (sideways moves allowed) for a minute to get
+    // off a plateau, and repeats while that finds more. Changes: a black tile moved to a tile of
+    // the same colour, a pair taken away (one of each colour), an end moved (to a tile of the
+    // same colour); each must keep the puzzle unique and the stroke finishable without
+    // checkerboard Xs.
+    const hintsOf = (t: Puzzle) => {
+      if (t.endpoints.some((e) => t.blocked.has(portCell(t, e.port))) || symmetryOf(t)) return -1;
       const h = playThrough(t, STROKE_HINT_ORDER, { checkerboardLinesOnly: true });
-      if (h.stuck || h.hints < bestHints) continue;
-      if (status(t).status !== 'unique') continue;
-      best = orientTail(t);
-      bestHints = h.hints;
+      return h.stuck ? -1 : h.hints;
+    };
+    let best: Puzzle = q;
+    let bestHints = rules.length;
+    const randomPolish = (seconds: number) => {
+      const until = Date.now() + seconds * 1000;
+      let improved = false;
+      while (Date.now() < until) {
+        const t = clonePuzzle(best);
+        const tiles = [...t.blocked];
+        const k = pick(3);
+        if (k === 0 && tiles.length) {
+          const c = tiles[pick(tiles.length)];
+          t.blocked.delete(c);
+          if (addOne(t, odd(t, c)) < 0) continue;
+        } else if (k === 1 && tiles.length >= 2) {
+          const a = tiles[pick(tiles.length)];
+          const others = tiles.filter((c) => odd(t, c) !== odd(t, a));
+          if (!others.length) continue;
+          t.blocked.delete(a);
+          t.blocked.delete(others[pick(others.length)]);
+          if (!openTilesOk(t)) continue;
+        } else {
+          const i = pick(2);
+          const cell = portCell(t, t.endpoints[i].port);
+          const port = pick(portCount(t));
+          const to = portCell(t, port);
+          if (t.blocked.has(to) || odd(t, to) !== odd(t, cell) || t.endpoints.some((e) => e.port === port)) continue;
+          t.endpoints[i] = portEnd(port);
+        }
+        const h = hintsOf(t);
+        if (h < bestHints) continue;
+        if (status(t).status !== 'unique') continue;
+        if (h > bestHints) improved = true;
+        best = orientTail(t);
+        bestHints = h;
+      }
+      return improved;
+    };
+    /** Every small change of `from`. */
+    const neighbours = (from: Puzzle): Puzzle[] => {
+      const out: Puzzle[] = [];
+      const tiles = [...from.blocked];
+      for (const c of tiles) {
+        for (let d = 0; d < from.w * from.h; d++) {
+          if (from.blocked.has(d) || odd(from, d) !== odd(from, c)) continue;
+          const t = clonePuzzle(from);
+          t.blocked.delete(c);
+          t.blocked.add(d);
+          if (openTilesOk(t)) out.push(t);
+        }
+      }
+      for (const a of tiles) {
+        for (const b of tiles) {
+          if (a >= b || odd(from, a) === odd(from, b)) continue;
+          const t = clonePuzzle(from);
+          t.blocked.delete(a);
+          t.blocked.delete(b);
+          if (openTilesOk(t)) out.push(t);
+        }
+      }
+      for (let i = 0; i < 2; i++) {
+        const cell = portCell(from, from.endpoints[i].port);
+        for (let port = 0; port < portCount(from); port++) {
+          const to = portCell(from, port);
+          if (from.blocked.has(to) || odd(from, to) !== odd(from, cell) || from.endpoints.some((e) => e.port === port)) continue;
+          const t = clonePuzzle(from);
+          t.endpoints[i] = portEnd(port);
+          out.push(t);
+        }
+      }
+      return out;
+    };
+    /** Take the change needing the most hints (more than now, still unique), until there's none. */
+    const systematicPolish = (deadline: number) => {
+      let improved = false;
+      while (Date.now() < deadline) {
+        const rated = neighbours(best)
+          .map((t) => ({ t, h: Date.now() < deadline ? hintsOf(t) : -1 }))
+          .filter((x) => x.h > bestHints)
+          .sort((x, y) => y.h - x.h || x.t.blocked.size - y.t.blocked.size);
+        const next = rated.find((x) => status(x.t).status === 'unique');
+        if (!next) break;
+        best = orientTail(next.t);
+        bestHints = next.h;
+        improved = true;
+      }
+      return improved;
+    };
+    const mode = process.env.POLISH ?? 'random';
+    const polishDeadline = Date.now() + env('POLISH_MAX_SECONDS', 1800) * 1000;
+    if (mode === 'random') randomPolish(env('POLISH_SECONDS', 180));
+    else if (mode === 'systematic') systematicPolish(polishDeadline);
+    else {
+      systematicPolish(polishDeadline);
+      while (Date.now() < polishDeadline && randomPolish(60)) systematicPolish(polishDeadline);
     }
     const final = best === q ? rules : journey(best);
     if (!final) continue;
     const finalCode = encodePuzzle(best);
     drop(best === q ? 'kept' : 'kept, polished');
-    record(`xl-strokes/found-${RUN}.tsv`, [finalCode, `${best.w}x${best.h}`, openCells(best).length, best.blocked.size, final.length, final.join(' '), `from ${rules.length}`].join('\t'));
+    record(`xl-strokes/found-${RUN}.tsv`, [finalCode, `${best.w}x${best.h}`, openCells(best).length, best.blocked.size, final.length, final.join(' '), `from ${rules.length}`, mode].join('\t'));
   }
 });
