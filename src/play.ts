@@ -1,6 +1,6 @@
 import { History } from './history';
 import { solveInBackground, type SolverRun } from './solver-client';
-import { findHint, findStrokeHint, hintPrompt, strokeFrom, type Hint } from './logic';
+import { findHint, findStrokeHint, hintPrompt, strokeFrom, trialPreview, type Hint } from './logic';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
 import { cellEdges, edgeBetween, isOneShot, isUsableEdge, type Puzzle } from './model';
@@ -534,10 +534,17 @@ export class PlayView {
     const d = hint?.kind === 'deduction' ? hint.deduction : null;
     const prompt = d ? hintPrompt(this.puzzle, { segments: this.segments, xs: this.xMarks }, d) : null;
     const focus = prompt ? prompt.cells : hint?.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
+    // A One-step trial hint: the lines its supposition leads to, faintly, and where that breaks.
+    // In a one-shot, only those carrying the stroke on from its head (the path from the tail)
+    // (and those where it breaks; the tiles the hint is about stay green even where it breaks).
+    const trial = d?.rule === 'trial' ? trialPreview(this.puzzle, this.segments, d) : null;
+    for (const c of trial?.broken ?? []) if (!focus.includes(c)) errorCells.add(c);
+    const phantom = new Set(trial?.phantom ?? []);
     renderBoard(this.svg, this.puzzle, {
       pad: padFor(this.puzzle),
       segments: this.segments,
       xMarks: this.xMarks,
+      faint: phantom.size ? phantom : undefined,
       focusCells: focus.length ? new Set(focus) : undefined,
       errorCells,
       errorEdges,
@@ -581,7 +588,7 @@ function closestWrong(solutions: number[][], segments: Set<number>, xMarks: Set<
 function wrongText(lines: number, xs: number): string {
   const lineText = lines === 1 ? 'line that isn’t part of the solution' : 'lines that aren’t part of the solution';
   const xText = xs === 1 ? 'X on a border the path needs' : 'X’s on borders the path needs';
-  if (!xs) return lines === 1 ? 'The highlighted line isn’t part of the solution.' : `These ${lines} highlighted lines aren’t part of the solution.`;
-  if (!lines) return xs === 1 ? 'The highlighted X is on a border the path needs.' : `These ${xs} highlighted X’s are on borders the path needs.`;
-  return `The highlighted marks are wrong: ${lines} ${lineText} and ${xs} ${xText}.`;
+  if (!xs) return lines === 1 ? 'This line isn’t part of the solution.' : `These ${lines} lines aren’t part of the solution.`;
+  if (!lines) return xs === 1 ? 'This X is on a border the path needs.' : `These ${xs} X’s are on borders the path needs.`;
+  return `These marks are wrong: ${lines} ${lineText} and ${xs} ${xText}.`;
 }

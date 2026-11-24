@@ -1,4 +1,4 @@
-import { cellCount, cellEdges, edgeCells, edgeCount, endpointCells, isHorizontalEdge, isUsableEdge, neighbors, openCells, portCell, type Puzzle } from './model';
+import { cellCount, cellEdges, edgeCells, edgeCount, endpointCells, isHorizontalEdge, isOneShot, isUsableEdge, neighbors, openCells, portCell, type Puzzle } from './model';
 
 /**
  * Simple, local deduction rules for the editor's logic helper. A "step"
@@ -192,6 +192,9 @@ export interface Deduction {
   why?: string;
   /** How big the application is, for picking the simplest hint, when there is no area. */
   size?: number;
+  /** One-step trial: the lines its supposition leads to, and the tiles where that breaks. */
+  phantom?: number[];
+  broken?: number[];
   /** Tiles of the area with a border out of it the path can still cross (open or already drawn), for picking the simplest hint. */
   exitTiles?: number;
 }
@@ -312,11 +315,11 @@ const TRIAL_MAX_TILES = 150;
 const TRIAL_RULES: RuleId[] = ['corners', 'passages', 'continue', 'noLoops', 'noFinish'];
 
 /** Does this state break, as far as the trial rules can tell? Returns how. */
-function breaks(p: Puzzle, start: LogicState): { phrase: string; cells: number[] } | null {
+function breaks(p: Puzzle, start: LogicState): { phrase: string; cells: number[]; state: LogicState } | null {
   let state = start;
   for (let i = 0; i < 40; i++) {
     const loop = earlyLoop(p, state);
-    if (loop) return { phrase: 'the lines would close a loop too soon', cells: loop };
+    if (loop) return { phrase: 'the lines would close a loop too soon', cells: loop, state };
     const step = logicStep(p, state, TRIAL_RULES);
     if (step.contradiction) {
       const c = step.contradiction;
@@ -326,10 +329,40 @@ function breaks(p: Puzzle, start: LogicState): { phrase: string; cells: number[]
           : c.reason === 'A tile has too few ways in or out.'
             ? 'a tile would be left with too few ways in or out'
             : 'the rules would contradict each other';
-      return { phrase: i ? `the quick rules would soon find that ${phrase}` : phrase, cells: c.cells ?? [c.cell] };
+      return { phrase: i ? `the quick rules would soon find that ${phrase}` : phrase, cells: c.cells ?? [c.cell], state };
     }
     if (step.solved || (!step.segments.length && !step.xs.length)) return null;
     state = applyStep(state, step);
+  }
+  return null;
+}
+
+/**
+ * A one-shot's version of `breaks`: from a supposition at the stroke's head, carry the stroke on
+ * only (the quick rules' lines out of its head, one after another) and see whether that breaks;
+ * nothing else on the board is drawn, so any contradiction comes from extending the path.
+ */
+function strokeBreaks(p: Puzzle, start: LogicState, head: number): { phrase: string; cells: number[]; state: LogicState } | null {
+  let state = start;
+  let tip = head;
+  const rules = new Set(TRIAL_RULES);
+  for (let i = 0; i < 4 * p.w * p.h; i++) {
+    const an = analyse(p, state, rules);
+    if (an.kind === 'contradiction') {
+      const phrase =
+        an.reason === 'A tile has too many lines.'
+          ? 'a tile would end up with too many lines'
+          : an.reason === 'A tile has too few ways in or out.'
+            ? 'a tile would be left with too few ways in or out'
+            : 'the rules would contradict each other';
+      return { phrase: i ? `carrying the path on, ${phrase}` : phrase, cells: an.cells ?? [an.cell], state };
+    }
+    if (an.kind === 'solved') return null;
+    // The next line out of the stroke's tip, if a rule forces one.
+    const next = an.deductions.flatMap((d) => d.segments).find((e) => !state.segments.has(e) && edgeCells(p, e).includes(tip));
+    if (next === undefined) return null;
+    tip = edgeCells(p, next).find((c) => c !== tip)!;
+    state = { segments: new Set([...state.segments, next]), xs: state.xs };
   }
   return null;
 }
@@ -362,21 +395,31 @@ function earlyLoop(p: Puzzle, state: LogicState): number[] | null {
  */
 function trialDeduction(p: Puzzle, state: LogicState, closed: Set<number>, focus?: number): Deduction | null {
   let borders = openBorders(p, state, closed);
-  if (focus !== undefined) {
-    const fr = Math.floor(focus / p.w);
-    const fc = focus % p.w;
-    const away = (e: number) => Math.min(...edgeCells(p, e).map((c) => Math.abs(Math.floor(c / p.w) - fr) + Math.abs((c % p.w) - fc)));
-    borders = borders.map((e) => [e, away(e)]).sort((a, b) => a[1] - b[1]).map(([e]) => e);
-  }
-  for (const e of borders) {
+  // A one-shot (its stroke's head the focus): only the head's borders, and only the stroke
+  // carried on from them counts (see strokeBreaks).
+  if (focus !== undefined) borders = borders.filter((e) => edgeCells(p, e).includes(focus));
+  const test = (st: LogicState, e: number, line: boolean) => {
+    if (focus === undefined) return breaks(p, st);
+    const tip = line ? edgeCells(p, e).find((c) => c !== focus)! : focus;
+    return strokeBreaks(p, st, tip);
+  };
+  // The lines the supposition leads to, for showing faintly (the supposed line among them).
+  const phantom = (b: { state: LogicState }) => [...b.state.segments].filter((x) => !state.segments.has(x));
+  // A one-shot tries a line on each of the head's borders first: showing where a wrong turn
+  // leads (so it gets an X) reads better than supposing an X.
+  const order: [number, boolean][] = focus === undefined ? borders.flatMap((e) => [[e, true], [e, false]] as [number, boolean][]) : [...borders.map((e) => [e, true] as [number, boolean]), ...borders.map((e) => [e, false] as [number, boolean])];
+  for (const [e, line] of order) {
     const [a] = edgeCells(p, e);
-    const withLine = breaks(p, { segments: new Set([...state.segments, e]), xs: state.xs });
-    if (withLine) {
-      return { rule: 'trial', cell: a, cells: withLine.cells, segments: [], xs: [e], why: `Suppose the highlighted border had a line: then ${withLine.phrase}. So it gets an X.` };
-    }
-    const withX = breaks(p, { segments: state.segments, xs: new Set([...state.xs, e]) });
-    if (withX) {
-      return { rule: 'trial', cell: a, cells: withX.cells, segments: [e], xs: [], why: `Suppose the highlighted border had an X: then ${withX.phrase}. So the path must go through it.` };
+    if (line) {
+      const withLine = test({ segments: new Set([...state.segments, e]), xs: state.xs }, e, true);
+      if (withLine) {
+        return { rule: 'trial', cell: a, cells: withLine.cells, segments: [], xs: [e], phantom: phantom(withLine), broken: withLine.cells, why: `Suppose the highlighted border had a line: then ${withLine.phrase}. So it gets an X.` };
+      }
+    } else {
+      const withX = test({ segments: state.segments, xs: new Set([...state.xs, e]) }, e, false);
+      if (withX) {
+        return { rule: 'trial', cell: a, cells: withX.cells, segments: [e], xs: [], phantom: phantom(withX), broken: withX.cells, why: `Suppose the highlighted border had an X: then ${withX.phrase}. So the path must go through it.` };
+      }
     }
   }
   return null;
@@ -512,15 +555,36 @@ export interface JourneyFrame {
   xs: number[];
   rule?: RuleId;
   focus?: number[];
+  /** A One-step trial hint: its supposition's lines (drawn faintly), and where it breaks. */
+  phantom?: number[];
+  broken?: number[];
 }
 /** Receives each step of a hint journey as it's taken. */
 export type JourneyWatcher = (f: JourneyFrame) => void;
-const frameOf = (kind: 'easy' | 'hint', s: LogicState, d?: Deduction): JourneyFrame => ({
-  kind,
-  segments: [...s.segments],
-  xs: [...s.xs],
-  ...(d ? { rule: d.rule, focus: d.cells ?? [d.cell] } : {}),
-});
+const frameOf = (p: Puzzle, kind: 'easy' | 'hint', s: LogicState, d?: Deduction): JourneyFrame => {
+  if (!d) return { kind, segments: [...s.segments], xs: [...s.xs] };
+  // A hint shows the tiles a player's hint would (see hintPrompt), and for a One-step trial its
+  // supposition's lines and where they break (see trialPreview).
+  const focus = hintPrompt(p, s, d).cells;
+  const t = d.rule === 'trial' ? trialPreview(p, s.segments, d) : null;
+  return { kind, segments: [...s.segments], xs: [...s.xs], rule: d.rule, focus, ...(t ? { phantom: t.phantom, broken: t.broken.filter((c) => !focus.includes(c)) } : {}) };
+};
+
+/**
+ * What a One-step trial hint shows besides its tiles: the lines its supposition leads to (for a
+ * one-shot only those carrying the stroke on from its head, and those where it breaks), drawn
+ * faintly, and the tiles where it breaks.
+ */
+export function trialPreview(p: Puzzle, drawn: Set<number>, d: Deduction): { phantom: number[]; broken: number[] } {
+  const broken = d.broken ?? [];
+  let phantom = (d.phantom ?? []).filter((e) => !drawn.has(e));
+  if (phantom.length && isOneShot(p)) {
+    const on = strokeFrom(p, new Set([...drawn, ...phantom])).lines;
+    const inBroken = new Set(broken);
+    phantom = phantom.filter((e) => on.has(e) || edgeCells(p, e).every((c) => inBroken.has(c)));
+  }
+  return { phantom, broken };
+}
 
 /**
  * What solving is like for a player who applies the easy rules until they get stuck, then
@@ -533,7 +597,7 @@ export function hintJourney(p: Puzzle, opts: LogicOptions = {}, watch?: JourneyW
   let state: LogicState = { segments: new Set(), xs: new Set() };
   for (let i = 0; i <= edgeCount(p); i++) {
     const run = runLogic(p, easy, state, opts);
-    if (watch && run.state.segments.size + run.state.xs.size > state.segments.size + state.xs.size) watch(frameOf('easy', run.state));
+    if (watch && run.state.segments.size + run.state.xs.size > state.segments.size + state.xs.size) watch(frameOf(p, 'easy', run.state));
     state = run.state;
     if (run.solved) return { steps, outcome: 'solved' };
     if (run.contradiction) return { steps, outcome: 'stuck' };
@@ -546,7 +610,7 @@ export function hintJourney(p: Puzzle, opts: LogicOptions = {}, watch?: JourneyW
     const areaRule = d.rule === 'balance' || d.rule === 'imbalance' || d.rule === 'bottlenecks';
     steps.push(areaRule && d.cells ? { rule: d.rule, area: d.cells.length } : { rule: d.rule });
     state = applyStep(state, { segments: d.segments, xs: d.xs, byRule: {}, solved: false });
-    watch?.(frameOf('hint', state, d));
+    watch?.(frameOf(p, 'hint', state, d));
   }
   return { steps, outcome: 'stuck' };
 }
@@ -784,7 +848,7 @@ export function strokeJourney(p: Puzzle, opts: LogicOptions = {}, watch?: Journe
   let state: LogicState = { segments: new Set(), xs: new Set() };
   for (let i = 0; i <= 2 * edgeCount(p); i++) {
     const run = runStroke(p, easy, state, opts);
-    if (watch && run.state.segments.size + run.state.xs.size > state.segments.size + state.xs.size) watch(frameOf('easy', run.state));
+    if (watch && run.state.segments.size + run.state.xs.size > state.segments.size + state.xs.size) watch(frameOf(p, 'easy', run.state));
     state = run.state;
     if (run.solved) return { steps, outcome: 'solved' };
     if (run.contradiction) return { steps, outcome: 'stuck' };
@@ -796,7 +860,7 @@ export function strokeJourney(p: Puzzle, opts: LogicOptions = {}, watch?: Journe
     const areaRule = d.rule === 'balance' || d.rule === 'imbalance' || d.rule === 'bottlenecks';
     steps.push(areaRule && d.cells ? { rule: d.rule, area: d.cells.length } : { rule: d.rule });
     state = { segments: new Set([...lines, ...d.segments]), xs: new Set([...state.xs, ...d.xs]) };
-    watch?.(frameOf('hint', state, d));
+    watch?.(frameOf(p, 'hint', state, d));
   }
   return { steps, outcome: 'stuck' };
 }
@@ -855,7 +919,7 @@ export function hintPrompt(p: Puzzle, state: LogicState, d: Deduction): { cells:
         cells: [d.cell],
         text:
           need === 1 && drawn === 0
-            ? 'The path ends at this tile, and this tile has only one way out.'
+            ? 'The path ends at this tile, and it has only one way out.'
             : // (Continue is only for an end, or a tile with a line already: an untouched tile with two
               // ways out is Corners or Passages, so this tile needs exactly one more.)
               'This tile needs one more line, and it has only one way out left.',
@@ -864,6 +928,9 @@ export function hintPrompt(p: Puzzle, state: LogicState, d: Deduction): { cells:
       return { cells: sides, text: 'A line between these tiles would close a loop.' };
     case 'noFinish':
       return { cells: sides, text: 'A line between these tiles would join both ends of the path before every tile is used.' };
+    case 'trial':
+      // The border's two tiles; the play view also shows the supposition's lines faintly and where it breaks.
+      return { cells: sides, text: reasoning(d.why!) };
     case 'noSeal':
       return { cells: d.cells ?? sides, text: 'A line on a border beside these tiles would wall them off, and then the path could never reach them.' };
     default:
