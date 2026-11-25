@@ -4,8 +4,11 @@ import { cellCount, cellRC, edgeCells, edgeCount, edgeTouchesBlocked, isHorizont
 export const CELL = 100;
 /** Space around the grid so the outer border and touches near it fit. */
 export const PAD = 10;
-/** Space around the grid when end arrows are drawn outside the frame. */
-export const PORT_PAD = 62;
+/**
+ * Space around the grid when end arrows are drawn outside the frame: the arrowhead's tip is 58
+ * past the frame, and its outline 5 more.
+ */
+export const PORT_PAD = 64;
 /** Extra space, outside everything else, for the column letters and row numbers. */
 export const COORD_PAD = 44;
 
