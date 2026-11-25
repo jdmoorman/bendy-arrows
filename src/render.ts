@@ -268,15 +268,14 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
 
   // Fixed ends: a path stub from the tile centre through the frame, with the
   // arrow's tail outside at the entrance and its head at the exit.
-  if (arrow) parts.push('<g class="ends">', arrow.stubs, '</g>');
-  else if (ends.length) {
-    parts.push('<g class="ends">');
-    ends.forEach((end, i) => {
-      const { x, y, d } = portPoint(end.port);
-      parts.push(endMarker(center(portCell(p, end.port)), [x, y], d, i === 0 ? 'in' : 'out'));
-    });
-    parts.push('</g>');
-  }
+  // Drawn like the line: outlines here, under the line's; fills over the line's (after it).
+  const markers = arrow
+    ? []
+    : ends.map((end, i) => {
+        const { x, y, d } = portPoint(end.port);
+        return endMarker(center(portCell(p, end.port)), [x, y], d, i === 0 ? 'in' : 'out');
+      });
+  if (markers.length) parts.push('<g class="ends">', ...markers.map((m) => m.edge), '</g>');
 
   if (o.ghost?.size) {
     parts.push('<g class="ghost">');
@@ -302,7 +301,7 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   parts.push(strokes(ok, 'seg'), strokes(bad, 'seg error'), strokes(hi, 'seg hint'));
   parts.push('</g>');
 
-  if (arrow) parts.push('<g class="ends">', arrow.heads, '</g>');
+  if (markers.length) parts.push('<g class="ends">', ...markers.map((m) => m.fill), '</g>');
 
   // X marks.
   if (o.xMarks?.size) {
@@ -412,7 +411,7 @@ function retractedArrow(
   portPoint: (port: number) => { x: number; y: number; d: [number, number] },
   { pull, spin }: { pull: number; spin: number },
   pad: number,
-): { stubs: string; body: string; heads: string; tint: number } | null {
+): { body: string; tint: number } | null {
   const runs = edgeRuns(p, segments);
   if (runs.length !== 1 || runs[0].closed) return null;
   let cells = runs[0].cells;
@@ -436,7 +435,6 @@ function retractedArrow(
   for (let i = 1; i < pts.length; i++) at.push(at[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
   const total = at[at.length - 1];
   const lastSeg = pts.length - 2;
-  const isStub = (i: number) => (tailStub && i === 0) || (headStub && i === lastSeg);
   const segOf = (s: number) => {
     for (let i = 0; i < lastSeg; i++) if (s < at[i + 1]) return i;
     return lastSeg;
@@ -519,24 +517,7 @@ function retractedArrow(
   };
   const placed = fracs.map(place);
 
-  // Split into stub and path pieces, by which part of the path each stretch comes from.
-  const stubs: Pt[][] = [];
-  const path: Pt[][] = [];
-  let piece: Pt[] | null = null;
-  let pieceStub = false;
-  for (let j = 1; j < placed.length; j++) {
-    // Off the grid, it's all path (in the solved colour).
-    const stub = !met && isStub(segOf(from + ((fracs[j - 1] + fracs[j]) / 2) * span));
-    if (!piece || pieceStub !== stub) {
-      if (piece) (pieceStub ? stubs : path).push(piece);
-      piece = [placed[j - 1]];
-      pieceStub = stub;
-    }
-    piece.push(placed[j]);
-  }
-  if (piece) (pieceStub ? stubs : path).push(piece);
-  const d = (run: Pt[]) => run.map((q, i) => `${i ? 'L' : 'M'}${q[0]} ${q[1]}`).join('');
-  const body = path.map(d).join('');
+  const body = placed.map((q, i) => `${i ? 'L' : 'M'}${q[0]} ${q[1]}`).join('');
 
   /** Points at offsets (forward, sideways) from o, facing from a to b. */
   const shape = (o: Pt, a: Pt, b: Pt, offsets: [number, number][]) => {
@@ -549,27 +530,16 @@ function retractedArrow(
   const ends: string[] = [];
   if (tailStub) ends.push(shape(placed[0], placed[0], placed[1], [[20, 0], [6, 24], [-22, 24], [-10, 0], [-22, -24], [6, -24]]));
   if (headStub) ends.push(shape(placed[n - 1], placed[n - 2], placed[n - 1], [[32, 0], [-2, 29], [-2, -29]]));
-  const stubPaths = stubs.map((r) => `<path class="end-seg" d="${d(r)}"/>`).join('');
-  if (!met) {
-    return {
-      stubs: stubPaths,
-      body: body ? `<path class="seg-edge" d="${body}"/><path class="seg" d="${body}"/>` : '',
-      heads: ends.map((pts) => `<polygon class="end-head" points="${pts}"/>`).join(''),
-      tint: 0,
-    };
-  }
-  // Once head and tail have met, they're the solved line's colours too, outlined like it (all the
-  // outlines first, so none cuts across a fill).
+  // The ends are drawn like the line, outlined like it (all the outlines first, so none cuts
+  // across a fill).
   const poly = (cls: string) => ends.map((pts) => `<polygon class="${cls}" points="${pts}"/>`).join('');
   return {
-    stubs: stubPaths,
     body:
       (body ? `<path class="seg-edge" d="${body}"/>` : '') +
       poly('head-edge') +
       (body ? `<path class="seg" d="${body}"/>` : '') +
       poly('head-fill'),
-    heads: '',
-    tint: bend,
+    tint: met ? bend : 0,
   };
 }
 
@@ -579,18 +549,18 @@ function retractedArrow(
  * along the path: the entrance gets the arrow's tail (fletching) at the
  * stroke's outer tip, and the exit gets the arrowhead.
  */
-function endMarker(c: [number, number], b: [number, number], d: [number, number], dir: 'in' | 'out'): string {
+function endMarker(c: [number, number], b: [number, number], d: [number, number], dir: 'in' | 'out'): { edge: string; fill: string } {
   const [dx, dy] = d;
   const at = (t: number, side = 0): string => `${b[0] + dx * t - dy * side},${b[1] + dy * t + dx * side}`;
-  // Distances are measured outward from the frame.
-  if (dir === 'in') {
-    // Fletching: a notched chevron at the tip, its point toward the grid.
-    const fins = [at(14), at(28, 24), at(56, 24), at(44), at(56, -24), at(28, -24)].join(' ');
-    return `<path class="end-seg" d="M${c[0]} ${c[1]}L${at(34).replace(',', ' ')}"/><polygon class="end-head" points="${fins}"/>`;
-  }
-  const half = 29;
-  return (
-    `<path class="end-seg" d="M${c[0]} ${c[1]}L${at(26).replace(',', ' ')}"/>` +
-    `<polygon class="end-head" points="${at(58)} ${at(24, half)} ${at(24, -half)}"/>`
-  );
+  // Distances are measured outward from the frame. The entrance's fletching is a notched chevron
+  // at the tip, its point toward the grid.
+  const stub = `M${c[0]} ${c[1]}L${at(dir === 'in' ? 34 : 26).replace(',', ' ')}`;
+  const head =
+    dir === 'in'
+      ? [at(14), at(28, 24), at(56, 24), at(44), at(56, -24), at(28, -24)].join(' ')
+      : `${at(58)} ${at(24, 29)} ${at(24, -29)}`;
+  return {
+    edge: `<path class="seg-edge" d="${stub}"/><polygon class="head-edge" points="${head}"/>`,
+    fill: `<path class="seg" d="${stub}"/><polygon class="head-fill" points="${head}"/>`,
+  };
 }

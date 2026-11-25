@@ -414,19 +414,6 @@ a.btn {
 }
 
 
-.end-seg {
-  fill: none;
-  stroke: var(--end);
-  stroke-width: 22;
-  stroke-linecap: round;
-}
-.end-head {
-  fill: var(--end);
-  stroke: var(--end);
-  stroke-width: 4;
-  stroke-linejoin: round;
-}
-
 .xmark {
   stroke: var(--xmark);
   stroke-width: 6;
@@ -448,19 +435,27 @@ a.btn {
 .board.solved .seg-edge {
   stroke: var(--solved-edge);
 }
-/* The solve animation's arrow, once its head and tail have met: outlined like the line. */
+.board.solved .head-fill {
+  fill: var(--solved-fill);
+  stroke: var(--solved-fill);
+}
+.board.solved .head-edge {
+  fill: var(--solved-edge);
+  stroke: var(--solved-edge);
+}
+/* The arrow's head and tail: coloured and outlined like the line. */
 .head-fill,
 .head-edge {
   stroke-linejoin: round;
 }
 .head-fill {
-  fill: var(--solved-fill);
-  stroke: var(--solved-fill);
+  fill: var(--path);
+  stroke: var(--path);
   stroke-width: 4;
 }
 .head-edge {
-  fill: var(--solved-edge);
-  stroke: var(--solved-edge);
+  fill: var(--path-edge);
+  stroke: var(--path-edge);
   stroke-width: 10;
 }
 /* …and the board fades to the solved colour as it spins (--celebrate goes 0 to 1), the
