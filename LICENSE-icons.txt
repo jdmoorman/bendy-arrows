@@ -1,6 +1,6 @@
-Most of BendyArrows' icons (src/icons.ts, and their image files in public/icons/ where they
-are kept that way) come from, or are drawn after, Lucide (https://lucide.dev), and some of
-those from Feather. Their licence follows. The rest of the project is under LICENSE.
+BendyArrows' icons (the image files in public/icons/, listed in src/icons.ts) are copies of
+Lucide icons (https://lucide.dev), some of those from Feather; the filled funnel and star are
+Lucide's funnel and star with a fill. Their licence follows. The rest of the project is under LICENSE.
 
 ISC License
 
