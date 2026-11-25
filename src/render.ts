@@ -394,8 +394,9 @@ export function edgeRuns(p: Puzzle, edges: Iterable<number>): { cells: number[];
 
 type Pt = [number, number];
 
-/** What's left of the arrow once its head has pulled back to the tail. */
-const PULLED = 60;
+/** What's left of the arrow once head and tail have pulled in: an L about one of the path's corners. */
+const HEAD_ARM = 90;
+const TAIL_ARM = 40;
 
 /**
  * The solved path drawn as one arrow partway through the solve animation (see
@@ -465,9 +466,24 @@ function retractedArrow(
       ? [A[0] + (V[0] - A[0]) * (f / corner), A[1] + (V[1] - A[1]) * (f / corner)]
       : [V[0] + (E[0] - V[0]) * ((f - corner) / (1 - corner)), V[1] + (E[1] - V[1]) * ((f - corner) / (1 - corner))];
 
-  // The head pulls back to the tail.
-  const from = 0;
-  const to = total - Math.max(0, Math.min(1, pull)) * Math.max(0, total - PULLED);
+  // Head and tail pull in together on one of the path's corners, which becomes the check's
+  // corner: one bending the check's way if there is one (else any), the nearest the middle of the
+  // path; with no corner, the middle.
+  const cross = (i: number) =>
+    (pts[i][0] - pts[i - 1][0]) * (pts[i + 1][1] - pts[i][1]) - (pts[i][1] - pts[i - 1][1]) * (pts[i + 1][0] - pts[i][0]);
+  const checkWay = Math.sign(down[0] * up[1] - down[1] * up[0]);
+  let pivot = -1;
+  let best = Infinity;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const c = Math.sign(cross(i));
+    if (!c) continue;
+    const score = Math.abs(at[i] - total / 2) + (c === checkWay ? 0 : 1e6);
+    if (score < best) [pivot, best] = [i, score];
+  }
+  const mid = pivot >= 0 ? at[pivot] : total / 2;
+  const k = Math.max(0, Math.min(1, pull));
+  const from = k * Math.max(0, mid - TAIL_ARM);
+  const to = total - k * Math.max(0, total - mid - HEAD_ARM);
   const span = to - from || 1;
   const bend = Math.max(0, Math.min(1, spin));
   const met = pull >= 1;
@@ -475,6 +491,10 @@ function retractedArrow(
   const fs = new Set<number>([corner]);
   for (let i = 0; i <= 40; i++) fs.add(i / 40);
   for (const s of at) if (s > from && s < to) fs.add((s - from) / span);
+  // Along the check, the pivot corner lands on its corner.
+  const pc = Math.max(1e-6, Math.min(1 - 1e-6, (mid - from) / span));
+  const toCheck = (f: number) => (f <= pc ? (f / pc) * corner : corner + ((f - pc) / (1 - pc)) * (1 - corner));
+  fs.add(pc);
   const fracs = [...fs].sort((x, y) => x - y);
   // Then it flies from where it is to the middle, growing into the check about its own centre
   // and turning a full turn as it goes.
@@ -489,30 +509,37 @@ function retractedArrow(
     return [x, y];
   };
   const c0 = bend ? mean((f) => pathAt(from + f * span)) : ([0, 0] as Pt);
-  const c1 = bend ? mean(checkAt) : ([0, 0] as Pt);
-  // It keeps turning the way the head last turned on its way back to the tail (clockwise without
-  // a turn). Going back round a corner, the head swings from the later stretch's way to the
-  // earlier one's; with y down, a positive cross product is clockwise.
+  const c1 = bend ? mean((f) => checkAt(toCheck(f))) : ([0, 0] as Pt);
+  // It keeps turning the way the head last turned on its way in (clockwise without a turn). Going
+  // back round a corner, the head swings from the later stretch's way to the earlier one's; with
+  // y down, a positive cross product is clockwise.
   let turn = 1;
-  const stop = Math.min(total, PULLED);
+  const stop = total - Math.max(0, total - mid - HEAD_ARM);
   for (let i = 1; i <= lastSeg; i++) {
     if (at[i] <= stop) continue;
-    const [ax, ay] = [pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]];
-    const [bx, by] = [pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]];
-    const cross = ax * by - ay * bx;
-    if (cross) {
-      turn = Math.sign(cross);
+    const c = -cross(i);
+    if (c) {
+      turn = Math.sign(c);
       break;
     }
   }
-  const cos = Math.cos(-turn * 2 * Math.PI * (1 - bend));
-  const sin = Math.sin(-turn * 2 * Math.PI * (1 - bend));
+  // The shape changes with the L turned to lie as the check does (its head's arm along the
+  // check's), so the corner keeps its bend; the whole then turns from the L's way to the check's,
+  // plus the full turn.
+  const armAt = pivot >= 0 ? pivot : segOf(mid);
+  const arm = Math.atan2(pts[armAt + 1][1] - pts[armAt][1], pts[armAt + 1][0] - pts[armAt][0]);
+  let align = Math.atan2(up[1], up[0]) - arm;
+  align = Math.atan2(Math.sin(align), Math.cos(align));
+  const angle = -(1 - bend) * (align + turn * 2 * Math.PI);
+  const [ac, as] = [Math.cos(align), Math.sin(align)];
+  const [cos, sin] = [Math.cos(angle), Math.sin(angle)];
   const place = (f: number): Pt => {
     const q = pathAt(from + f * span);
     if (!bend) return q;
-    const c = checkAt(f);
-    const rx = (q[0] - c0[0]) * (1 - bend) + (c[0] - c1[0]) * bend;
-    const ry = (q[1] - c0[1]) * (1 - bend) + (c[1] - c1[1]) * bend;
+    const c = checkAt(toCheck(f));
+    const [qx, qy] = [q[0] - c0[0], q[1] - c0[1]];
+    const rx = (qx * ac - qy * as) * (1 - bend) + (c[0] - c1[0]) * bend;
+    const ry = (qx * as + qy * ac) * (1 - bend) + (c[1] - c1[1]) * bend;
     return [c0[0] + (c1[0] - c0[0]) * bend + rx * cos - ry * sin, c0[1] + (c1[1] - c0[1]) * bend + rx * sin + ry * cos];
   };
   const placed = fracs.map(place);
