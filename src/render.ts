@@ -487,8 +487,23 @@ function retractedArrow(
   };
   const c0 = bend ? mean((f) => pathAt(from + f * span)) : ([0, 0] as Pt);
   const c1 = bend ? mean(checkAt) : ([0, 0] as Pt);
-  const cos = Math.cos(-2 * Math.PI * (1 - bend));
-  const sin = Math.sin(-2 * Math.PI * (1 - bend));
+  // It keeps turning the way the head last turned on its way back to the tail (clockwise without
+  // a turn). Going back round a corner, the head swings from the later stretch's way to the
+  // earlier one's; with y down, a positive cross product is clockwise.
+  let turn = 1;
+  const stop = Math.min(total, PULLED);
+  for (let i = 1; i <= lastSeg; i++) {
+    if (at[i] <= stop) continue;
+    const [ax, ay] = [pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]];
+    const [bx, by] = [pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]];
+    const cross = ax * by - ay * bx;
+    if (cross) {
+      turn = Math.sign(cross);
+      break;
+    }
+  }
+  const cos = Math.cos(-turn * 2 * Math.PI * (1 - bend));
+  const sin = Math.sin(-turn * 2 * Math.PI * (1 - bend));
   const place = (f: number): Pt => {
     const q = pathAt(from + f * span);
     if (!bend) return q;
