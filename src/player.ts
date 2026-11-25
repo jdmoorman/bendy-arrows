@@ -322,7 +322,7 @@ function drawLevels() {
       renderBoard(svg, p, { coordinates: false, pad: padFor(p, false, false), segments: started ? new Set(marks.segments) : undefined, xMarks: started ? new Set(marks.xMarks) : undefined });
       b.dataset.code = code;
       b.append(svg);
-      // Solved: a tick; with a gold star (no hints, and for a one-shot no backtracks), a star.
+      // Solved: a tick; with a gold star (no hints), a star.
       const gold = done && storage.isGold(code);
       b.classList.toggle('gold', gold);
       if (done) b.append(el('span', `level-check${gold ? ' gold' : ''}`, gold ? ICONS.star : ICONS.check));

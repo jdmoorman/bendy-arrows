@@ -49,6 +49,6 @@ export const ICONS = {
   exit: icon('exit.svg'),
   /** The filter, filled in: a column whose filter is on. */
   filterOn: icon('filter-on.svg'),
-  /** A star, for a level solved with no hints (and, for a one-shot, no backtracks). */
+  /** A star, for a level solved with no hints. */
   star: icon('star.svg'),
 };

@@ -38,7 +38,7 @@ const LIBRARY_KEY = 'bendyarrows.library.v1';
 const SESSION_KEY = 'bendyarrows.session.v1';
 const SETTINGS_KEY = 'bendyarrows.settings.v1';
 const SOLVED_KEY = 'bendyarrows.solved.v1';
-/** Puzzles solved with a gold star: no hints (and, for a one-shot, no backtracks). */
+/** Puzzles solved with a gold star: no hints. */
 const GOLD_KEY = 'bendyarrows.gold.v1';
 /** Old solve times (the timer is gone): read once to seed SOLVED_KEY. */
 const TIMES_KEY = 'hamiltonian.times.v1';
@@ -217,7 +217,7 @@ export class Storage {
     if (!list.includes(code)) this.write(SOLVED_KEY, [...list, code]);
   }
 
-  /** Share codes of puzzles solved with a gold star (no hints; for a one-shot, no backtracks either). */
+  /** Share codes of puzzles solved with a gold star (no hints). */
   private loadGold(): string[] {
     const list = this.read<unknown>(GOLD_KEY, []);
     return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : [];

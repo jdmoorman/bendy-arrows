@@ -440,9 +440,9 @@ export class PlayView {
     return { ...this.snapshot(), ...counts };
   }
 
-  /** Solved with a gold star: no hints, no mistake shown by auto-check (and, for a one-shot, no backtracks). */
+  /** Solved with a gold star: no hints and no mistake shown by auto-check (backtracks don't count against it). */
   get gold(): boolean {
-    return this.solved && !this.hintsUsed && !this.caught && (!this.strokeMode || !this.backtracks);
+    return this.solved && !this.hintsUsed && !this.caught;
   }
 
   /** One-shots: how many times the stroke has been taken back on this board. */

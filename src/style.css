@@ -1708,7 +1708,7 @@ img.icon {
   color: #fff;
   box-shadow: 0 0 0 2px var(--surface);
 }
-/* A gold star: solved with no hints (and, for a one-shot, no backtracks). */
+/* A gold star: solved with no hints. */
 .level-check.gold {
   background: rgb(234 179 8);
 }
