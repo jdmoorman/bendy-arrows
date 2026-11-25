@@ -348,7 +348,7 @@ export class LibraryView {
       const title = el('span');
       title.textContent = r.name;
       open.append(title);
-      if (r.status === 'Solved') open.append(el('span', 'lib-check', ICONS.checkBold));
+      if (r.status === 'Solved') open.append(el('span', 'lib-check', ICONS.check));
       open.setAttribute('aria-label', `Play ${r.name}`);
       open.addEventListener('click', (ev) => this.followHere(ev, () => this.open(r, 'play')));
       name.append(open);
