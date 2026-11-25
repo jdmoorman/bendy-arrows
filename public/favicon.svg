@@ -1,11 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
   <circle cx="64" cy="64" r="64" fill="#000"/>
-  <!-- The end arrow (fletched tail, triangular head) with a zigzag in its shaft. -->
-  <g transform="translate(64 64) scale(0.7) translate(-62.5 -58)" fill="#fff" stroke="#fff">
-    <path d="M30 94V64H90V32" fill="none" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
-    <g stroke-width="4" stroke-linejoin="round">
-      <polygon points="30,74 54,88 54,116 30,104 6,116 6,88"/>
-      <polygon points="90,0 61,34 119,34"/>
-    </g>
+  <!-- The solved arrow bent into a check mark (sized as on a 2×2 board): gold, outlined. -->
+  <g transform="translate(64 64) scale(0.4369) translate(-53.0 25.0)">
+    <path d="M0.0 0.0L41.4 41.4L115.9 -65.1" fill="none" stroke="#ca8a04" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
+    <g fill="#ca8a04" stroke="#ca8a04" stroke-width="10" stroke-linejoin="round"><polygon points="14.1,14.1 -12.7,21.2 -32.5,1.4 -7.1,-7.1 1.4,-32.5 21.2,-12.7"/><polygon points="134.3,-91.3 138.5,-46.9 91.0,-80.1"/></g>
+    <path d="M0.0 0.0L41.4 41.4L115.9 -65.1" fill="none" stroke="#facc15" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+    <g fill="#facc15" stroke="#facc15" stroke-width="4" stroke-linejoin="round"><polygon points="14.1,14.1 -12.7,21.2 -32.5,1.4 -7.1,-7.1 1.4,-32.5 21.2,-12.7"/><polygon points="134.3,-91.3 138.5,-46.9 91.0,-80.1"/></g>
   </g>
 </svg>
