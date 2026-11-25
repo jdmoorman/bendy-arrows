@@ -76,9 +76,11 @@ export interface Settings {
   coordinates: boolean;
   /** Hints draw the line or X they lead to (otherwise they only point to where to look and why). */
   hintMoves: boolean;
+  /** Play the board from the keyboard (the arrow keys or WASD). */
+  keyboard: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false, hintMoves: false };
+export const DEFAULT_SETTINGS: Settings = { checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false, hintMoves: false, keyboard: false };
 
 /** The player app's place: the pack last played, the tab shown, and unfinished boards. */
 export interface PlayerState {

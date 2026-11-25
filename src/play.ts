@@ -83,6 +83,8 @@ export class PlayView {
   private caught = false;
   /** The Hints show the move setting. */
   private hintMoves = false;
+  /** Keyboard controls (a setting): the arrow keys or WASD play the board. */
+  private keyboard = false;
   /** Solutions of the puzzle, found once in the background when Hint first needs them. */
   private solutions: Promise<number[][]> | null = null;
   private solutionsRun: SolverRun | null = null;
@@ -351,6 +353,11 @@ export class PlayView {
     this.render();
   }
 
+  /** Whether the arrow keys (or WASD) play the board. */
+  setKeyboard(on: boolean): void {
+    this.keyboard = on;
+  }
+
   setAutoCheck(on: boolean): void {
     this.autoCheck = on;
     this.render();
@@ -413,9 +420,10 @@ export class PlayView {
       action.run();
       return true;
     }
-    // One-shot mode: the arrow keys (or WASD) move the stroke's head, back over the stroke to take it back.
+    // One-shot mode, with keyboard controls on: the arrow keys (or WASD) move the stroke's head,
+    // back over the stroke to take it back.
     const step = KEY_STEPS[ev.key.length === 1 ? ev.key.toLowerCase() : ev.key];
-    if (!mod && !ev.altKey && step && this.strokeMode && this.puzzle.endpoints.length) {
+    if (this.keyboard && !mod && !ev.altKey && step && this.strokeMode && this.puzzle.endpoints.length) {
       this.strokeKey(step[0], step[1]);
       return true;
     }
