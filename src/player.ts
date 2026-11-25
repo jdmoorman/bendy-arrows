@@ -53,9 +53,9 @@ const app = document.getElementById('app')!;
 app.innerHTML = `
   <header class="app-header">
     <h1 class="app-title">BendyArrows</h1>
-    <button class="btn icon" data-act="exit" aria-label="Exit to the levels" title="Exit to the levels">${ICONS.exit}</button>
-    <button class="btn icon touch-only" data-act="share" aria-label="Share or open a puzzle">${ICONS.share}</button>
-    <button class="btn icon" data-act="settings" aria-label="Settings">${ICONS.settings}</button>
+    <button class="btn labelled" data-act="exit" title="Exit to the levels">${ICONS.exit}<span>Exit</span></button>
+    <button class="btn labelled touch-only" data-act="share" title="Share or open a puzzle">${ICONS.share}<span>Share</span></button>
+    <button class="btn labelled" data-act="settings">${ICONS.settings}<span>Settings</span></button>
   </header>
   <main class="views"></main>
 `;
@@ -64,6 +64,7 @@ const storage = new Storage();
 let settings = storage.loadSettings();
 applySettings(settings);
 const titleEl = app.querySelector<HTMLElement>('.app-title')!;
+const header = app.querySelector<HTMLElement>('.app-header')!;
 const play = new PlayView();
 const levels = el('div', 'view levels-view hidden');
 app.querySelector('.views')!.append(play.el, levels);
@@ -131,7 +132,18 @@ function showTitle() {
     const d = difficultyBadge(currentCode);
     if (d) titleEl.append(d);
   }
+  fitHeader();
 }
+
+/**
+ * The header's buttons show their names beside their icons, unless that cuts the title short:
+ * then the names go in small type under the icons. Checked whenever the title or the width changes.
+ */
+function fitHeader() {
+  header.classList.remove('compact');
+  if (titleEl.scrollWidth > titleEl.clientWidth) header.classList.add('compact');
+}
+new ResizeObserver(fitHeader).observe(header);
 
 // --- Difficulty -------------------------------------------------------------
 // A level's difficulty is how many hints a player alternating the easy rules and hints needs
