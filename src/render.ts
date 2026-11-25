@@ -450,16 +450,18 @@ function retractedArrow(
   };
 
   // The check: a short stroke down to the right, then a long one up to the right, in the middle
-  // of the board (nudged left and down, as the arrowhead sticks out up to the right).
-  const long = Math.max(130, Math.min(280, Math.min(p.w, p.h) * CELL * 0.5));
+  // of the board (nudged left and down, as the arrowhead sticks out up to the right). It looks
+  // the same on every board: as on a 3×3 one, grown with the board, its line as thick.
+  const long = Math.max(130, Math.min(p.w, p.h) * CELL * 0.5);
+  const grow = long / 150;
   const short = long * 0.45;
   const down: Pt = [Math.SQRT1_2, Math.SQRT1_2];
   const up: Pt = [Math.cos(-0.96), Math.sin(-0.96)];
   const a0: Pt = [0, 0];
   const v0: Pt = [down[0] * short, down[1] * short];
   const e0: Pt = [v0[0] + up[0] * long, v0[1] + up[1] * long];
-  const cx = pad + (p.w * CELL) / 2 - (Math.min(a0[0], e0[0]) + Math.max(a0[0], e0[0])) / 2 - 10;
-  const cy = pad + (p.h * CELL) / 2 - (Math.min(a0[1], e0[1]) + v0[1]) / 2 + 12;
+  const cx = pad + (p.w * CELL) / 2 - (Math.min(a0[0], e0[0]) + Math.max(a0[0], e0[0])) / 2 - 10 * grow;
+  const cy = pad + (p.h * CELL) / 2 - (Math.min(a0[1], e0[1]) + v0[1]) / 2 + 12 * grow;
   const A: Pt = [a0[0] + cx, a0[1] + cy];
   const V: Pt = [v0[0] + cx, v0[1] + cy];
   const E: Pt = [e0[0] + cx, e0[1] + cy];
@@ -556,19 +558,23 @@ function retractedArrow(
     const uy = (b[1] - a[1]) / len;
     return offsets.map(([f, side]) => `${o[0] + ux * f - uy * side},${o[1] + uy * f + ux * side}`).join(' ');
   };
+  // The line, head and tail thicken as it grows into the check (widths as in style.css).
+  const w = 1 + (grow - 1) * bend;
+  const width = (base: number) => (w === 1 ? '' : ` style="stroke-width:${base * w}"`);
+  const scaled = (offsets: [number, number][]) => offsets.map(([f, side]): [number, number] => [f * w, side * w]);
   const n = placed.length;
   const ends: string[] = [];
-  if (tailStub) ends.push(shape(placed[0], placed[0], placed[1], [[20, 0], [6, 24], [-22, 24], [-10, 0], [-22, -24], [6, -24]]));
-  if (headStub) ends.push(shape(placed[n - 1], placed[n - 2], placed[n - 1], [[32, 0], [-2, 29], [-2, -29]]));
+  if (tailStub) ends.push(shape(placed[0], placed[0], placed[1], scaled([[20, 0], [6, 24], [-22, 24], [-10, 0], [-22, -24], [6, -24]])));
+  if (headStub) ends.push(shape(placed[n - 1], placed[n - 2], placed[n - 1], scaled([[32, 0], [-2, 29], [-2, -29]])));
   // The ends are drawn like the line, outlined like it (all the outlines first, so none cuts
   // across a fill).
-  const poly = (cls: string) => ends.map((pts) => `<polygon class="${cls}" points="${pts}"/>`).join('');
+  const poly = (cls: string, base: number) => ends.map((pts) => `<polygon class="${cls}" points="${pts}"${width(base)}/>`).join('');
   return {
     body:
-      (body ? `<path class="seg-edge" d="${body}"/>` : '') +
-      poly('head-edge') +
-      (body ? `<path class="seg" d="${body}"/>` : '') +
-      poly('head-fill'),
+      (body ? `<path class="seg-edge" d="${body}"${width(28)}/>` : '') +
+      poly('head-edge', 10) +
+      (body ? `<path class="seg" d="${body}"${width(22)}/>` : '') +
+      poly('head-fill', 4),
     tint: met ? bend : 0,
   };
 }
