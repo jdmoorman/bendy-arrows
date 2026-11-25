@@ -133,12 +133,8 @@ export class PlayView {
       </div>
       <p class="status" role="status" aria-live="polite"></p>`;
     this.svg = this.el.querySelector('svg')!;
-    // Upright, the board sits at the bottom of its space, right above the toolbar; side by side
-    // (landscape), it stays centred beside the buttons.
-    const upright = window.matchMedia('(orientation: portrait), (max-width: 599px)');
-    const place = () => this.svg.setAttribute('preserveAspectRatio', upright.matches ? 'xMidYMax meet' : 'xMidYMid meet');
-    place();
-    upright.addEventListener('change', place);
+    // The board sits centred in its space, between the header and the buttons (or beside them).
+    this.svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     this.status = this.el.querySelector('.status')!;
     // The only messages are hints (upright, they pop up over the buttons): a tap puts the hint
     // away, its highlight too.
@@ -661,11 +657,11 @@ export class PlayView {
     // In a one-shot, only those carrying the stroke on from its head (the path from the tail)
     // (and those where it breaks; the tiles the hint is about stay green even where it breaks).
     const trial = d?.rule === 'trial' && !this.hintMoves ? trialPreview(this.puzzle, this.segments, d) : null;
-      tightCoordinates: true,
     for (const c of trial?.broken ?? []) if (!focus.includes(c)) errorCells.add(c);
     const phantom = new Set(trial?.phantom ?? []);
     renderBoard(this.svg, this.puzzle, {
       pad: padFor(this.puzzle),
+      tightCoordinates: true,
       segments: d && this.hintMoves ? new Set([...this.segments, ...d.segments]) : this.segments,
       xMarks: d && this.hintMoves ? new Set([...this.xMarks, ...d.xs]) : this.xMarks,
       highlight: d && this.hintMoves ? new Set([...d.segments, ...d.xs]) : undefined,
