@@ -661,6 +661,7 @@ export class PlayView {
     // In a one-shot, only those carrying the stroke on from its head (the path from the tail)
     // (and those where it breaks; the tiles the hint is about stay green even where it breaks).
     const trial = d?.rule === 'trial' && !this.hintMoves ? trialPreview(this.puzzle, this.segments, d) : null;
+      tightCoordinates: true,
     for (const c of trial?.broken ?? []) if (!focus.includes(c)) errorCells.add(c);
     const phantom = new Set(trial?.phantom ?? []);
     renderBoard(this.svg, this.puzzle, {

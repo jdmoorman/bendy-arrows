@@ -51,6 +51,11 @@ export interface RenderOptions {
   highlight?: Set<number>;
   /** Column letters and row numbers around the board (the Coordinates setting by default). */
   coordinates?: boolean;
+  /**
+   * The letters and numbers sit right by the grid (under an end's arrow, if one comes out there),
+   * and the margin beyond is cropped off. Not while editing, where an end can go anywhere.
+   */
+  tightCoordinates?: boolean;
   /** Borders to suggest walls on, drawn dashed on top; and walls to suggest taking away, in red. */
   suggestWalls?: number[];
   suggestClearWalls?: number[];
@@ -79,7 +84,16 @@ const OUT: Record<Side, [number, number]> = { top: [0, -1], right: [1, 0], botto
 export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}): void {
   const pad = o.pad ?? PAD;
   const { width, height } = boardSize(p, pad);
-  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  const coords = (o.coordinates ?? showCoordinates) && pad >= COORD_PAD;
+  // Tight coordinates: the margin past the labels, or past the arrows on a side an end comes out of.
+  const tight = !!o.tightCoordinates && coords;
+  const spare = (side: Side) =>
+    !tight ? 0 : p.endpoints.some((e) => e.kind === 'port' && portSide(p, e.port)[0] === side) ? pad - PORT_PAD : pad - PAD - COORD_PAD;
+  const top = spare('top');
+  const left = spare('left');
+  const right = spare('right');
+  const bottom = spare('bottom');
+  svg.setAttribute('viewBox', `${left} ${top} ${width - left - right} ${height - top - bottom}`);
   svg.dataset.pad = String(pad);
   svg.classList.toggle('solved', !!o.solved);
   svg.classList.toggle('gold', !!o.solved && !!o.gold);
@@ -215,6 +229,28 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   parts.push(`<rect class="outer" x="${pad}" y="${pad}" width="${p.w * CELL}" height="${p.h * CELL}" rx="4"/>`);
   parts.push('</g>');
 
+  // Coordinates: letters above and below the columns, numbers either side of the rows. In the
+  // outermost band of the margin, clear of end arrows; or, tight, right by the grid, under the
+  // arrows (so drawn before them).
+  if (coords) {
+    const mid = COORD_PAD / 2;
+    const near = PAD + mid;
+    const at = (side: Side) =>
+      tight
+        ? side === 'top' || side === 'left' ? pad - near : (side === 'bottom' ? height : width) - pad + near
+        : side === 'top' ? top + mid : side === 'left' ? left + mid : side === 'bottom' ? height - bottom - mid : width - right - mid;
+    parts.push('<g class="coords">');
+    for (let c = 0; c < p.w; c++) {
+      const x = pad + (c + 0.5) * CELL;
+      parts.push(`<text x="${x}" y="${at('top')}">${columnName(c)}</text>`, `<text x="${x}" y="${at('bottom')}">${columnName(c)}</text>`);
+    }
+    for (let r = 0; r < p.h; r++) {
+      const y = pad + (r + 0.5) * CELL;
+      parts.push(`<text x="${at('left')}" y="${y}">${r + 1}</text>`, `<text x="${at('right')}" y="${y}">${r + 1}</text>`);
+    }
+    parts.push('</g>');
+  }
+
   // Fixed ends: a path stub from the tile centre through the frame, with the
   // arrow's tail outside at the entrance and its head at the exit.
   if (ends.length) {
@@ -263,15 +299,6 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
     parts.push('</g>');
   }
 
-  // Coordinates in the outermost band of the margin, clear of end arrows: letters above the
-  // columns, numbers left of the rows.
-  if ((o.coordinates ?? showCoordinates) && pad >= COORD_PAD) {
-    const mid = COORD_PAD / 2;
-    parts.push('<g class="coords">');
-    for (let c = 0; c < p.w; c++) parts.push(`<text x="${pad + (c + 0.5) * CELL}" y="${mid}">${columnName(c)}</text>`);
-    for (let r = 0; r < p.h; r++) parts.push(`<text x="${mid}" y="${pad + (r + 0.5) * CELL}">${r + 1}</text>`);
-    parts.push('</g>');
-  }
 
   for (const e of o.suggestWalls ?? []) {
     const [x1, y1, x2, y2] = borderLine(e);
