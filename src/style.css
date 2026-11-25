@@ -1218,13 +1218,6 @@ img.icon {
   min-width: 0;
   padding: 0 8px;
 }
-@media (max-width: 420px) {
-  .play-view .toolbar-row > [data-act='undo'] .icon,
-  .play-view .toolbar-row > [data-act='redo'] .icon,
-  .play-view .toolbar-row > [data-act='hint'] .icon {
-    display: none;
-  }
-}
 
 /* A row under the editor's buttons for the hint count; it keeps its height when
    empty so the board doesn't jump. */
