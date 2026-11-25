@@ -47,6 +47,8 @@ export interface RenderOptions {
   pad?: number;
   /** Tiles to shade in the highlight colour (e.g. the tile a hint is about). */
   focusCells?: Set<number>;
+  /** The keyboard cursor's tile, outlined on top. */
+  cursor?: number;
   /** Segments and X marks to draw in the highlight colour (e.g. the latest logic step). */
   highlight?: Set<number>;
   /** Column letters and row numbers around the board (the Coordinates setting by default). */
@@ -317,6 +319,12 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
     const [r, c] = cellRC(p, cell);
     const inset = CELL * 0.12;
     parts.push(`<rect class="tile-suggest" x="${pad + c * CELL + inset}" y="${pad + r * CELL + inset}" width="${CELL - 2 * inset}" height="${CELL - 2 * inset}" rx="8"/>`);
+  }
+
+  if (o.cursor !== undefined) {
+    const [r, c] = cellRC(p, o.cursor);
+    const inset = CELL * 0.06;
+    parts.push(`<rect class="cursor" x="${pad + c * CELL + inset}" y="${pad + r * CELL + inset}" width="${CELL - 2 * inset}" height="${CELL - 2 * inset}" rx="10"/>`);
   }
 
   svg.innerHTML = parts.join('');

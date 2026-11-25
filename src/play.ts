@@ -3,7 +3,7 @@ import { solveInBackground, type SolverRun } from './solver-client';
 import { findHint, findStrokeHint, hintPrompt, strokeFrom, trialPreview, type Hint } from './logic';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
-import { cellAt, cellEdges, cellRC, edgeBetween, isOneShot, isUsableEdge, type Puzzle } from './model';
+import { cellAt, cellEdges, cellRC, edgeBetween, endpointCells, isOneShot, isUsableEdge, type Puzzle } from './model';
 
 /** One-shot mode's keys that move the stroke's head: row and column steps. */
 const KEY_STEPS: Record<string, [number, number]> = {
@@ -85,6 +85,11 @@ export class PlayView {
   private hintMoves = false;
   /** Keyboard controls (a setting): the arrow keys or WASD play the board. */
   private keyboard = false;
+  /** Classic puzzles with keyboard controls: the tile the cursor is on, and whether it shows (it hides when the board is touched). */
+  private cursor = 0;
+  private cursorShown = false;
+  /** Keys held down that mark as the cursor moves: Z draws (or takes back) lines, X puts (or takes off) Xs. */
+  private held = new Set<string>();
   /** Solutions of the puzzle, found once in the background when Hint first needs them. */
   private solutions: Promise<number[][]> | null = null;
   private solutionsRun: SolverRun | null = null;
@@ -171,6 +176,10 @@ export class PlayView {
     attachBoardInput(this.svg, () => this.puzzle, {
       kind: () => 'path',
       onGestureStart: () => {
+        if (this.cursorShown) {
+          this.cursorShown = false;
+          this.render();
+        }
         this.changed = false;
         this.dragMode = 'draw';
         this.startedOnSegment = false;
@@ -245,6 +254,12 @@ export class PlayView {
     this.shownHint = null;
     this.solved = checkSolution(p, this.segments).solved;
     this.announce.textContent = '';
+    // The keyboard cursor starts at the arrow's tail (the entrance), or mid-board without ends.
+    this.cursor = p.endpoints.length ? endpointCells(p)[0] : cellAt(p, Math.floor((p.h - 1) / 2), Math.floor((p.w - 1) / 2));
+    // With keyboard controls on, a classic level opens with the cursor showing and in charge: a
+    // button left focused (e.g. Next level) lets go, so keys go to the board.
+    this.cursorShown = this.keyboard;
+    if (this.keyboard && !isOneShot(p) && document.activeElement instanceof HTMLElement) document.activeElement.blur();
     this.log.load(p);
     const action = this.solvedAction();
     this.nextBtn.querySelector('span')!.textContent = action?.label ?? '';
@@ -355,7 +370,21 @@ export class PlayView {
 
   /** Whether the arrow keys (or WASD) play the board. */
   setKeyboard(on: boolean): void {
+    if (on !== this.keyboard) this.cursorShown = on;
     this.keyboard = on;
+    this.held.clear();
+    this.render();
+  }
+
+  /** Classic puzzles with keyboard controls: the cursor moves (and draws) on the arrow keys or WASD. */
+  private get cursorKeys(): boolean {
+    return this.keyboard && !this.strokeMode;
+  }
+
+  /** A key was let go (or the window lost focus, with no key named): stop marking with it. */
+  handleKeyUp(ev?: KeyboardEvent): void {
+    if (ev) this.held.delete(ev.key.toLowerCase());
+    else this.held.clear();
   }
 
   setAutoCheck(on: boolean): void {
@@ -403,8 +432,13 @@ export class PlayView {
       this.render();
       return true;
     }
-    // Z or U undoes the last move; H gets a hint (like the Hint button).
+    // Z or U undoes the last move; H gets a hint (like the Hint button). With the keyboard cursor,
+    // Z and X are held down to mark as it moves instead.
     const plain = !mod && !ev.altKey && ev.key.length === 1 ? ev.key.toLowerCase() : '';
+    if (this.cursorKeys && (plain === 'z' || plain === 'x')) {
+      this.held.add(plain);
+      return true;
+    }
     if (plain === 'z' || plain === 'u') {
       this.undo();
       return true;
@@ -427,7 +461,38 @@ export class PlayView {
       this.strokeKey(step[0], step[1]);
       return true;
     }
+    if (this.cursorKeys && !mod && !ev.altKey && step) {
+      this.cursorKey(step[0], step[1]);
+      return true;
+    }
     return false;
+  }
+
+  /**
+   * Keyboard cursor: move a tile (row, column steps). Holding Z draws a line along the way, or takes
+   * one back if it's there; holding X puts an X on the border crossed, or takes one off. If the
+   * cursor was hidden (by touching the board), the first press only brings it back into view.
+   */
+  private cursorKey(dr: number, dc: number) {
+    if (!this.cursorShown) {
+      this.cursorShown = true;
+      return this.render();
+    }
+    const [r, c] = cellRC(this.puzzle, this.cursor);
+    if (r + dr < 0 || c + dc < 0 || r + dr >= this.puzzle.h || c + dc >= this.puzzle.w) return;
+    const to = cellAt(this.puzzle, r + dr, c + dc);
+    const e = edgeBetween(this.puzzle, this.cursor, to);
+    this.changed = false;
+    if (this.held.has('z')) {
+      if (this.segments.has(e)) this.setSegment(e, false);
+      else if (canPlace(this.puzzle, e)) this.setSegment(e, true);
+    } else if (this.held.has('x') && this.canMark(e)) {
+      this.setX(e, !this.xMarks.has(e));
+    }
+    this.cursor = to;
+    if (this.changed) this.afterChange();
+    this.changed = false;
+    this.render();
   }
 
   /** One-shot mode: move the stroke's head a tile (row, column steps), or back along the stroke. */
@@ -696,6 +761,7 @@ export class PlayView {
       errorEdges,
       solved: this.solved,
       gold: this.gold,
+      cursor: this.cursorKeys && this.cursorShown ? this.cursor : undefined,
     });
 
     const kind = hint ? (hint.kind === 'mistake' || hint.kind === 'wrong' ? 'error' : 'hint') : '';

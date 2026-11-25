@@ -401,6 +401,8 @@ document.addEventListener('keydown', (ev) => {
   if (document.querySelector('dialog[open]') || tab !== 'play') return;
   if (play.handleKey(ev)) ev.preventDefault();
 });
+document.addEventListener('keyup', (ev) => play.handleKeyUp(ev));
+window.addEventListener('blur', () => play.handleKeyUp());
 
 /** A puzzle from a shared link ("#p=CODE"): played as its level if it is one. */
 function openLink(): boolean {
