@@ -202,7 +202,7 @@ a.btn {
   cursor: pointer;
   pointer-events: auto;
 }
-.grid-handle svg {
+.grid-handle .icon {
   width: 16px;
   height: 16px;
 }
@@ -518,9 +518,23 @@ a.btn {
   gap: 6px;
 }
 
-.seg-btn svg,
-.btn svg {
+/* The icons (src/icons.ts): image files in public/icons/. A one-colour icon is a mask filled
+   with the text colour; a full-colour one is an <img>. Pixel art stays sharp when scaled. */
+.icon {
+  display: inline-block;
   flex: none;
+  width: 22px;
+  height: 22px;
+  vertical-align: middle;
+  image-rendering: pixelated;
+}
+span.icon {
+  background-color: currentColor;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
+}
+img.icon {
+  object-fit: contain;
 }
 
 /* Only on touch screens (the player's Share: elsewhere the address bar shows the puzzle's link). */
@@ -941,16 +955,13 @@ a.btn {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.lib-filter-btn svg {
+.lib-filter-btn .icon {
   width: 14px;
   height: 14px;
 }
 .lib-filter-btn.active {
   color: var(--accent);
   opacity: 1;
-}
-.lib-filter-btn.active svg {
-  fill: currentColor;
 }
 .lib-open {
   appearance: none;
@@ -987,10 +998,9 @@ a.btn {
   font-weight: 700;
   font-size: 0.8rem;
 }
-.lib-check svg {
+.lib-check .icon {
   width: 15px;
   height: 15px;
-  stroke-width: 3;
 }
 .lib-actions {
   padding: 0 2px;
@@ -1124,7 +1134,7 @@ a.btn {
 
 /* Logic helper and the solution check share a row; drop the icons when it's tight. */
 @media (max-width: 480px) {
-  .logic-row > .btn:not(.icon-only) svg {
+  .logic-row > .btn:not(.icon-only) .icon {
     display: none;
   }
 }
@@ -1173,9 +1183,9 @@ a.btn {
   padding: 0 8px;
 }
 @media (max-width: 420px) {
-  .play-view .toolbar-row > [data-act='undo'] svg,
-  .play-view .toolbar-row > [data-act='redo'] svg,
-  .play-view .toolbar-row > [data-act='hint'] svg {
+  .play-view .toolbar-row > [data-act='undo'] .icon,
+  .play-view .toolbar-row > [data-act='redo'] .icon,
+  .play-view .toolbar-row > [data-act='hint'] .icon {
     display: none;
   }
 }
@@ -1457,7 +1467,7 @@ a.btn {
   color: var(--text-muted);
   transition: transform 0.15s;
 }
-.pack-chevron svg {
+.pack-chevron .icon {
   width: 18px;
   height: 18px;
 }
@@ -1588,7 +1598,7 @@ a.btn {
   border-color: rgb(234 179 8);
   background: color-mix(in srgb, rgb(234 179 8) 22%, var(--surface));
 }
-.level-check svg {
+.level-check .icon {
   width: 14px;
   height: 14px;
 }
@@ -1757,7 +1767,7 @@ a.btn {
   color: var(--accent);
   outline: none;
 }
-.pack-add svg {
+.pack-add .icon {
   width: 28px;
   height: 28px;
 }
@@ -1817,7 +1827,7 @@ a.btn {
 .pack-new {
   margin-top: 14px;
 }
-.pack-new svg {
+.pack-new .icon {
   width: 18px;
   height: 18px;
 }
@@ -1846,16 +1856,16 @@ a.btn {
 .pack-tool.pack-delete:hover:not(:disabled) {
   color: var(--error);
 }
-.pack-tool svg {
+.pack-tool .icon {
   width: 18px;
   height: 18px;
 }
 /* A pack's fold button points down while open, right while folded; folded, its levels hide. */
-.pack-fold svg {
+.pack-fold .icon {
   transform: rotate(90deg);
   transition: transform 0.15s;
 }
-.pack-section.folded .pack-fold svg {
+.pack-section.folded .pack-fold .icon {
   transform: none;
 }
 .pack-section.folded .pack-tiles {
@@ -1915,7 +1925,7 @@ a.btn {
 .pack-tile-remove:hover {
   color: var(--error);
 }
-.pack-tile-remove svg {
+.pack-tile-remove .icon {
   width: 18px;
   height: 18px;
 }

@@ -322,7 +322,7 @@ export class LibraryView {
       if (c !== NAME_COLUMN) {
         // Each column's filter sits in its header.
         const on = filterActive(this.state.filters[c.key]);
-        const fb = el('button', `lib-filter-btn${on ? ' active' : ''}`, ICONS.filter);
+        const fb = el('button', `lib-filter-btn${on ? ' active' : ''}`, on ? ICONS.filterOn : ICONS.filter);
         fb.setAttribute('aria-label', `Filter by ${c.label.toLowerCase()}${on ? ' (on)' : ''}`);
         fb.title = `Filter by ${c.label.toLowerCase()}`;
         fb.addEventListener('click', () => this.openFilters([c], c.label));
@@ -348,7 +348,7 @@ export class LibraryView {
       const title = el('span');
       title.textContent = r.name;
       open.append(title);
-      if (r.status === 'Solved') open.append(el('span', 'lib-check', ICONS.check));
+      if (r.status === 'Solved') open.append(el('span', 'lib-check', ICONS.checkBold));
       open.setAttribute('aria-label', `Play ${r.name}`);
       open.addEventListener('click', (ev) => this.followHere(ev, () => this.open(r, 'play')));
       name.append(open);

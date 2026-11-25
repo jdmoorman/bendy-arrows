@@ -1,45 +1,62 @@
-/** Small inline SVG icons (stroke = currentColor). */
-const svg = (body: string) =>
-  `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+/**
+ * The icons. Each is an image file in public/icons/, named below: to change one, replace its
+ * file (or point its entry at another, e.g. a .png).
+ *
+ * A one-colour icon is used as a mask, filled with the text colour around it, so it follows the
+ * theme, greyed-out buttons and so on: only its shape (the file's opaque pixels) matters. Pass
+ * `true` as the second argument for an icon in full colour, shown just as the file has it.
+ */
+const icon = (file: string, fullColour = false) => {
+  const url = `${import.meta.env.BASE_URL}icons/${file}`;
+  return fullColour
+    ? `<img class="icon" src="${url}" alt="" aria-hidden="true">`
+    : `<span class="icon" style="--icon: url('${url}')" aria-hidden="true"></span>`;
+};
 
 export const ICONS = {
-  undo: svg('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
-  redo: svg('<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>'),
-  check: svg('<path d="M20 6 9 17l-5-5"/>'),
-  clear: svg('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/>'),
-  line: svg('<circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M6 16V8h10"/>'),
-  x: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
-  menu: svg('<path d="M4 6h16M4 12h16M4 18h16"/>'),
-  share: svg('<path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/><path d="m16 6-4-4-4 4"/><path d="M12 2v13"/>'),
-  save: svg('<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>'),
-  library: svg('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5V21h16"/>'),
-  play: svg('<path d="M7 4v16l13-8z"/>'),
-  search: svg('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
-  eye: svg('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
-  transform: svg('<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>'),
-  dice: svg('<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/><circle cx="9" cy="15" r="1" fill="currentColor"/>'),
-  plus: svg('<path d="M12 5v14M5 12h14"/>'),
-  minus: svg('<path d="M5 12h14"/>'),
-  edit: svg('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>'),
-  settings: svg('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>'),
-  rotateLeft: svg('<path d="M3 4v5h5"/><path d="M3.5 9A9 9 0 1 1 6 18.4"/>'),
-  rotateRight: svg('<path d="M21 4v5h-5"/><path d="M20.5 9A9 9 0 1 0 18 18.4"/>'),
-  flipH: svg('<path d="M12 3v18"/><path d="M8 7 3 12l5 5V7z"/><path d="M16 7l5 5-5 5V7z"/>'),
-  flipV: svg('<path d="M3 12h18"/><path d="M7 8l5-5 5 5H7z"/><path d="M7 16l5 5 5-5H7z"/>'),
-  filter: svg('<path d="M3 5h18l-7 8v6l-4 2v-8z"/>'),
-  list: svg('<path d="M9 6h11M9 12h11M9 18h11"/><path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2"/>'),
-  step: svg('<path d="M5 5v14l9-7z"/><path d="M18 5v14"/>'),
-  fastForward: svg('<path d="M3 5v14l8-7z"/><path d="M12 5v14l8-7z"/>'),
-  rewind: svg('<path d="M21 5v14l-8-7z"/><path d="M12 5v14l-8-7z"/>'),
-  stepBack: svg('<path d="M19 5v14l-9-7z"/><path d="M6 5v14"/>'),
-  bulb: svg('<path d="M9 18h6M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/>'),
-  chevron: svg('<path d="m9 6 6 6-6 6"/>'),
-  grid: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>'),
-  fill: svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v12M15 9v12M3 9h6M15 15h6"/>'),
-  eraser: svg('<path d="m7 21-4.3-4.3a1 1 0 0 1 0-1.4l10-10a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4L11 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/>'),
-  arrowUp: svg('<path d="M12 19V5"/><path d="m6 11 6-6 6 6"/>'),
-  arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
-  close: svg('<path d="M6 6l12 12M18 6 6 18"/>'),
+  undo: icon('undo.svg'),
+  redo: icon('redo.svg'),
+  check: icon('check.svg'),
+  clear: icon('clear.svg'),
+  line: icon('line.svg'),
+  x: icon('x.svg'),
+  menu: icon('menu.svg'),
+  share: icon('share.svg'),
+  save: icon('save.svg'),
+  library: icon('library.svg'),
+  play: icon('play.svg'),
+  search: icon('search.svg'),
+  eye: icon('eye.svg'),
+  transform: icon('transform.svg'),
+  dice: icon('dice.svg'),
+  plus: icon('plus.svg'),
+  minus: icon('minus.svg'),
+  edit: icon('edit.svg'),
+  settings: icon('settings.svg'),
+  rotateLeft: icon('rotate-left.svg'),
+  rotateRight: icon('rotate-right.svg'),
+  flipH: icon('flip-h.svg'),
+  flipV: icon('flip-v.svg'),
+  filter: icon('filter.svg'),
+  list: icon('list.svg'),
+  step: icon('step.svg'),
+  fastForward: icon('fast-forward.svg'),
+  rewind: icon('rewind.svg'),
+  stepBack: icon('step-back.svg'),
+  bulb: icon('bulb.svg'),
+  chevron: icon('chevron.svg'),
+  grid: icon('grid.svg'),
+  fill: icon('fill.svg'),
+  eraser: icon('eraser.svg'),
+  arrowUp: icon('arrow-up.svg'),
+  arrowDown: icon('arrow-down.svg'),
+  close: icon('close.svg'),
   /** An arrow leaving through a door. */
-  exit: svg('<path d="M15 21h4a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-4"/><path d="m8 17-5-5 5-5"/><path d="M3 12h12"/>'),
+  exit: icon('exit.svg'),
+  /** The filter, filled in: a column whose filter is on. */
+  filterOn: icon('filter-on.svg'),
+  /** A heavier check, for small sizes. */
+  checkBold: icon('check-bold.svg'),
+  /** A star, for a level solved with no hints (and, for a one-shot, no backtracks). */
+  star: icon('star.svg'),
 };

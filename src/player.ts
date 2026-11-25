@@ -147,8 +147,6 @@ function hintsFor(code: string): HintCount | null {
 }
 /** Difficulty from 1 to 4 (see difficulty.ts, which the generator uses too). */
 const difficulty = (h: HintCount) => DIFFICULTIES.indexOf(difficultyOf(h)) + 1;
-/** A gold star, for a level solved with no hints (and, for a one-shot, no backtracks). */
-const STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" stroke="none" d="M12 2.6l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17l-5.7 3.1 1.2-6.4L2.8 9.3l6.4-.8z"/></svg>';
 /** Four dots, the first `difficulty` coloured in; null until it's worked out. */
 function difficultyBadge(code: string): HTMLElement | null {
   const h = hintsFor(code);
@@ -290,7 +288,7 @@ function drawLevels() {
       // Solved: a tick; with a gold star (no hints, and for a one-shot no backtracks), a star.
       const gold = done && storage.isGold(code);
       b.classList.toggle('gold', gold);
-      if (done) b.append(el('span', `level-check${gold ? ' gold' : ''}`, gold ? STAR : ICONS.check));
+      if (done) b.append(el('span', `level-check${gold ? ' gold' : ''}`, gold ? ICONS.star : ICONS.check));
       const d = difficultyBadge(code);
       if (d) b.append(d);
       b.classList.toggle('solved', done);
