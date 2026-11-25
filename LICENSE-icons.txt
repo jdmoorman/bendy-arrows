@@ -1,6 +1,7 @@
 BendyArrows' icons (the image files in public/icons/, listed in src/icons.ts) are copies of
 Lucide icons (https://lucide.dev), some of those from Feather; the filled funnel and star are
-Lucide's funnel and star with a fill. Their licence follows. The rest of the project is under LICENSE.
+Lucide's funnel and star with a fill, and the die is Lucide's dice-4 with bigger pips. Their
+licence follows. The rest of the project is under LICENSE.
 
 ISC License
 
