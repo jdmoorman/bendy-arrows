@@ -91,6 +91,9 @@ export class PlayView {
   /** Bumped on every change, so a slow hint can tell the board moved on. */
   private changeCount = 0;
   private solved = false;
+  /** Says "Solved" to screen readers, which can't see the path change colour. */
+  private announce: HTMLElement;
+  private sideBySide: MediaQueryList;
   /** Every step taken on this puzzle, for the Share sheet's Copy solve log. */
   readonly log = new SolveLog();
 
@@ -122,20 +125,26 @@ export class PlayView {
       <div class="board-wrap"><svg class="board" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Puzzle board"></svg></div>
       <div class="toolbar">
         <div class="toolbar-row">
-          <button class="btn" data-act="undo" aria-label="Undo">${ICONS.undo}<span>Undo</span></button>
-          <button class="btn" data-act="redo" aria-label="Redo">${ICONS.redo}<span>Redo</span></button>
-          <button class="btn" data-act="hint" aria-label="Hint">${ICONS.bulb}<span>Hint</span></button>
+          <button class="btn" data-act="undo">${ICONS.undo}<span>Undo</span></button>
+          <button class="btn" data-act="redo">${ICONS.redo}<span>Redo</span></button>
+          <button class="btn" data-act="hint">${ICONS.bulb}<span>Hint</span></button>
         </div>
       </div>
       <div class="solved-row">
         <button class="btn" data-act="reset">${ICONS.reset}<span>Reset</span></button>
         <button class="btn primary" data-act="next"><span>Next level</span></button>
       </div>
-      <p class="status" role="status" aria-live="polite"></p>`;
+      <p class="status" role="status" aria-live="polite" title="Tap to put the hint away (or press Escape)"></p>
+      <p class="sr-only announce" role="status" aria-live="polite"></p>`;
     this.svg = this.el.querySelector('svg')!;
     // The board sits centred in its space, between the header and the buttons (or beside them).
     this.svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
     this.status = this.el.querySelector('.status')!;
+    this.announce = this.el.querySelector('.announce')!;
+    // Upright, the hint covers the buttons: they're out of reach (by Tab too) until it's put away.
+    // Side by side, it has a place of its own, so nothing is covered.
+    this.sideBySide = window.matchMedia('(min-width: 600px) and (orientation: landscape)');
+    this.sideBySide.addEventListener('change', () => this.render());
     // The only messages are hints (upright, they pop up over the buttons): a tap puts the hint
     // away, its highlight too.
     this.status.addEventListener('click', () => {
@@ -233,6 +242,7 @@ export class PlayView {
     this.history.clear();
     this.shownHint = null;
     this.solved = checkSolution(p, this.segments).solved;
+    this.announce.textContent = '';
     this.log.load(p);
     const action = this.solvedAction();
     this.nextBtn.querySelector('span')!.textContent = action?.label ?? '';
@@ -380,6 +390,12 @@ export class PlayView {
       this.redo();
       return true;
     }
+    // Escape puts a hint away (as a tap on it does).
+    if (ev.key === 'Escape' && this.shownHint) {
+      this.shownHint = null;
+      this.render();
+      return true;
+    }
     // Z or U undoes the last move; H gets a hint (like the Hint button).
     const plain = !mod && !ev.altKey && ev.key.length === 1 ? ev.key.toLowerCase() : '';
     if (plain === 'z' || plain === 'u') {
@@ -508,6 +524,7 @@ export class PlayView {
     this.render();
     this.onProgress?.(this.progress, this.solved);
     // Every time the board becomes solved (e.g. again after Reset or Undo), not just the first.
+    if (this.solved !== wasSolved) this.announce.textContent = this.solved ? (this.gold ? 'Solved, with a gold star' : 'Solved') : '';
     if (this.solved && !wasSolved) {
       this.log.note(`solved with ${this.hintsUsed} hint${this.hintsUsed === 1 ? '' : 's'}${this.strokeMode ? ` and ${this.backtracks} backtrack${this.backtracks === 1 ? '' : 's'}` : ''}${this.gold ? ' (gold star)' : ''}`);
       this.onSolved?.();
@@ -679,6 +696,8 @@ export class PlayView {
     // Solving needs no message: the path turning green (gold for a perfect solve) says it.
     const text = prompt ? prompt.text : hint ? hint.text : '';
     this.status.textContent = text;
+    const covered = !!text && !this.sideBySide.matches;
+    for (const row of this.el.querySelectorAll<HTMLElement>('.toolbar, .solved-row')) row.inert = covered;
 
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;

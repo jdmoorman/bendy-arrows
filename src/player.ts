@@ -131,6 +131,11 @@ function showTitle(short = false, stacked = false) {
   titleEl.classList.toggle('stacked', stacked);
   titleEl.textContent = tab === 'play' ? title(short) : 'BendyArrows';
   titleEl.title = tab === 'play' && short ? title() : '';
+  // Shortened, the name is shown as "S. 7" but read out in full.
+  if (tab === 'play' && short) {
+    titleEl.replaceChildren(el('span', '', title(true)), el('span', 'sr-only', title()));
+    titleEl.firstElementChild!.setAttribute('aria-hidden', 'true');
+  }
   if (tab === 'play' && currentCode) {
     const d = difficultyBadge(currentCode);
     if (d) titleEl.append(d);
