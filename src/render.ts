@@ -231,7 +231,7 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
     const y0 = pad + r * CELL;
     const x1 = x0 + CELL;
     const y1 = y0 + CELL;
-    const cls = o.removable?.blocked.has(cell) ? `wall removable ${o.removable.goal ?? ''}` : 'wall';
+    const cls = o.removable?.blocked.has(cell) ? `wall removable ${o.removable.goal ?? ''}` : 'wall block';
     parts.push(line(x0, y0, x1, y0, cls), line(x1, y0, x1, y1, cls), line(x1, y1, x0, y1, cls), line(x0, y1, x0, y0, cls));
   }
   parts.push('</g><g class="frame">');
@@ -261,6 +261,10 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   }
 
   const arrow = o.retract !== undefined && o.segments ? retractedArrow(p, o.segments, center, portPoint, o.retract, pad) : null;
+
+  // Once the arrow's head and tail have met, the board fades to the solved colour with the spin.
+  if (arrow?.tint) svg.style.setProperty('--celebrate', String(arrow.tint));
+  else svg.style.removeProperty('--celebrate');
 
   // Fixed ends: a path stub from the tile centre through the frame, with the
   // arrow's tail outside at the entrance and its head at the exit.
@@ -408,7 +412,7 @@ function retractedArrow(
   portPoint: (port: number) => { x: number; y: number; d: [number, number] },
   { pull, spin }: { pull: number; spin: number },
   pad: number,
-): { stubs: string; body: string; heads: string } | null {
+): { stubs: string; body: string; heads: string; tint: number } | null {
   const runs = edgeRuns(p, segments);
   if (runs.length !== 1 || runs[0].closed) return null;
   let cells = runs[0].cells;
@@ -468,6 +472,7 @@ function retractedArrow(
   const to = total - Math.max(0, Math.min(1, pull)) * Math.max(0, total - PULLED);
   const span = to - from || 1;
   const bend = Math.max(0, Math.min(1, spin));
+  const met = pull >= 1;
   // Points along the stretch showing: the path's corners, the check's, and evenly in between.
   const fs = new Set<number>([corner]);
   for (let i = 0; i <= 40; i++) fs.add(i / 40);
@@ -521,7 +526,7 @@ function retractedArrow(
   let pieceStub = false;
   for (let j = 1; j < placed.length; j++) {
     // Off the grid, it's all path (in the solved colour).
-    const stub = !bend && isStub(segOf(from + ((fracs[j - 1] + fracs[j]) / 2) * span));
+    const stub = !met && isStub(segOf(from + ((fracs[j - 1] + fracs[j]) / 2) * span));
     if (!piece || pieceStub !== stub) {
       if (piece) (pieceStub ? stubs : path).push(piece);
       piece = [placed[j - 1]];
@@ -541,16 +546,30 @@ function retractedArrow(
     return offsets.map(([f, side]) => `${o[0] + ux * f - uy * side},${o[1] + uy * f + ux * side}`).join(' ');
   };
   const n = placed.length;
-  let heads = '';
-  if (tailStub) {
-    const fins = shape(placed[0], placed[0], placed[1], [[20, 0], [6, 24], [-22, 24], [-10, 0], [-22, -24], [6, -24]]);
-    heads += `<polygon class="end-head" points="${fins}"/>`;
+  const ends: string[] = [];
+  if (tailStub) ends.push(shape(placed[0], placed[0], placed[1], [[20, 0], [6, 24], [-22, 24], [-10, 0], [-22, -24], [6, -24]]));
+  if (headStub) ends.push(shape(placed[n - 1], placed[n - 2], placed[n - 1], [[32, 0], [-2, 29], [-2, -29]]));
+  const stubPaths = stubs.map((r) => `<path class="end-seg" d="${d(r)}"/>`).join('');
+  if (!met) {
+    return {
+      stubs: stubPaths,
+      body: body ? `<path class="seg-edge" d="${body}"/><path class="seg" d="${body}"/>` : '',
+      heads: ends.map((pts) => `<polygon class="end-head" points="${pts}"/>`).join(''),
+      tint: 0,
+    };
   }
-  if (headStub) heads += `<polygon class="end-head" points="${shape(placed[n - 1], placed[n - 2], placed[n - 1], [[32, 0], [-2, 29], [-2, -29]])}"/>`;
+  // Once head and tail have met, they're the solved line's colours too, outlined like it (all the
+  // outlines first, so none cuts across a fill).
+  const poly = (cls: string) => ends.map((pts) => `<polygon class="${cls}" points="${pts}"/>`).join('');
   return {
-    stubs: stubs.map((r) => `<path class="end-seg" d="${d(r)}"/>`).join(''),
-    body: body ? `<path class="seg-edge" d="${body}"/><path class="seg" d="${body}"/>` : '',
-    heads,
+    stubs: stubPaths,
+    body:
+      (body ? `<path class="seg-edge" d="${body}"/>` : '') +
+      poly('head-edge') +
+      (body ? `<path class="seg" d="${body}"/>` : '') +
+      poly('head-fill'),
+    heads: '',
+    tint: bend,
   };
 }
 

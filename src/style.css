@@ -433,18 +433,64 @@ a.btn {
   stroke-linecap: round;
 }
 
-.board.solved .seg {
-  stroke: var(--path-solved);
-}
-.board.solved .seg-edge {
-  stroke: var(--path-solved-edge);
+.board.solved {
+  --solved-fill: var(--path-solved);
+  --solved-edge: var(--path-solved-edge);
 }
 /* Solved with a gold star: a gold path. */
-.board.solved.gold .seg {
-  stroke: rgb(250 204 21);
+.board.solved.gold {
+  --solved-fill: rgb(250 204 21);
+  --solved-edge: rgb(202 138 4);
 }
-.board.solved.gold .seg-edge {
-  stroke: rgb(202 138 4);
+.board.solved .seg {
+  stroke: var(--solved-fill);
+}
+.board.solved .seg-edge {
+  stroke: var(--solved-edge);
+}
+/* The solve animation's arrow, once its head and tail have met: outlined like the line. */
+.head-fill,
+.head-edge {
+  stroke-linejoin: round;
+}
+.head-fill {
+  fill: var(--solved-fill);
+  stroke: var(--solved-fill);
+  stroke-width: 4;
+}
+.head-edge {
+  fill: var(--solved-edge);
+  stroke: var(--solved-edge);
+  stroke-width: 10;
+}
+/* …and the board fades to the solved colour as it spins (--celebrate goes 0 to 1), the
+   checkerboard fading out as it does. */
+.board.solved .tile:not(.blocked, .focus, .error) {
+  fill: color-mix(in srgb, var(--solved-fill) calc(var(--celebrate, 0) * 40%), var(--tile));
+}
+.board.solved .tile.alt:not(.blocked, .focus, .error) {
+  fill: color-mix(
+    in srgb,
+    var(--solved-fill) calc(var(--celebrate, 0) * 40%),
+    color-mix(in srgb, var(--tile-alt) calc((1 - var(--celebrate, 0)) * 100%), var(--tile))
+  );
+}
+.no-checkerboard .board.solved .tile.alt:not(.blocked, .focus, .error) {
+  fill: color-mix(in srgb, var(--solved-fill) calc(var(--celebrate, 0) * 40%), var(--tile));
+}
+/* The lines between tiles, the grid's outer edge and the black tiles (and their rounded edges)
+   take the darker shade. */
+.board.solved .grid-line {
+  stroke: color-mix(in srgb, var(--solved-edge) calc(var(--celebrate, 0) * 45%), var(--grid-line));
+}
+.board.solved .tile.blocked:not(.removable) {
+  fill: color-mix(in srgb, var(--solved-edge) calc(var(--celebrate, 0) * 45%), var(--tile-blocked));
+}
+.board.solved .outer {
+  stroke: color-mix(in srgb, var(--solved-edge) calc(var(--celebrate, 0) * 45%), var(--wall));
+}
+.board.solved .wall.block {
+  stroke: color-mix(in srgb, var(--solved-edge) calc(var(--celebrate, 0) * 45%), var(--wall));
 }
 
 /* ---------- Status & toolbars ---------- */
