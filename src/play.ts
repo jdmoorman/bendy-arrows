@@ -484,6 +484,13 @@ export class PlayView {
     // One-shot mode: the arrow keys (or WASD) move the stroke's head,
     // back over the stroke to take it back.
     const step = arrowStep(ev);
+    // With nothing focused (say, after clicking off the board), the first move only brings the
+    // board back into focus, its cursor showing.
+    const nothingFocused = !document.activeElement || document.activeElement === document.body;
+    if (nothingFocused && !mod && !ev.altKey && step) {
+      this.focusBoard();
+      return true;
+    }
     if (this.boardFocused && !mod && !ev.altKey && step && this.strokeMode && this.puzzle.endpoints.length) {
       this.cursorShown = true;
       this.strokeKey(step[0], step[1]);
@@ -632,6 +639,8 @@ export class PlayView {
     if (this.solved && !wasSolved) {
       this.log.note(`solved with ${this.hintsUsed} hint${this.hintsUsed === 1 ? '' : 's'}${this.strokeMode ? ` and ${this.backtracks} backtrack${this.backtracks === 1 ? '' : 's'}` : ''}${this.gold ? ' (gold star)' : ''}`);
       this.onSolved?.();
+      // On to the next level: focus goes to its button (when there is one).
+      if (!this.nextBtn.classList.contains('hidden')) this.nextBtn.focus({ preventScroll: true });
     }
   }
 
@@ -770,8 +779,8 @@ export class PlayView {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const delay = 300;
     // Longer paths take a little longer to pull in, but never drag.
-    const pullTime = Math.min(1400, Math.max(500, 300 + this.segments.size * 30));
-    const spinTime = 700;
+    const pullTime = Math.min(2000, Math.max(700, 400 + this.segments.size * 42));
+    const spinTime = 1000;
     const start = performance.now() + delay;
     const tick = (now: number) => {
       const pull = Math.max(0, Math.min(1, (now - start) / pullTime));
