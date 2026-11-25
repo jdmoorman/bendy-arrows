@@ -92,6 +92,9 @@ export class PlayView {
   /** Bumped on every change, so a slow hint can tell the board moved on. */
   private changeCount = 0;
   private solved = false;
+  /** How far through the solve animation, during and after it; undefined before. */
+  private retract: { pull: number; spin: number } | undefined;
+  private retractFrame = 0;
   /** Says "Solved" to screen readers, which can't see the path change colour. */
   private announce: HTMLElement;
   private sideBySide: MediaQueryList;
@@ -268,6 +271,7 @@ export class PlayView {
     this.history.clear();
     this.shownHint = null;
     this.solved = checkSolution(p, this.segments).solved;
+    this.stopRetract();
     this.announce.textContent = '';
     // The keyboard cursor starts at the arrow's tail (the entrance), or mid-board without ends.
     this.cursor = p.endpoints.length ? endpointCells(p)[0] : cellAt(p, Math.floor((p.h - 1) / 2), Math.floor((p.w - 1) / 2));
@@ -619,6 +623,8 @@ export class PlayView {
     this.shownHint = this.shownHint?.kind === 'wrong' ? this.stillWrong(this.shownHint) : null;
     const wasSolved = this.solved;
     this.solved = checkSolution(this.puzzle, this.segments).solved;
+    if (!this.solved) this.stopRetract();
+    else if (!wasSolved) this.startRetract();
     this.render();
     this.onProgress?.(this.progress, this.solved);
     // Every time the board becomes solved (e.g. again after Reset or Undo), not just the first.
@@ -754,6 +760,36 @@ export class PlayView {
     this.render();
   }
 
+  /**
+   * Once solved, the arrow pulls itself in: its head slides back along the path to the tail,
+   * speeding up and taking the path up, then snaps off the grid and spins into a check mark in
+   * the middle. Not with reduced motion.
+   */
+  private startRetract() {
+    this.stopRetract();
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const delay = 300;
+    // Longer paths take a little longer to pull in, but never drag.
+    const pullTime = Math.min(1400, Math.max(500, 300 + this.segments.size * 30));
+    const spinTime = 700;
+    const start = performance.now() + delay;
+    const tick = (now: number) => {
+      const pull = Math.max(0, Math.min(1, (now - start) / pullTime));
+      const spin = Math.max(0, Math.min(1, (now - start - pullTime) / spinTime));
+      // Speeding up all the way into the tail; then flung off fast, settling as it lands.
+      this.retract = { pull: pull * pull, spin: 1 - (1 - spin) ** 3 };
+      this.render();
+      this.retractFrame = spin < 1 ? requestAnimationFrame(tick) : 0;
+    };
+    this.retractFrame = requestAnimationFrame(tick);
+  }
+
+  private stopRetract() {
+    cancelAnimationFrame(this.retractFrame);
+    this.retractFrame = 0;
+    this.retract = undefined;
+  }
+
   render(): void {
     if (!this.puzzle) return;
     const errorCells = new Set<number>();
@@ -786,6 +822,7 @@ export class PlayView {
       errorEdges,
       solved: this.solved,
       gold: this.gold,
+      retract: this.solved ? this.retract : undefined,
       cursor: this.cursorShown && this.boardFocused ? this.cursorTile() : undefined,
     });
     this.svg.setAttribute(

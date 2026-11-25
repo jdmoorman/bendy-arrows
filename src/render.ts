@@ -66,6 +66,13 @@ export interface RenderOptions {
   suggestClear?: number[];
   /** Walls and black tiles that could go without losing the unique solution, drawn in their own colour. */
   removable?: { walls: Set<number>; blocked: Set<number>; goal?: 'easy' | 'minimal' };
+  /**
+   * How far through the solve animation: pull (0 to 1), the head sliding back along the path to
+   * the tail, taking it up; then spin (0 to 1), the short arrow left flying off the grid to the
+   * middle of the board, turning and bending into a check mark. Only for a single open path;
+   * anything else draws as usual.
+   */
+  retract?: { pull: number; spin: number };
 }
 
 /** Margin to use for a puzzle: room for end arrows when it has (or may get) ends. */
@@ -253,9 +260,12 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
     parts.push('</g>');
   }
 
+  const arrow = o.retract !== undefined && o.segments ? retractedArrow(p, o.segments, center, portPoint, o.retract, pad) : null;
+
   // Fixed ends: a path stub from the tile centre through the frame, with the
   // arrow's tail outside at the entrance and its head at the exit.
-  if (ends.length) {
+  if (arrow) parts.push('<g class="ends">', arrow.stubs, '</g>');
+  else if (ends.length) {
     parts.push('<g class="ends">');
     ends.forEach((end, i) => {
       const { x, y, d } = portPoint(end.port);
@@ -273,10 +283,11 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   // Path segments. Each continuous run is one stroke with round joins, so
   // corners are seamless.
   const isErr = (e: number) => !!o.errorEdges?.has(e);
-  const player = [...(o.segments ?? [])];
+  const player = arrow ? [] : [...(o.segments ?? [])];
   if (o.plan?.size) parts.push('<g class="plan">', strokes([...o.plan], 'seg-edge plan'), strokes([...o.plan], 'seg plan'), '</g>');
   if (o.faint?.size) parts.push('<g class="faint">', strokes([...o.faint], 'seg faint'), '</g>');
   parts.push('<g class="segments">');
+  if (arrow) parts.push(arrow.body);
   const isHi = (e: number) => !!o.highlight?.has(e);
   const ok = player.filter((e) => !isErr(e) && !isHi(e));
   const bad = player.filter(isErr);
@@ -286,6 +297,8 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   parts.push(strokes(ok, 'seg-edge'), strokes(bad, 'seg-edge error'), strokes(hi, 'seg-edge hint'));
   parts.push(strokes(ok, 'seg'), strokes(bad, 'seg error'), strokes(hi, 'seg hint'));
   parts.push('</g>');
+
+  if (arrow) parts.push('<g class="ends">', arrow.heads, '</g>');
 
   // X marks.
   if (o.xMarks?.size) {
@@ -374,6 +387,156 @@ export function edgeRuns(p: Puzzle, edges: Iterable<number>): { cells: number[];
     runs.push(walk(edgeCells(p, e)[0], e));
   }
   return runs;
+}
+
+type Pt = [number, number];
+
+/** What's left of the arrow once its head has pulled back to the tail. */
+const PULLED = 60;
+
+/**
+ * The solved path drawn as one arrow partway through the solve animation (see
+ * RenderOptions.retract): its head pulled back toward the tail by pull, then what's left flown
+ * to the middle of the board, turned and bent into a check mark by spin. Gives the stretch
+ * showing (frame stubs and the path between) and the fletching and head at its ends. Null
+ * unless the lines make one open path.
+ */
+function retractedArrow(
+  p: Puzzle,
+  segments: Set<number>,
+  center: (cell: number) => Pt,
+  portPoint: (port: number) => { x: number; y: number; d: [number, number] },
+  { pull, spin }: { pull: number; spin: number },
+  pad: number,
+): { stubs: string; body: string; heads: string } | null {
+  const runs = edgeRuns(p, segments);
+  if (runs.length !== 1 || runs[0].closed) return null;
+  let cells = runs[0].cells;
+  const [tail, head] = p.endpoints.slice(0, 2).map((e) => portCell(p, e.port));
+  if ((tail !== undefined && tail === cells[cells.length - 1] && tail !== cells[0]) || (head !== undefined && head === cells[0])) {
+    cells = [...cells].reverse();
+  }
+  // The arrow's whole length: tail stub's tip, the tile centres, head stub's tip.
+  const pts: Pt[] = cells.map(center);
+  const tailStub = tail !== undefined && tail === cells[0];
+  const headStub = head !== undefined && head === cells[cells.length - 1];
+  if (tailStub) {
+    const { x, y, d } = portPoint(p.endpoints[0].port);
+    pts.unshift([x + d[0] * 34, y + d[1] * 34]);
+  }
+  if (headStub) {
+    const { x, y, d } = portPoint(p.endpoints[1].port);
+    pts.push([x + d[0] * 26, y + d[1] * 26]);
+  }
+  const at: number[] = [0];
+  for (let i = 1; i < pts.length; i++) at.push(at[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+  const total = at[at.length - 1];
+  const lastSeg = pts.length - 2;
+  const isStub = (i: number) => (tailStub && i === 0) || (headStub && i === lastSeg);
+  const segOf = (s: number) => {
+    for (let i = 0; i < lastSeg; i++) if (s < at[i + 1]) return i;
+    return lastSeg;
+  };
+  const pathAt = (s: number): Pt => {
+    const i = segOf(s);
+    const f = at[i + 1] > at[i] ? (s - at[i]) / (at[i + 1] - at[i]) : 0;
+    return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * f, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * f];
+  };
+
+  // The check: a short stroke down to the right, then a long one up to the right, in the middle
+  // of the board (nudged left and down, as the arrowhead sticks out up to the right).
+  const long = Math.max(130, Math.min(280, Math.min(p.w, p.h) * CELL * 0.5));
+  const short = long * 0.45;
+  const down: Pt = [Math.SQRT1_2, Math.SQRT1_2];
+  const up: Pt = [Math.cos(-0.96), Math.sin(-0.96)];
+  const a0: Pt = [0, 0];
+  const v0: Pt = [down[0] * short, down[1] * short];
+  const e0: Pt = [v0[0] + up[0] * long, v0[1] + up[1] * long];
+  const cx = pad + (p.w * CELL) / 2 - (Math.min(a0[0], e0[0]) + Math.max(a0[0], e0[0])) / 2 - 10;
+  const cy = pad + (p.h * CELL) / 2 - (Math.min(a0[1], e0[1]) + v0[1]) / 2 + 12;
+  const A: Pt = [a0[0] + cx, a0[1] + cy];
+  const V: Pt = [v0[0] + cx, v0[1] + cy];
+  const E: Pt = [e0[0] + cx, e0[1] + cy];
+  const corner = short / (short + long);
+  const checkAt = (f: number): Pt =>
+    f <= corner
+      ? [A[0] + (V[0] - A[0]) * (f / corner), A[1] + (V[1] - A[1]) * (f / corner)]
+      : [V[0] + (E[0] - V[0]) * ((f - corner) / (1 - corner)), V[1] + (E[1] - V[1]) * ((f - corner) / (1 - corner))];
+
+  // The head pulls back to the tail.
+  const from = 0;
+  const to = total - Math.max(0, Math.min(1, pull)) * Math.max(0, total - PULLED);
+  const span = to - from || 1;
+  const bend = Math.max(0, Math.min(1, spin));
+  // Points along the stretch showing: the path's corners, the check's, and evenly in between.
+  const fs = new Set<number>([corner]);
+  for (let i = 0; i <= 40; i++) fs.add(i / 40);
+  for (const s of at) if (s > from && s < to) fs.add((s - from) / span);
+  const fracs = [...fs].sort((x, y) => x - y);
+  // Then it flies from where it is to the middle, growing into the check about its own centre
+  // and turning a full turn as it goes.
+  const mean = (at: (f: number) => Pt): Pt => {
+    let x = 0;
+    let y = 0;
+    for (let i = 0; i <= 40; i++) {
+      const q = at(i / 40);
+      x += q[0] / 41;
+      y += q[1] / 41;
+    }
+    return [x, y];
+  };
+  const c0 = bend ? mean((f) => pathAt(from + f * span)) : ([0, 0] as Pt);
+  const c1 = bend ? mean(checkAt) : ([0, 0] as Pt);
+  const cos = Math.cos(-2 * Math.PI * (1 - bend));
+  const sin = Math.sin(-2 * Math.PI * (1 - bend));
+  const place = (f: number): Pt => {
+    const q = pathAt(from + f * span);
+    if (!bend) return q;
+    const c = checkAt(f);
+    const rx = (q[0] - c0[0]) * (1 - bend) + (c[0] - c1[0]) * bend;
+    const ry = (q[1] - c0[1]) * (1 - bend) + (c[1] - c1[1]) * bend;
+    return [c0[0] + (c1[0] - c0[0]) * bend + rx * cos - ry * sin, c0[1] + (c1[1] - c0[1]) * bend + rx * sin + ry * cos];
+  };
+  const placed = fracs.map(place);
+
+  // Split into stub and path pieces, by which part of the path each stretch comes from.
+  const stubs: Pt[][] = [];
+  const path: Pt[][] = [];
+  let piece: Pt[] | null = null;
+  let pieceStub = false;
+  for (let j = 1; j < placed.length; j++) {
+    // Off the grid, it's all path (in the solved colour).
+    const stub = !bend && isStub(segOf(from + ((fracs[j - 1] + fracs[j]) / 2) * span));
+    if (!piece || pieceStub !== stub) {
+      if (piece) (pieceStub ? stubs : path).push(piece);
+      piece = [placed[j - 1]];
+      pieceStub = stub;
+    }
+    piece.push(placed[j]);
+  }
+  if (piece) (pieceStub ? stubs : path).push(piece);
+  const d = (run: Pt[]) => run.map((q, i) => `${i ? 'L' : 'M'}${q[0]} ${q[1]}`).join('');
+  const body = path.map(d).join('');
+
+  /** Points at offsets (forward, sideways) from o, facing from a to b. */
+  const shape = (o: Pt, a: Pt, b: Pt, offsets: [number, number][]) => {
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const ux = (b[0] - a[0]) / len;
+    const uy = (b[1] - a[1]) / len;
+    return offsets.map(([f, side]) => `${o[0] + ux * f - uy * side},${o[1] + uy * f + ux * side}`).join(' ');
+  };
+  const n = placed.length;
+  let heads = '';
+  if (tailStub) {
+    const fins = shape(placed[0], placed[0], placed[1], [[20, 0], [6, 24], [-22, 24], [-10, 0], [-22, -24], [6, -24]]);
+    heads += `<polygon class="end-head" points="${fins}"/>`;
+  }
+  if (headStub) heads += `<polygon class="end-head" points="${shape(placed[n - 1], placed[n - 2], placed[n - 1], [[32, 0], [-2, 29], [-2, -29]])}"/>`;
+  return {
+    stubs: stubs.map((r) => `<path class="end-seg" d="${d(r)}"/>`).join(''),
+    body: body ? `<path class="seg-edge" d="${body}"/><path class="seg" d="${body}"/>` : '',
+    heads,
+  };
 }
 
 /**
