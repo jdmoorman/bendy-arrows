@@ -7,7 +7,9 @@
  * `true` as the second argument for an icon in full colour, shown just as the file has it.
  */
 const icon = (file: string, fullColour = false) => {
-  const url = `${import.meta.env.BASE_URL}icons/${file}`;
+  // Absolute: a relative url() in the --icon custom property would be resolved against the
+  // stylesheet that uses it (in assets/ once built), not the page.
+  const url = new URL(`${import.meta.env.BASE_URL}icons/${file}`, globalThis.document?.baseURI ?? 'http://localhost/').href;
   return fullColour
     ? `<img class="icon" src="${url}" alt="" aria-hidden="true">`
     : `<span class="icon" style="--icon: url('${url}')" aria-hidden="true"></span>`;
