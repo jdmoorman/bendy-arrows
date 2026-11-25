@@ -404,7 +404,12 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
 document.addEventListener('keydown', (ev) => {
   const target = ev.target as HTMLElement | null;
   if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
-  if (document.querySelector('dialog[open]') || tab !== 'play') return;
+  if (document.querySelector('dialog[open]')) return;
+  if (tab === 'levels') {
+    if (levelKey(ev)) ev.preventDefault();
+    return;
+  }
+  if (tab !== 'play') return;
   if (play.handleKey(ev)) ev.preventDefault();
   // Escape (with no hint to put away) goes back to the level list, like Exit.
   else if (ev.key === 'Escape' && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !ev.shiftKey) {
@@ -414,6 +419,40 @@ document.addEventListener('keydown', (ev) => {
 });
 document.addEventListener('keyup', (ev) => play.handleKeyUp(ev));
 window.addEventListener('blur', () => play.handleKeyUp());
+
+/**
+ * The level list: with a level (or a pack's heading) focused, the arrow keys move to the next or
+ * previous one (on through the packs), or the one above or below as laid out (nearest across).
+ * Levels in a folded pack are skipped; its heading is a stop, so Enter can unfold it.
+ */
+function levelKey(ev: KeyboardEvent): boolean {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.shiftKey) return false;
+  const at = document.activeElement;
+  if (!(at instanceof HTMLElement) || !at.matches('.level-btn, .pack > summary')) return false;
+  const all = [...levels.querySelectorAll<HTMLElement>('.level-btn, .pack > summary')].filter((b) => b.tagName === 'SUMMARY' || (b.closest('details') as HTMLDetailsElement).open);
+  const i = all.indexOf(at);
+  let to: HTMLElement | undefined;
+  if (ev.key === 'ArrowLeft') to = all[i - 1];
+  else if (ev.key === 'ArrowRight') to = all[i + 1];
+  else if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
+    const down = ev.key === 'ArrowDown';
+    const from = at.getBoundingClientRect();
+    // Across, a level counts its middle and a pack's heading its start (so Down from it goes to its first level).
+    const x = (b: HTMLElement, r = b.getBoundingClientRect()) => (b.tagName === 'SUMMARY' ? r.left : r.left + r.width / 2);
+    // The nearest row in that direction, then the level in it closest across.
+    let best: { b: HTMLElement; dy: number; dx: number } | null = null;
+    for (const b of all) {
+      const r = b.getBoundingClientRect();
+      const dy = down ? r.top - from.top : from.top - r.top;
+      if (dy < from.height / 2) continue;
+      const dx = Math.abs(x(b, r) - x(at, from));
+      if (!best || dy < best.dy - 1 || (Math.abs(dy - best.dy) <= 1 && dx < best.dx)) best = { b, dy, dx };
+    }
+    to = best?.b;
+  } else return false;
+  to?.focus();
+  return true;
+}
 
 /** A puzzle from a shared link ("#p=CODE"): played as its level if it is one. */
 function openLink(): boolean {
