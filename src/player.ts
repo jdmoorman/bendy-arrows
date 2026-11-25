@@ -327,7 +327,6 @@ function drawLevels() {
       const d = difficultyBadge(code);
       if (d) b.append(d);
       b.classList.toggle('solved', done);
-      b.classList.toggle('started', started);
       b.classList.toggle('current', current?.pack === pi && current.level === li);
       b.setAttribute('aria-label', `Level ${li + 1}${done ? (storage.isGold(code) ? ', solved with a gold star' : ', solved') : started ? ', started' : ''}`);
       b.addEventListener('click', (ev) => {

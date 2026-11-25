@@ -1679,9 +1679,6 @@ img.icon {
   width: 14px;
   height: 14px;
 }
-.level-btn.started {
-  border-color: var(--accent);
-}
 .level-btn.current {
   box-shadow: 0 0 0 2px var(--accent);
 }
