@@ -27,7 +27,6 @@ export type ThemeTokens = Record<
   | 'hint-edge'
   | 'hint-fill'
   | 'xmark'
-  | 'end'
   | 'error'
   | 'error-fill'
   | 'success'
@@ -69,7 +68,6 @@ export const THEMES = {
     'hint-fill': 'rgba(181, 232, 160, 0.6)',
     // The same light as the end arrows (an orange was too close to the red of a wrong mark).
     xmark: '#e6e9f0',
-    end: '#e6e9f0',
     error: '#ff5c7a',
     'error-fill': 'rgba(255, 92, 122, 0.18)',
     success: '#b5e8a0',
@@ -106,7 +104,6 @@ export const THEMES = {
     // The highlighted tiles a hint points to: strong enough to spot at a glance.
     'hint-fill': '#b6e39f',
     xmark: '#000000',
-    end: '#000000',
     error: '#d92d4b',
     'error-fill': 'rgba(217, 45, 75, 0.14)',
     success: '#4e8f36',
