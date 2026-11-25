@@ -231,7 +231,7 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
     const y0 = pad + r * CELL;
     const x1 = x0 + CELL;
     const y1 = y0 + CELL;
-    const cls = o.removable?.blocked.has(cell) ? `wall removable ${o.removable.goal ?? ''}` : 'wall block';
+    const cls = o.removable?.blocked.has(cell) ? `wall removable ${o.removable.goal ?? ''}` : 'wall';
     parts.push(line(x0, y0, x1, y0, cls), line(x1, y0, x1, y1, cls), line(x1, y1, x0, y1, cls), line(x0, y1, x0, y0, cls));
   }
   parts.push('</g><g class="frame">');

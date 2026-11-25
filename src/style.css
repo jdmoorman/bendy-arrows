@@ -478,8 +478,8 @@ a.btn {
 .no-checkerboard .board.solved .tile.alt:not(.blocked, .focus, .error) {
   fill: color-mix(in srgb, var(--solved-fill) calc(var(--celebrate, 0) * 40%), var(--tile));
 }
-/* The lines between tiles, the grid's outer edge and the black tiles (and their rounded edges)
-   take the darker shade. */
+/* The lines between tiles, the walls, the grid's outer edge and the black tiles take the darker
+   shade. */
 .board.solved .grid-line {
   stroke: color-mix(in srgb, var(--solved-edge) calc(var(--celebrate, 0) * 45%), var(--grid-line));
 }
@@ -489,7 +489,7 @@ a.btn {
 .board.solved .outer {
   stroke: color-mix(in srgb, var(--solved-edge) calc(var(--celebrate, 0) * 45%), var(--wall));
 }
-.board.solved .wall.block {
+.board.solved .wall:not(.removable, .suggest) {
   stroke: color-mix(in srgb, var(--solved-edge) calc(var(--celebrate, 0) * 45%), var(--wall));
 }
 
