@@ -17,6 +17,8 @@ export interface PackRating {
   hints: number;
   /** The hints ran out before the end. */
   stuck: boolean;
+  /** The biggest area a hint reasons about. */
+  maxArea: number;
   /** Each step: the easy rules run to the end, or one hint. */
   frames: JourneyFrame[];
 }
@@ -49,7 +51,7 @@ ctx.onmessage = (ev: MessageEvent<PacksRequest>) => {
       const frames: JourneyFrame[] = [];
       const watch = (f: JourneyFrame) => frames.push(f);
       const j = isOneShot(p) ? strokeJourney(p, {}, watch) : hintJourney(p, {}, watch);
-      rating = { hints: j.steps.length, stuck: j.outcome === 'stuck', frames };
+      rating = { hints: j.steps.length, stuck: j.outcome === 'stuck', maxArea: Math.max(0, ...j.steps.map((s) => s.area ?? 0)), frames };
     }
     ctx.postMessage({ kind: 'rated', code, rating } satisfies PacksMessage);
   }

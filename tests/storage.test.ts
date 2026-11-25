@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'vitest';
+import { encodePuzzle, plainCode } from '../src/codec';
+import { createPuzzle, portEnd } from '../src/model';
 import { Storage, type KeyValueStore } from '../src/storage';
 
 class MemStore implements KeyValueStore {
@@ -106,6 +108,37 @@ describe('solved puzzles', () => {
     s.markSolved('B');
     expect(s.isSolved('A')).toBe(true);
     expect(s.isSolved('B')).toBe(true);
+  });
+});
+
+describe('codes with a difficulty', () => {
+  const p = createPuzzle(3, 3);
+  p.endpoints = [portEnd(0), portEnd(5)];
+  const plain = encodePuzzle(p);
+
+  test('solved and gold marks hold whatever difficulty a code carries', () => {
+    const s = new Storage(new MemStore());
+    s.markSolved(encodePuzzle(p, 2));
+    s.markGold(encodePuzzle(p, 2));
+    for (const code of [plain, encodePuzzle(p, 2), encodePuzzle(p, 3)]) {
+      expect(s.isSolved(code)).toBe(true);
+      expect(s.isGold(code)).toBe(true);
+    }
+  });
+
+  test('0.6 codes saved before are rewritten as plain codes, once', () => {
+    const m = new MemStore();
+    m.setItem('bendyarrows.solved.v1', JSON.stringify(['BhDssQ', 'junk']));
+    m.setItem('bendyarrows.gold.v1', JSON.stringify(['BhDssQ']));
+    m.setItem('bendyarrows.player.v1', JSON.stringify({ tab: 'levels', progress: { BhDssQ: { segments: [1], xMarks: [] } }, collapsed: [] }));
+    const s = new Storage(m);
+    const level = 'ByIdliA';
+    expect(s.isSolved(level)).toBe(true);
+    expect(s.isGold(level)).toBe(true);
+    expect(s.isSolved('junk')).toBe(true);
+    const progress = s.loadPlayer().progress;
+    expect(Object.keys(progress)).toEqual([plainCode(level)]);
+    expect(m.getItem('bendyarrows.codeformat.v1')).toBe('"0.7"');
   });
 });
 

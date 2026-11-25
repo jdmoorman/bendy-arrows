@@ -1,4 +1,4 @@
-import { encodePuzzle } from './codec';
+import { encodePuzzle, plainCode } from './codec';
 import { cellRC, edgeCells, type Puzzle } from './model';
 import { columnName } from './render';
 
@@ -59,7 +59,7 @@ function logText(log: Log, name?: string): string {
 
 /** One puzzle's kept log as text (named `name`), or '' if it has none. */
 export function puzzleLogText(code: string, name?: string): string {
-  const log = loadAll().find((l) => l.code === code);
+  const log = loadAll().find((l) => plainCode(l.code) === plainCode(code));
   return log ? logText(log, name) : '';
 }
 
@@ -79,7 +79,9 @@ export class SolveLog {
   load(p: Puzzle): void {
     this.puzzle = p;
     const code = encodePuzzle(p);
-    this.log = loadAll().find((l) => l.code === code) ?? { code, start: 0, steps: [] };
+    // (Found by its plain code, so an older log under a 0.6 code carries on under the new one.)
+    const old = loadAll().find((l) => plainCode(l.code) === code);
+    this.log = old ? { ...old, code } : { code, start: 0, steps: [] };
   }
 
   /** Note one step, e.g. "+line B3-C3" or "hint balance". */
@@ -88,7 +90,7 @@ export class SolveLog {
     const now = Date.now();
     if (!this.log.start) this.log.start = now;
     this.log.steps.push(`${((now - this.log.start) / 1000).toFixed(1)}s ${step}`);
-    const logs = loadAll().filter((l) => l.code !== this.log!.code);
+    const logs = loadAll().filter((l) => plainCode(l.code) !== this.log!.code);
     saveAll([...logs, this.log]);
   }
 

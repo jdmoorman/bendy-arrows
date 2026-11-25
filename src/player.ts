@@ -1,17 +1,15 @@
 import './levels-sync';
 import './style.css';
-import { decodePuzzle, encodePuzzle } from './codec';
+import { codeDifficulty, decodePuzzle, encodePuzzle, plainCode } from './codec';
 import { ICONS } from './icons';
 import { arrowStep } from './keys';
 import { findLevel, levelName, PACKS, type LevelRef } from './levels';
 import { endVariants, type Puzzle } from './model';
 import { padFor, renderBoard } from './render';
-import { RATING_VERSION } from './library-table';
-import { DIFFICULTIES, DIFFICULTY_NAMES, difficultyOf, type HintCount } from './difficulty';
-import type { RatingMessage, RatingRequest } from './rating.worker';
+import { DIFFICULTIES, DIFFICULTY_NAMES } from './difficulty';
 import { PlayView } from './play';
 import { allLogsText, puzzleLogText } from './solve-log';
-import { download, openShareSheet, puzzleFromHash } from './share';
+import { codeFromHash, download, openShareSheet } from './share';
 import { applySettings, openSettingsSheet } from './settings-ui';
 import { Storage, type PlayerState } from './storage';
 import { applyTheme, DEFAULT_THEME } from './themes';
@@ -83,7 +81,8 @@ for (const pack of PACKS) {
     if (p.oneShot) {
       const old = encodePuzzle({ ...p, oneShot: undefined });
       if (storage.isSolved(old)) storage.markSolved(code);
-      if (state.progress[old] && !state.progress[code]) state.progress[code] = state.progress[old];
+      const key = plainCode(code);
+      if (state.progress[old] && !state.progress[key]) state.progress[key] = state.progress[old];
       delete state.progress[old];
     }
     // Levels were turned or mirrored, and their arrows moved round corner tiles, to place the
@@ -170,24 +169,14 @@ function fitHeader() {
 new ResizeObserver(fitHeader).observe(header);
 
 // --- Difficulty -------------------------------------------------------------
-// A level's difficulty is how many hints a player alternating the easy rules and hints needs
-// (for a one-shot, along its stroke), worked out once in the background and kept (the ratings
-// the creator's Library uses too). Shown as four dots, as many coloured in as the difficulty
-// (green, yellow, orange, red), the rest grey.
+// A level's difficulty (see difficulty.ts) comes in its code: every level's has it, and a
+// shared link's may. Shown as four dots, as many coloured in as the difficulty (green,
+// yellow, orange, red), the rest grey.
 
-const ratings = storage.loadRatings();
-/** Hints a level needs, whether hints alone get stuck, and the biggest area a hint reasons about (if worked out with today's rules). */
-function hintsFor(code: string): HintCount | null {
-  const r = ratings[code];
-  return r && r.v === RATING_VERSION && typeof r.hints === 'number' ? { hints: r.hints, stuck: !!r.hintsStuck, maxArea: r.maxArea ?? 0 } : null;
-}
-/** Difficulty from 1 to 4 (see difficulty.ts, which the generator uses too). */
-const difficulty = (h: HintCount) => DIFFICULTIES.indexOf(difficultyOf(h)) + 1;
-/** Four dots, the first `difficulty` coloured in; null until it's worked out. */
+/** Four dots, the first `difficulty` coloured in; null if the code doesn't say. */
 function difficultyBadge(code: string): HTMLElement | null {
-  const h = hintsFor(code);
-  if (!h) return null;
-  const d = difficulty(h);
+  const d = codeDifficulty(code);
+  if (!d) return null;
   const badge = el('span', `difficulty d${d}`, Array.from({ length: 4 }, (_, i) => `<i${i < d ? ' class="on"' : ''}></i>`).join(''));
   const label = DIFFICULTY_NAMES[DIFFICULTIES[d - 1]];
   badge.title = label;
@@ -195,33 +184,13 @@ function difficultyBadge(code: string): HTMLElement | null {
   badge.setAttribute('aria-label', `Difficulty: ${label}`);
   return badge;
 }
-/** Work out the difficulty of every level not yet rated, a few at a time, showing each as it comes. */
-function rateLevels() {
-  const todo = PACKS.flatMap((k) => k.levels).filter((c) => !hintsFor(c));
-  if (!todo.length) return;
-  const worker = new Worker(new URL('./rating.worker.ts', import.meta.url), { type: 'module' });
-  let left = todo.length;
-  worker.onmessage = (ev: MessageEvent<RatingMessage>) => {
-    const { code, rating } = ev.data;
-    ratings[code] = rating;
-    storage.saveRating(code, rating);
-    for (const card of levels.querySelectorAll<HTMLElement>(`.level-btn[data-code="${code}"]`)) {
-      card.querySelector('.difficulty')?.remove();
-      const d = difficultyBadge(code);
-      if (d) card.append(d);
-    }
-    if (code === currentCode) fitHeader();
-    if (--left === 0) worker.terminate();
-  };
-  worker.postMessage(todo satisfies RatingRequest);
-}
 
 /** Put a puzzle on the board: a level, or (with no ref) one from a link. */
 function load(p: Puzzle, code: string, ref: LevelRef | undefined) {
   current = ref;
   currentCode = code;
   // A level solved before starts with a clean board; an unfinished one picks up where it was.
-  play.load(p, state.progress[code]);
+  play.load(p, state.progress[plainCode(code)]);
   setTab('play');
   play.focusBoard();
 }
@@ -233,9 +202,10 @@ function openLevel(ref: LevelRef) {
 
 play.onProgress = (progress, solved) => {
   // A solved level starts afresh next time; an unfinished one keeps its lines.
-  if (solved) delete state.progress[currentCode];
-  else if (progress.segments.length || progress.xMarks.length) state.progress[currentCode] = progress;
-  else delete state.progress[currentCode];
+  const key = plainCode(currentCode);
+  if (solved) delete state.progress[key];
+  else if (progress.segments.length || progress.xMarks.length) state.progress[key] = progress;
+  else delete state.progress[key];
   save();
 };
 
@@ -313,12 +283,12 @@ function drawLevels() {
       const b = el('a', 'level-btn') as HTMLAnchorElement;
       b.href = `#p=${code}`;
       const done = storage.isSolved(code);
-      const started = !done && !!state.progress[code];
+      const marks = state.progress[plainCode(code)];
+      const started = !done && !!marks;
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.classList.add('board', 'level-board');
       svg.setAttribute('aria-hidden', 'true');
       const p = decodePuzzle(code);
-      const marks = state.progress[code];
       renderBoard(svg, p, { coordinates: false, pad: padFor(p, false, false), segments: started ? new Set(marks.segments) : undefined, xMarks: started ? new Set(marks.xMarks) : undefined });
       b.dataset.code = code;
       b.append(svg);
@@ -365,8 +335,9 @@ app.querySelector('[data-act=share]')!.addEventListener('click', () => {
   if (!currentCode) return toast('Open a level first.');
   openShareSheet({
     puzzle: decodePuzzle(currentCode),
+    code: currentCode,
     name: title(),
-    onOpen: (p) => load(p, encodePuzzle(p), findLevel(encodePuzzle(p)) ?? undefined),
+    onOpen: (_, code) => openCode(code),
   });
 });
 
@@ -460,17 +431,19 @@ function levelKey(ev: KeyboardEvent): boolean {
 
 /** A puzzle from a shared link ("#p=CODE"): played as its level if it is one. */
 function openLink(): boolean {
-  let p: Puzzle | null = null;
+  // The code as given, so a difficulty it carries is shown.
+  const code = codeFromHash(location.hash);
+  let ok = false;
   try {
-    p = puzzleFromHash(location.hash);
+    ok = !!code && !!decodePuzzle(code);
   } catch {
     toast("This link doesn't contain a valid puzzle.", 'error');
   }
-  if (!p) {
+  if (!ok) {
     history.replaceState(history.state, '', location.pathname + location.search);
     return false;
   }
-  openCode(encodePuzzle(p));
+  openCode(code!);
   return true;
 }
 
@@ -505,7 +478,6 @@ function goBackTo(t: Tab) {
  * scrolled to), rather than a level, since packs and levels may have been reordered.
  */
 function start() {
-  rateLevels();
   if (location.hash && openLink()) return;
   // Older saves kept the level's place: find its pack.
   if (!state.pack && valid(state.current)) state.pack = PACKS[state.current.pack].name;

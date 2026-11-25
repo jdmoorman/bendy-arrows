@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { decodePuzzle, encodePuzzle, puzzleFromJson, puzzleToJson } from '../src/codec';
+import { codeDifficulty, decodePuzzle, encodePuzzle, plainCode, puzzleFromJson, puzzleToJson } from '../src/codec';
 import { createPuzzle, edgeBetween, edgeCount, portCount, portEnd, portId, puzzlesEqual } from '../src/model';
 
 function sample() {
@@ -56,12 +56,35 @@ describe('codec', () => {
     }
   });
 
+  test('a code can carry a difficulty, which the plain code leaves out', () => {
+    const p = sample();
+    const plain = encodePuzzle(p);
+    expect(codeDifficulty(plain)).toBeUndefined();
+    for (const d of [1, 2, 3, 4] as const) {
+      const code = encodePuzzle(p, d);
+      expect(code).not.toBe(plain);
+      expect(codeDifficulty(code)).toBe(d);
+      expect(puzzlesEqual(p, decodePuzzle(code))).toBe(true);
+      expect(plainCode(code)).toBe(plain);
+    }
+    expect(plainCode('not a code!')).toBe('not a code!');
+  });
+
+  test('0.6 codes (no difficulty) still open', () => {
+    // The first Sparse level, as 0.6 wrote it.
+    const p = decodePuzzle('BhDssQ');
+    expect(codeDifficulty('BhDssQ')).toBeUndefined();
+    expect(plainCode('BhDssQ')).toBe(encodePuzzle(p));
+    expect(codeDifficulty(encodePuzzle(p, 1))).toBe(1);
+    expect(encodePuzzle(p, 1)).toBe('ByIdliA');
+  });
+
   test('share code is URL safe', () => {
     expect(encodePuzzle(sample())).toMatch(/^[A-Za-z0-9_-]+$/);
   });
 
   test('JSON carries a 0.x format version', () => {
-    expect(puzzleToJson(sample()).version).toBe('0.6');
+    expect(puzzleToJson(sample()).version).toBe('0.7');
   });
 
   test('codes in older formats (0.1–0.5) are refused', () => {

@@ -3,10 +3,12 @@ import { cellCount, createPuzzle, edgeCount, isOneShot, MAX_SIZE, MIN_SIZE, port
 /**
  * Compact share code for a puzzle.
  *
- * Pre-release format versions are 0.x; the first byte holds the minor number. Only the
- * current one, 0.6, is read: older codes (0.1–0.5) were converted and are no longer opened.
+ * Pre-release format versions are 0.x; the first byte holds the minor number. The current
+ * one, 0.7, and 0.6 (the same less the difficulty) are read; older codes (0.1–0.5) aren't.
  *
- * Layout (0.6): byte 0 is the version (6), then a bit stream, most significant bit first:
+ * Layout (0.7): byte 0 is the version (7), then a bit stream, most significant bit first:
+ *   3 bits        the level's difficulty, 1 (easy) to 4 (very hard), or 0 if not given (see
+ *                 difficulty.ts): players see it without working it out
  *   5 bits each   width - 1, height - 1
  *   2 bits        number of ends; 3 means two ends and a one-shot puzzle
  *   per end       frame port index, in just enough bits for the board's port count
@@ -19,10 +21,16 @@ import { cellCount, createPuzzle, edgeCount, isOneShot, MAX_SIZE, MIN_SIZE, port
  */
 
 /** Current puzzle format version (pre-release). */
-export const FORMAT_VERSION = '0.6';
-const VERSION_BYTE = 6;
+export const FORMAT_VERSION = '0.7';
+const VERSION_BYTE = 7;
+/** 0.6: no difficulty. */
+const OLD_VERSION_BYTE = 6;
 
-export function encodePuzzle(p: Puzzle): string {
+/** A difficulty a code can carry: 1 (easy) to 4 (very hard). */
+export type CodeDifficulty = 1 | 2 | 3 | 4;
+
+/** The puzzle's code, carrying its difficulty if given. */
+export function encodePuzzle(p: Puzzle, difficulty?: CodeDifficulty): string {
   const n = cellCount(p);
   const positions = [...[...p.blocked].sort((x, y) => x - y), ...[...p.walls].sort((x, y) => x - y).map((w) => n + w)];
   const gaps = positions.map((pos, i) => pos - (i ? positions[i - 1] : -1) - 1);
@@ -34,6 +42,7 @@ export function encodePuzzle(p: Puzzle): string {
     if (bits < bestBits) [k, bestBits] = [t, bits];
   }
   const out = new BitWriter();
+  out.write(difficulty ?? 0, 3);
   out.write(p.w - 1, 5);
   out.write(p.h - 1, 5);
   const endpoints = p.endpoints.slice(0, 2);
@@ -51,15 +60,49 @@ export function encodePuzzle(p: Puzzle): string {
 }
 
 export function decodePuzzle(code: string): Puzzle {
-  const bytes = fromBase64Url(code.trim());
-  if (!bytes.length) throw new Error('Puzzle code is too short.');
-  if (bytes[0] !== VERSION_BYTE) throw new Error(`Unsupported puzzle format 0.${bytes[0]}.`);
-  return decodePacked(bytes);
+  return decodeCode(code).puzzle;
 }
 
-/** Decode a 0.6 code (the version byte has been checked). */
-function decodePacked(bytes: Uint8Array): Puzzle {
+/** The difficulty a code carries, if any. */
+export function codeDifficulty(code: string): CodeDifficulty | undefined {
+  try {
+    return decodeCode(code).difficulty;
+  } catch {
+    return undefined;
+  }
+}
+
+const plainCodes = new Map<string, string>();
+/**
+ * The code without its difficulty, in the current format: what a puzzle is known by (solved
+ * marks, progress), so it's the same however its difficulty is rated. A code that can't be read
+ * is its own.
+ */
+export function plainCode(code: string): string {
+  let plain = plainCodes.get(code);
+  if (plain === undefined) {
+    try {
+      plain = encodePuzzle(decodePuzzle(code));
+    } catch {
+      plain = code;
+    }
+    plainCodes.set(code, plain);
+  }
+  return plain;
+}
+
+function decodeCode(code: string): { puzzle: Puzzle; difficulty?: CodeDifficulty } {
+  const bytes = fromBase64Url(code.trim());
+  if (!bytes.length) throw new Error('Puzzle code is too short.');
+  if (bytes[0] !== VERSION_BYTE && bytes[0] !== OLD_VERSION_BYTE) throw new Error(`Unsupported puzzle format 0.${bytes[0]}.`);
   const r = new BitReader(bytes, 1);
+  const d = bytes[0] === VERSION_BYTE ? r.read(3) : 0;
+  if (d > 4) throw new Error('Puzzle code has an unknown difficulty.');
+  return { puzzle: decodePacked(r), difficulty: d ? (d as CodeDifficulty) : undefined };
+}
+
+/** Decode the bit stream past the version byte (and difficulty). */
+function decodePacked(r: BitReader): Puzzle {
   const w = r.read(5) + 1;
   const h = r.read(5) + 1;
   checkSize(w, h);

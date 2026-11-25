@@ -6,6 +6,7 @@ import { isOneShot, levelKey, pathKey } from './model';
 import { boardSize, padFor, renderBoard } from './render';
 import type { PackCacheEntry, Storage } from './storage';
 import { RATING_VERSION } from './library-table';
+import { difficultyLevel } from './difficulty';
 import { ICONS } from './icons';
 import { el, openSheet, toast } from './ui';
 
@@ -128,13 +129,13 @@ export class PacksView {
     // Results from other rating versions are dropped.
     let dropped = false;
     for (const [code, c] of Object.entries(this.cache)) {
-      if (c.v !== RATING_VERSION || (c.unique && c.hints === undefined)) {
+      if (c.v !== RATING_VERSION || (c.unique && (c.hints === undefined || c.maxArea === undefined))) {
         delete this.cache[code];
         dropped = true;
         continue;
       }
       this.solutions.set(code, { lines: c.segments ? new Set(c.segments) : null, unique: c.unique });
-      this.ratings.set(code, c.unique ? { hints: c.hints!, stuck: !!c.stuck, frames: c.frames ?? [] } : null);
+      this.ratings.set(code, c.unique ? { hints: c.hints!, stuck: !!c.stuck, maxArea: c.maxArea!, frames: c.frames ?? [] } : null);
     }
     if (dropped) this.storage.savePackCache(this.cache);
   }
@@ -167,7 +168,7 @@ export class PacksView {
         } else {
           this.solving.delete(code);
           this.ratings.set(code, m.rating);
-          this.remember(code, m.rating ? { hints: m.rating.hints, stuck: m.rating.stuck, frames: m.rating.frames } : {});
+          this.remember(code, m.rating ? { hints: m.rating.hints, stuck: m.rating.stuck, maxArea: m.rating.maxArea, frames: m.rating.frames } : {});
         }
         for (const t of this.body.querySelectorAll<HTMLElement>(`.pack-tile[data-code="${code}"]`)) this.drawTile(t);
         this.update();
@@ -198,6 +199,9 @@ export class PacksView {
     if (notUnique) return `${notUnique === 1 ? 'A level has' : `${notUnique} levels have`} more than one solution, or none.`;
     const repeats = this.repeats().size;
     if (repeats) return `${repeats === 1 ? 'A level has' : `${repeats} levels have`} the same solution path as an earlier one (turned or mirrored).`;
+    // Each level's code carries its difficulty, so every level must be rated first.
+    const unrated = this.packs.flatMap((k) => k.levels).filter((c) => !this.ratings.get(c)).length;
+    if (unrated) return `Working out how hard ${unrated === 1 ? 'a level is' : `${unrated} levels are`}…`;
     return '';
   }
 
@@ -558,7 +562,7 @@ export class PacksView {
       if (this.framesWorker === worker) this.framesWorker = null;
       if (!m.rating) return;
       this.ratings.set(code, m.rating);
-      this.remember(code, { hints: m.rating.hints, stuck: m.rating.stuck, frames: m.rating.frames });
+      this.remember(code, { hints: m.rating.hints, stuck: m.rating.stuck, maxArea: m.rating.maxArea, frames: m.rating.frames });
       if (t.isConnected && t.matches(':hover')) this.playJourney(t);
     };
     worker.postMessage([code] satisfies PacksRequest);
@@ -807,6 +811,18 @@ export class PacksView {
     const n = this.removed.length;
     if (n && !confirm(`Remove ${n} level${n === 1 ? '' : 's'} from src/levels.ts? Players' progress on ${n === 1 ? 'it' : 'them'} goes too.`)) return;
     this.saveBtn.disabled = true;
+    // Each level's code carries its difficulty (as rated now); what's known of it carries over.
+    const asSaved = (c: string) => {
+      const r = this.ratings.get(c)!;
+      const to = encodePuzzle(decodePuzzle(c), difficultyLevel(r));
+      if (to !== c) {
+        this.solutions.set(to, this.solutions.get(c)!);
+        this.ratings.set(to, r);
+        if (this.cache[c]) this.remember(to, this.cache[c]);
+      }
+      return to;
+    };
+    for (const k of this.packs) k.levels = k.levels.map(asSaved);
     try {
       const res = await fetch('/__packs', {
         method: 'POST',

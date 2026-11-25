@@ -3,18 +3,23 @@ import { ICONS } from './icons';
 import type { Puzzle } from './model';
 import { el, openSheet, toast } from './ui';
 
-/** Link that opens this puzzle in the app. */
-export function shareUrl(p: Puzzle): string {
+/** Link that opens this puzzle in the app (by this code of it, e.g. one carrying its difficulty). */
+export function shareUrl(p: Puzzle, code = encodePuzzle(p)): string {
   const url = new URL(location.href);
   url.search = '';
-  url.hash = `p=${encodePuzzle(p)}`;
+  url.hash = `p=${code}`;
   return url.toString();
+}
+
+/** The puzzle code in a URL hash like "#p=CODE", if any (not checked). */
+export function codeFromHash(hash: string): string | null {
+  return /(?:^#|&)p=([A-Za-z0-9_-]+)/.exec(hash)?.[1] ?? null;
 }
 
 /** Puzzle encoded in a URL hash like "#p=CODE", if any. */
 export function puzzleFromHash(hash: string): Puzzle | null {
-  const m = /(?:^#|&)p=([A-Za-z0-9_-]+)/.exec(hash);
-  return m ? decodePuzzle(m[1]) : null;
+  const code = codeFromHash(hash);
+  return code ? decodePuzzle(code) : null;
 }
 
 /** The link asks for the editor ("#p=CODE&edit") rather than Play. */
@@ -24,16 +29,18 @@ export function hashWantsEditor(hash: string): boolean {
 
 /** Accept a full link, a "#p=…" fragment, a bare code, or JSON text. */
 export function puzzleFromText(text: string): Puzzle {
+  return decodePuzzle(codeFromText(text));
+}
+
+/** The puzzle code in a full link, a "#p=…" fragment, a bare code, or JSON text (checked). */
+export function codeFromText(text: string): string {
   const t = text.trim();
   if (!t) throw new Error('Paste a puzzle link or code first.');
-  if (t.startsWith('{')) return puzzleFromJson(JSON.parse(t));
+  if (t.startsWith('{')) return encodePuzzle(puzzleFromJson(JSON.parse(t)));
   const hashAt = t.indexOf('#');
-  if (hashAt >= 0) {
-    const p = puzzleFromHash(t.slice(hashAt));
-    if (p) return p;
-  }
-  const m = /[?&]p=([A-Za-z0-9_-]+)/.exec(t);
-  return decodePuzzle(m ? m[1] : t);
+  const m = (hashAt >= 0 ? codeFromHash(t.slice(hashAt)) : null) ?? /[?&]p=([A-Za-z0-9_-]+)/.exec(t)?.[1] ?? t;
+  decodePuzzle(m);
+  return m;
 }
 
 async function copyText(text: string): Promise<boolean> {
@@ -57,9 +64,10 @@ export function download(filename: string, text: string, type = 'text/plain') {
 }
 
 /** The share / import sheet. */
-export function openShareSheet(opts: { puzzle: Puzzle; name?: string; onOpen: (p: Puzzle) => void }): void {
+/** `code` is the code to share (by default the puzzle's own, with no difficulty); `onOpen` gets the code as given too. */
+export function openShareSheet(opts: { puzzle: Puzzle; code?: string; name?: string; onOpen: (p: Puzzle, code: string) => void }): void {
   const { puzzle } = opts;
-  const url = shareUrl(puzzle);
+  const url = shareUrl(puzzle, opts.code);
   const body = el('div', 'sheet-stack');
 
   const linkBox = el('input', 'text-input') as HTMLInputElement;
@@ -99,9 +107,10 @@ export function openShareSheet(opts: { puzzle: Puzzle; name?: string; onOpen: (p
   openBtn.style.flex = '0 0 auto';
   const doOpen = () => {
     try {
-      const p = puzzleFromText(openInput.value);
+      const code = codeFromText(openInput.value);
+      const p = decodePuzzle(code);
       sheet.close();
-      opts.onOpen(p);
+      opts.onOpen(p, code);
       toast('Puzzle opened');
     } catch (err) {
       toast(`Could not open: ${(err as Error).message}`, 'error');

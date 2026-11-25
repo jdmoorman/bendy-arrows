@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { decodePuzzle, encodePuzzle } from '../src/codec';
+import { codeDifficulty, decodePuzzle, encodePuzzle } from '../src/codec';
+import { countHints, difficultyLevel } from '../src/difficulty';
 import { findLevel, levelName, PACKS } from '../src/levels';
 import { ADVANCED_RULES, ALL_RULES, runStroke } from '../src/logic';
 import { isOneShot, openCells, pathKey } from '../src/model';
@@ -70,9 +71,11 @@ describe('level packs', () => {
 
   for (const pack of PACKS) {
     pack.levels.forEach((code, i) => {
-      test(`${pack.name} ${i + 1}: decodes in the current format, is at most twice as long as wide, and has exactly one solution`, () => {
+      test(`${pack.name} ${i + 1}: decodes in the current format, carries its difficulty, is at most twice as long as wide, and has exactly one solution`, () => {
         const p = decodePuzzle(code);
-        expect(encodePuzzle(p)).toBe(code);
+        expect(encodePuzzle(p, codeDifficulty(code))).toBe(code);
+        // Players see the difficulty the code carries: `npm run rate-levels` puts it right.
+        expect(codeDifficulty(code), 'difficulty (npm run rate-levels puts it right)').toBe(difficultyLevel(countHints(p)));
         // Which way up a level is, and where its tail is, are each pack's own business.
         expect(Math.max(p.w, p.h), `${p.w}×${p.h} is more than twice as long as wide`).toBeLessThanOrEqual(2 * Math.min(p.w, p.h));
         expect(solve(p, { maxSolutions: 2 }).status).toBe('unique');

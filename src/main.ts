@@ -2,7 +2,7 @@ import './levels-sync';
 import './style.css';
 import { attachUniquenessCheck } from './check-ui';
 import { checkSolution } from './rules';
-import { decodePuzzle, encodePuzzle } from './codec';
+import { decodePuzzle, encodePuzzle, plainCode } from './codec';
 import { EditorView } from './editor';
 import { ICONS } from './icons';
 import { LibraryView } from './library-view';
@@ -17,6 +17,7 @@ import { openSettingsSheet, applySettings } from './settings-ui';
 import { Storage } from './storage';
 import { applyTheme, DEFAULT_THEME } from './themes';
 import { solveInBackground } from './solver-client';
+import { levelCode } from './rating-client';
 import { el, openSheet, toast } from './ui';
 
 // --- Back button ---------------------------------------------------------------
@@ -309,13 +310,14 @@ function saveCurrent(fromEditor: boolean, toLibrary = false) {
 /** Save over a pack level in src/levels.ts (the local dev server does the writing). */
 function openLevelSaveSheet(level: LevelRef, p: Puzzle, fromEditor: boolean) {
   const from = PACKS[level.pack].levels[level.level];
-  const to = encodePuzzle(p);
+  const plain = encodePuzzle(p);
+  const unchanged = plain === plainCode(from);
   const body = el('div', 'sheet-stack');
   const note = el('p', 'field-label');
   // Either way up is fine for a level (that's the pack's business), but not too long and thin.
   const thin = Math.max(p.w, p.h) > 2 * Math.min(p.w, p.h);
   note.textContent =
-    to === from
+    unchanged
       ? `${levelName(level)} is unchanged.`
       : thin
         ? `A level is at most twice as long as it is wide, and this puzzle is ${p.w}×${p.h}.`
@@ -323,7 +325,7 @@ function openLevelSaveSheet(level: LevelRef, p: Puzzle, fromEditor: boolean) {
   const row = el('div', 'sheet-row');
   const copy = el('button', 'btn', '<span>Save to Library</span>');
   const update = el('button', 'btn primary', `${ICONS.save}<span>Update level</span>`);
-  update.disabled = to === from || thin;
+  update.disabled = unchanged || thin;
   row.append(copy, update);
   body.append(note, row);
   const sheet = openSheet(`Save ${levelName(level)}`, body);
@@ -337,6 +339,8 @@ function openLevelSaveSheet(level: LevelRef, p: Puzzle, fromEditor: boolean) {
       // A level must keep exactly one solution (the tests refuse anything else).
       const r = await solveInBackground(p, undefined, { maxSolutions: 2 }).result;
       if (r.status !== 'unique') throw new Error('A level needs exactly one solution.');
+      // A level's code carries its difficulty.
+      const to = await levelCode(plain);
       const res = await fetch('/__levels', { method: 'POST', body: JSON.stringify({ from, to }) });
       const reply = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok || !reply.ok) throw new Error(reply.error ?? 'The dev server refused the change.');

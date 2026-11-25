@@ -1,3 +1,5 @@
+import type { CodeDifficulty } from './codec';
+import type { Rating } from './library-table';
 import { hintJourney, strokeJourney } from './logic';
 import { isOneShot, type Puzzle } from './model';
 
@@ -26,6 +28,16 @@ export function difficultyOf(h: HintCount): Difficulty {
   if (h.stuck || h.hints >= 8 || h.maxArea > 24) return 'veryhard';
   if (h.hints >= 4 || h.maxArea > 12) return 'hard';
   return h.hints ? 'medium' : 'easy';
+}
+
+/** The difficulty as a number, 1 (easy) to 4 (very hard), as share codes carry it. */
+export function difficultyLevel(h: HintCount): CodeDifficulty {
+  return (DIFFICULTIES.indexOf(difficultyOf(h)) + 1) as CodeDifficulty;
+}
+
+/** What a rating says the hints took (none if the puzzle isn't unique). */
+export function ratingHints(r: Rating): HintCount | null {
+  return r.unique && typeof r.hints === 'number' ? { hints: r.hints, stuck: !!r.hintsStuck, maxArea: r.maxArea ?? 0 } : null;
 }
 
 /** The hints a player needs for a puzzle (with a unique solution). */

@@ -1,4 +1,5 @@
-import { encodePuzzle } from './codec';
+import { decodePuzzle, encodePuzzle } from './codec';
+import { difficultyLevel, ratingHints } from './difficulty';
 import type { EditorView } from './editor';
 import { missingEnds } from './rules';
 import type { RatingMessage, RatingRequest } from './rating.worker';
@@ -73,7 +74,10 @@ export function attachUniquenessCheck(editor: EditorView): void {
       const count = n ? `${n} hint${n === 1 ? '' : 's'}` : 'No hints';
       hints.textContent = ev.data.rating.hintsStuck ? `${count}, then stuck` : count;
       const p = editor.current;
-      entry = `      '${ev.data.code}', // ${hints.textContent} ${p.w}×${p.h}`;
+      const h = ratingHints(ev.data.rating);
+      // The level's code carries its difficulty.
+      const code = h ? encodePuzzle(decodePuzzle(ev.data.code), difficultyLevel(h)) : ev.data.code;
+      entry = `      '${code}', // ${hints.textContent} ${p.w}×${p.h}`;
       copyBtn.classList.remove('hidden');
     };
     worker.postMessage([encodePuzzle(editor.current)] satisfies RatingRequest);

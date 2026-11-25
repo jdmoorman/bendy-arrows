@@ -1,3 +1,4 @@
+import { FORMAT_VERSION, plainCode } from './codec';
 import type { JourneyFrame } from './logic';
 import type { Rating, TableState } from './library-table';
 import type { Progress } from './play';
@@ -49,6 +50,8 @@ const GENERATOR_KEY = 'bendyarrows.generator.v1';
 const TABLE_KEY = 'bendyarrows.libtable.v1';
 const RATINGS_KEY = 'bendyarrows.ratings.v1';
 const PACK_CACHE_KEY = 'bendyarrows.packcache.v1';
+/** The share-code format the stored codes were last rewritten to. */
+const CODE_FORMAT_KEY = 'bendyarrows.codeformat.v1';
 
 /** A level as the Packs tab worked it out: its solution, whether it's the only one, its hints and their replay (RATING_VERSION v). */
 export interface PackCacheEntry {
@@ -57,6 +60,7 @@ export interface PackCacheEntry {
   unique: boolean;
   hints?: number;
   stuck?: boolean;
+  maxArea?: number;
   frames?: JourneyFrame[];
 }
 const SHOW_SOLUTION_KEY = 'bendyarrows.showsolution.v1';
@@ -89,7 +93,7 @@ export interface PlayerState {
   /** Older saves: the level being played, as pack and level (from 0). Read once to find `pack`. */
   current?: { pack: number; level: number };
   tab: 'play' | 'levels';
-  /** Lines and X's on each level started and not finished, by code. */
+  /** Lines and X's on each level started and not finished, by plain code (see plainCode). */
   progress: Record<string, Progress>;
   /** Packs folded away in the Levels tab, by name. */
   collapsed: string[];
@@ -113,6 +117,39 @@ function defaultStore(): KeyValueStore | null {
 export class Storage {
   constructor(private store: KeyValueStore | null = defaultStore()) {
     this.migrateOldKeys();
+    this.migrateCodes();
+  }
+
+  /**
+   * Rewrite every stored share code as its plain code (current format, no difficulty), once per
+   * format change, so solved marks, progress and the rest are found by the codes the app makes
+   * now. Codes that don't decode are left as they are.
+   */
+  private migrateCodes(): void {
+    if (!this.store || this.read<string | null>(CODE_FORMAT_KEY, null) === FORMAT_VERSION) return;
+    const library = this.read<unknown>(LIBRARY_KEY, null);
+    if (Array.isArray(library)) {
+      this.write(LIBRARY_KEY, library.map((e) => (e && typeof e.code === 'string' ? { ...e, code: plainCode(e.code) } : e)));
+    }
+    const codeList = (key: string) => {
+      const xs = this.read<unknown>(key, null);
+      if (Array.isArray(xs)) this.write(key, xs.map((x) => (typeof x === 'string' ? plainCode(x) : x)));
+    };
+    codeList(SOLVED_KEY);
+    codeList(GOLD_KEY);
+    const byCode = (o: unknown) => (o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).map(([code, v]) => [plainCode(code), v])) : o);
+    const ratings = this.read<unknown>(RATINGS_KEY, null);
+    if (ratings && typeof ratings === 'object') this.write(RATINGS_KEY, byCode(ratings));
+    const player = this.read<Partial<PlayerState> | null>(PLAYER_KEY, null);
+    if (player && typeof player === 'object' && player.progress) this.write(PLAYER_KEY, { ...player, progress: byCode(player.progress) });
+    const session = this.read<Session | null>(SESSION_KEY, null);
+    if (session && typeof session === 'object') {
+      const s: Session = { ...session };
+      if (typeof s.code === 'string') s.code = plainCode(s.code);
+      if (typeof s.editorCode === 'string') s.editorCode = plainCode(s.editorCode);
+      this.write(SESSION_KEY, s);
+    }
+    this.write(CODE_FORMAT_KEY, FORMAT_VERSION);
   }
 
   /** Copy data saved under the old app name to the new keys (the old keys are left alone). */
@@ -198,7 +235,7 @@ export class Storage {
     this.put({ ...e, progress, solved: solved || !!e.solved, updated: Date.now() });
   }
 
-  /** Share codes of every puzzle solved on this device (saved in the library or not). */
+  /** Plain codes (see plainCode) of every puzzle solved on this device (saved in the library or not). */
   private loadSolved(): string[] {
     const list = this.read<unknown>(SOLVED_KEY, null);
     if (Array.isArray(list)) return list.filter((c): c is string => typeof c === 'string');
@@ -207,28 +244,30 @@ export class Storage {
     return times && typeof times === 'object' ? Object.keys(times) : [];
   }
 
-  /** Whether the puzzle with this share code has been solved on this device (see also an entry's `solved`). */
+  /** Whether the puzzle with this share code (whatever difficulty it carries) has been solved on this device (see also an entry's `solved`). */
   isSolved(code: string): boolean {
-    return this.loadSolved().includes(code);
+    return this.loadSolved().includes(plainCode(code));
   }
 
   markSolved(code: string): void {
     const list = this.loadSolved();
+    code = plainCode(code);
     if (!list.includes(code)) this.write(SOLVED_KEY, [...list, code]);
   }
 
-  /** Share codes of puzzles solved with a gold star (no hints). */
+  /** Plain codes of puzzles solved with a gold star (no hints). */
   private loadGold(): string[] {
     const list = this.read<unknown>(GOLD_KEY, []);
     return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : [];
   }
 
   isGold(code: string): boolean {
-    return this.loadGold().includes(code);
+    return this.loadGold().includes(plainCode(code));
   }
 
   markGold(code: string): void {
     const list = this.loadGold();
+    code = plainCode(code);
     if (!list.includes(code)) this.write(GOLD_KEY, [...list, code]);
   }
 
