@@ -114,7 +114,14 @@ function setTab(t: Tab) {
   tab = t;
   play.el.classList.toggle('hidden', t !== 'play');
   levels.classList.toggle('hidden', t !== 'levels');
-  if (t === 'levels') drawLevels();
+  if (t === 'levels') {
+    drawLevels();
+    // The level just played is marked, and has focus (so Tab carries on from it); the mark goes
+    // once focus moves on.
+    const cur = levels.querySelector<HTMLElement>('.level-btn.current');
+    cur?.focus({ preventScroll: true });
+    cur?.addEventListener('blur', () => cur.classList.remove('current'), { once: true });
+  }
   // No tabs: a level is opened from the list, and Exit (shown while playing) goes back to it.
   for (const a of ['exit', 'share']) app.querySelector(`[data-act=${a}]`)!.classList.toggle('hidden', t !== 'play');
   fitHeader();
