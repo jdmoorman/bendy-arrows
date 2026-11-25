@@ -70,8 +70,8 @@ export interface Settings {
   checkerboard: boolean;
   /** Highlight mistakes (branches, early loops) as you play. */
   autoCheck: boolean;
-  /** Use the dark colour theme. */
-  darkTheme: boolean;
+  /** The colour theme picked; unset, the device's (light or dark) is followed. */
+  theme?: 'light' | 'dark';
   /** Label columns with letters (A, B, …) and rows with numbers (1, 2, …) around the board. */
   coordinates: boolean;
   /** Hints draw the line or X they lead to (otherwise they only point to where to look and why). */
@@ -80,7 +80,7 @@ export interface Settings {
   winAnimation: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false, hintMoves: false, winAnimation: true };
+export const DEFAULT_SETTINGS: Settings = { checkerboard: true, autoCheck: false, coordinates: false, hintMoves: false, winAnimation: true };
 
 /** The player app's place: the pack last played, the tab shown, and unfinished boards. */
 export interface PlayerState {
@@ -319,8 +319,14 @@ export class Storage {
   }
 
   loadSettings(): Settings {
-    const s = this.read<Partial<Settings> | null>(SETTINGS_KEY, null);
-    return { ...DEFAULT_SETTINGS, ...(s && typeof s === 'object' ? s : {}) };
+    const s = this.read<(Partial<Settings> & { darkTheme?: boolean }) | null>(SETTINGS_KEY, null);
+    if (!s || typeof s !== 'object') return { ...DEFAULT_SETTINGS };
+    // Older saves: a Dark theme switch, saved off with any other setting whether or not it was
+    // touched. On is a choice; off now follows the device.
+    const { darkTheme, ...rest } = s;
+    const out: Settings = { ...DEFAULT_SETTINGS, ...rest };
+    if (darkTheme && !out.theme) out.theme = 'dark';
+    return out;
   }
 
   saveSettings(s: Settings): void {

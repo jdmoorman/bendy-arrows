@@ -69,10 +69,21 @@ describe('Storage', () => {
 describe('settings', () => {
   test('default to checkerboard on, auto-check off, win animation on, and round-trip', () => {
     const s = new Storage(new MemStore());
-    expect(s.loadSettings()).toEqual({ checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false, hintMoves: false, winAnimation: true });
-    s.saveSettings({ checkerboard: false, autoCheck: false, darkTheme: true, coordinates: true, hintMoves: true, winAnimation: false });
-    expect(s.loadSettings()).toEqual({ checkerboard: false, autoCheck: false, darkTheme: true, coordinates: true, hintMoves: true, winAnimation: false });
-    expect(new Storage(null).loadSettings()).toEqual({ checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false, hintMoves: false, winAnimation: true });
+    expect(s.loadSettings()).toEqual({ checkerboard: true, autoCheck: false, coordinates: false, hintMoves: false, winAnimation: true });
+    s.saveSettings({ checkerboard: false, autoCheck: false, theme: 'dark', coordinates: true, hintMoves: true, winAnimation: false });
+    expect(s.loadSettings()).toEqual({ checkerboard: false, autoCheck: false, theme: 'dark', coordinates: true, hintMoves: true, winAnimation: false });
+    expect(new Storage(null).loadSettings()).toEqual({ checkerboard: true, autoCheck: false, coordinates: false, hintMoves: false, winAnimation: true });
+  });
+
+  test('older saves: Dark theme on is kept as picked; off follows the device', () => {
+    const old = (darkTheme: boolean) => {
+      const m = new MemStore();
+      m.setItem('bendyarrows.settings.v1', JSON.stringify({ checkerboard: true, autoCheck: false, darkTheme, coordinates: false, hintMoves: false }));
+      return new Storage(m).loadSettings();
+    };
+    expect(old(true).theme).toBe('dark');
+    expect(old(false).theme).toBeUndefined();
+    expect('darkTheme' in old(true)).toBe(false);
   });
 
 });
@@ -106,6 +117,6 @@ describe('rename from Hamiltonian', () => {
     m.setItem('bendyarrows.settings.v1', JSON.stringify({ darkTheme: false }));
     const s = new Storage(m);
     expect(s.list().map((e) => e.id)).toEqual(['a']);
-    expect(s.loadSettings().darkTheme).toBe(false);
+    expect(s.loadSettings().theme).toBeUndefined();
   });
 });
