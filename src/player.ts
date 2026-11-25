@@ -2,6 +2,7 @@ import './levels-sync';
 import './style.css';
 import { decodePuzzle, encodePuzzle } from './codec';
 import { ICONS } from './icons';
+import { arrowStep } from './keys';
 import { findLevel, levelName, PACKS, type LevelRef } from './levels';
 import { endVariants, type Puzzle } from './model';
 import { padFor, renderBoard } from './render';
@@ -420,7 +421,7 @@ document.addEventListener('keyup', (ev) => play.handleKeyUp(ev));
 window.addEventListener('blur', () => play.handleKeyUp());
 
 /**
- * The level list: with a level (or a pack's heading) focused, the arrow keys move to the next or
+ * The level list: with a level (or a pack's heading) focused, the arrow keys (or WASD) move to the next or
  * previous one (on through the packs), or the one above or below as laid out (nearest across).
  * Levels in a folded pack are skipped; its heading is a stop, so Enter can unfold it.
  */
@@ -431,10 +432,12 @@ function levelKey(ev: KeyboardEvent): boolean {
   const all = [...levels.querySelectorAll<HTMLElement>('.level-btn, .pack > summary')].filter((b) => b.tagName === 'SUMMARY' || (b.closest('details') as HTMLDetailsElement).open);
   const i = all.indexOf(at);
   let to: HTMLElement | undefined;
-  if (ev.key === 'ArrowLeft') to = all[i - 1];
-  else if (ev.key === 'ArrowRight') to = all[i + 1];
-  else if (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') {
-    const down = ev.key === 'ArrowDown';
+  const step = arrowStep(ev);
+  if (!step) return false;
+  const [dr, dc] = step;
+  if (dc) to = all[i + dc];
+  else {
+    const down = dr > 0;
     const from = at.getBoundingClientRect();
     // Across, a level counts its middle and a pack's heading its start (so Down from it goes to its first level).
     const x = (b: HTMLElement, r = b.getBoundingClientRect()) => (b.tagName === 'SUMMARY' ? r.left : r.left + r.width / 2);
@@ -448,7 +451,7 @@ function levelKey(ev: KeyboardEvent): boolean {
       if (!best || dy < best.dy - 1 || (Math.abs(dy - best.dy) <= 1 && dx < best.dx)) best = { b, dy, dx };
     }
     to = best?.b;
-  } else return false;
+  }
   to?.focus();
   return true;
 }

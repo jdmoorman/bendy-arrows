@@ -3,19 +3,8 @@ import { solveInBackground, type SolverRun } from './solver-client';
 import { findHint, findStrokeHint, hintPrompt, strokeFrom, trialPreview, type Hint } from './logic';
 import { ICONS } from './icons';
 import { attachBoardInput } from './input';
+import { arrowStep } from './keys';
 import { cellAt, cellEdges, cellRC, edgeBetween, endpointCells, isOneShot, isUsableEdge, type Puzzle } from './model';
-
-/** One-shot mode's keys that move the stroke's head: row and column steps. */
-const KEY_STEPS: Record<string, [number, number]> = {
-  ArrowUp: [-1, 0],
-  ArrowDown: [1, 0],
-  ArrowLeft: [0, -1],
-  ArrowRight: [0, 1],
-  w: [-1, 0],
-  s: [1, 0],
-  a: [0, -1],
-  d: [0, 1],
-};
 import { padFor, renderBoard } from './render';
 import { canPlace, checkSolution } from './rules';
 import { edgeName, SolveLog } from './solve-log';
@@ -490,7 +479,7 @@ export class PlayView {
     }
     // One-shot mode: the arrow keys (or WASD) move the stroke's head,
     // back over the stroke to take it back.
-    const step = KEY_STEPS[ev.key.length === 1 ? ev.key.toLowerCase() : ev.key];
+    const step = arrowStep(ev);
     if (this.boardFocused && !mod && !ev.altKey && step && this.strokeMode && this.puzzle.endpoints.length) {
       this.cursorShown = true;
       this.strokeKey(step[0], step[1]);
