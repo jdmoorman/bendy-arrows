@@ -470,8 +470,9 @@ export class PlayView {
       this.render();
       return true;
     }
-    // U undoes the last move; H gets a hint (like the Hint button). With the keyboard cursor, Z and
-    // X are held down to mark as it moves.
+    // U undoes the last move; R resets the board (one undoable step, like the Reset button); H gets
+    // a hint (like the Hint button). With the keyboard cursor, Z and X are held down to mark as it
+    // moves.
     const plain = !mod && !ev.altKey && ev.key.length === 1 ? ev.key.toLowerCase() : '';
     if (this.cursorKeys && this.boardFocused && (plain === 'z' || plain === 'x')) {
       this.held.add(plain);
@@ -479,6 +480,10 @@ export class PlayView {
     }
     if (plain === 'u') {
       this.undo();
+      return true;
+    }
+    if (plain === 'r') {
+      this.reset();
       return true;
     }
     if (plain === 'h') {
