@@ -175,7 +175,7 @@ function difficultyBadge(code: string): HTMLElement | null {
   if (!h) return null;
   const d = difficulty(h);
   const badge = el('span', `difficulty d${d}`, Array.from({ length: 4 }, (_, i) => `<i${i < d ? ' class="on"' : ''}></i>`).join(''));
-  const label = `${DIFFICULTY_NAMES[DIFFICULTIES[d - 1]]} (${h.hints ? `${h.hints} hint${h.hints === 1 ? '' : 's'}` : 'no hints'})`;
+  const label = DIFFICULTY_NAMES[DIFFICULTIES[d - 1]];
   badge.title = label;
   badge.setAttribute('role', 'img');
   badge.setAttribute('aria-label', `Difficulty: ${label}`);
