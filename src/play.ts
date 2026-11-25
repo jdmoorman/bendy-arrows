@@ -151,10 +151,11 @@ export class PlayView {
     this.svg = this.el.querySelector('svg')!;
     // The board sits centred in its space, between the header and the buttons (or beside them).
     this.svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-    // Focused from the keyboard (by Tab, or on loading a level after a key), the board shows its
-    // keyboard cursor; it hides on leaving.
+    // The board takes its turn in the Tab order. Focused from the keyboard (by Tab, or on loading a
+    // level after a key), it shows its keyboard cursor (on a one-shot, on the stroke's head); it
+    // hides on leaving.
     this.svg.setAttribute('role', 'application');
-    this.svg.setAttribute('aria-label', 'Board: the arrow keys move; hold Z while moving to draw lines, X for Xs');
+    this.svg.setAttribute('tabindex', '0');
     document.addEventListener('keydown', () => (this.keyed = true), true);
     document.addEventListener('pointerdown', () => (this.keyed = false), true);
     this.svg.addEventListener('focus', () => {
@@ -196,7 +197,7 @@ export class PlayView {
       kind: () => 'path',
       onGestureStart: () => {
         // Touching the board gives it focus (so keys go to it after) but hides the cursor.
-        if (this.cursorKeys && document.activeElement !== this.svg) {
+        if (document.activeElement !== this.svg) {
           this.touchFocus = true;
           this.svg.focus({ preventScroll: true });
           this.touchFocus = false;
@@ -286,9 +287,14 @@ export class PlayView {
     this.nextBtn.querySelector('span')!.textContent = action?.label ?? '';
     this.nextBtn.classList.toggle('hidden', !action);
     this.render();
-    // A classic level opens with the board focused, so the keys go to it (its cursor showing if
-    // the level was opened from the keyboard).
-    if (this.cursorKeys) this.svg.focus({ preventScroll: true });
+  }
+
+  /**
+   * Give the board focus, so the keys go to it (its cursor showing if this follows a key). Done
+   * when a level opens, once the board is on screen: a hidden board can't take focus.
+   */
+  focusBoard(): void {
+    this.svg.focus({ preventScroll: true });
   }
 
   /** Reset: empty the board, as one undoable step. */
@@ -392,6 +398,13 @@ export class PlayView {
     this.render();
   }
 
+  /** Where the keyboard cursor is: on a one-shot, the stroke's head (none without ends). */
+  private cursorTile(): number | undefined {
+    if (!this.strokeMode) return this.cursor;
+    const s = this.puzzle.endpoints.length ? this.strokeCells() : [];
+    return s.length ? s[s.length - 1] : undefined;
+  }
+
   /** Classic puzzles: a keyboard cursor moves (and draws) on the arrow keys or WASD. */
   private get cursorKeys(): boolean {
     return !this.strokeMode;
@@ -478,8 +491,10 @@ export class PlayView {
     // One-shot mode: the arrow keys (or WASD) move the stroke's head,
     // back over the stroke to take it back.
     const step = KEY_STEPS[ev.key.length === 1 ? ev.key.toLowerCase() : ev.key];
-    if (!mod && !ev.altKey && step && this.strokeMode && this.puzzle.endpoints.length) {
+    if (this.boardFocused && !mod && !ev.altKey && step && this.strokeMode && this.puzzle.endpoints.length) {
+      this.cursorShown = true;
       this.strokeKey(step[0], step[1]);
+      this.render();
       return true;
     }
     if (this.cursorKeys && this.boardFocused && !mod && !ev.altKey && step) {
@@ -782,11 +797,14 @@ export class PlayView {
       errorEdges,
       solved: this.solved,
       gold: this.gold,
-      cursor: this.cursorKeys && this.cursorShown && this.boardFocused ? this.cursor : undefined,
+      cursor: this.cursorShown && this.boardFocused ? this.cursorTile() : undefined,
     });
-    // With the keyboard cursor, the board takes its turn in the Tab order.
-    if (this.cursorKeys) this.svg.setAttribute('tabindex', '0');
-    else this.svg.removeAttribute('tabindex');
+    this.svg.setAttribute(
+      'aria-label',
+      this.strokeMode
+        ? 'Board: the arrow keys draw the line; going back over it takes it back'
+        : 'Board: the arrow keys move; hold Z while moving to draw lines, X for Xs',
+    );
 
     const kind = hint ? (hint.kind === 'mistake' || hint.kind === 'wrong' ? 'error' : 'hint') : '';
     this.status.classList.toggle('error', kind === 'error');

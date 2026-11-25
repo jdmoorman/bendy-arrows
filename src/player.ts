@@ -214,6 +214,7 @@ function load(p: Puzzle, code: string, ref: LevelRef | undefined) {
   // A level solved before starts with a clean board; an unfinished one picks up where it was.
   play.load(p, state.progress[code]);
   setTab('play');
+  play.focusBoard();
 }
 
 function openLevel(ref: LevelRef) {
