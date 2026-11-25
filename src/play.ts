@@ -140,6 +140,13 @@ export class PlayView {
     place();
     upright.addEventListener('change', place);
     this.status = this.el.querySelector('.status')!;
+    // The only messages are hints (upright, they pop up over the buttons): a tap puts the hint
+    // away, its highlight too.
+    this.status.addEventListener('click', () => {
+      if (!this.shownHint) return;
+      this.shownHint = null;
+      this.render();
+    });
     this.undoBtn = this.el.querySelector('[data-act=undo]')!;
     this.redoBtn = this.el.querySelector('[data-act=redo]')!;
 
@@ -672,15 +679,9 @@ export class PlayView {
     const kind = hint ? (hint.kind === 'mistake' || hint.kind === 'wrong' ? 'error' : 'hint') : '';
     this.status.classList.toggle('error', kind === 'error');
     this.status.classList.toggle('hint', kind === 'hint');
-    this.status.textContent = prompt
-      ? prompt.text
-      : hint
-        ? hint.text
-        : this.gold
-          ? '★ Solved perfectly!'
-          : this.solved
-            ? `Solved with ${[this.hintsUsed ? `${this.hintsUsed} hint${this.hintsUsed === 1 ? '' : 's'}` : this.strokeMode ? 'no hints' : '', this.caught ? 'auto-check' : '', this.strokeMode ? (this.backtracks ? `${this.backtracks} backtrack${this.backtracks === 1 ? '' : 's'}` : 'no backtracks') : ''].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1')}.`
-            : '';
+    // Solving needs no message: the path turning green (gold for a perfect solve) says it.
+    const text = prompt ? prompt.text : hint ? hint.text : '';
+    this.status.textContent = text;
 
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;

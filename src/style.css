@@ -446,9 +446,45 @@ a.btn {
 }
 
 /* Play's order under the board: the toolbar, then Reset (always usable) and Next level (always
-   shown, usable once solved), then the status line at the bottom. */
+   shown, usable once solved). The board takes all the rest: a hint's message gets no room of its
+   own but pops up over the buttons, and a tap puts the hint away (and the buttons back). */
+.view.play-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto auto;
+}
+.play-view > .board-wrap {
+  grid-area: 1 / 1;
+}
 .play-view > .toolbar {
+  grid-area: 2 / 1;
   padding-bottom: 0;
+}
+.play-view > .solved-row {
+  grid-area: 3 / 1;
+  padding-bottom: 12px;
+}
+.play-view > .status {
+  /* Covers both rows of buttons exactly; its own size never moves them (a long message scrolls). */
+  grid-area: 2 / 1 / 4 / 2;
+  contain: size;
+  height: calc(100% - 12px);
+  align-self: start;
+  justify-self: stretch;
+  overflow-y: auto;
+  z-index: 3;
+  min-height: 0;
+  box-sizing: border-box;
+  margin: 4px 12px 0;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
+.play-view > .status:empty {
+  display: none;
 }
 .solved-row {
   display: flex;
@@ -1247,7 +1283,7 @@ img.icon {
  * them stacked under the board.
  */
 @media (min-width: 600px) and (orientation: landscape) {
-  .play-view {
+  .view.play-view {
     display: grid;
     grid-template-columns: minmax(0, 1fr) clamp(220px, 30vw, 320px);
     column-gap: 16px;
@@ -1262,11 +1298,24 @@ img.icon {
   .play-view > .board-wrap {
     grid-area: board;
   }
-  .play-view > .status {
+  /* Beside the board there's room to spare, so the message keeps its place in the column. */
+  .play-view > .status,
+  .play-view > .status:empty {
+    display: flex;
     grid-area: status;
+    contain: none;
+    height: auto;
+    overflow: visible;
+    align-self: stretch;
+    justify-self: stretch;
     /* Taller column, so allow more lines before anything moves. */
     min-height: 7em;
     margin: 8px 12px;
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+    cursor: auto;
   }
   .play-view > .toolbar {
     grid-area: toolbar;
