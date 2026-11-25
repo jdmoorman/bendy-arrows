@@ -232,7 +232,7 @@ const KINDS = {
   oneShot: {
     title: 'One-shot',
     intro: [
-      'The same puzzle, but you must draw the whole path in order starting from the tail.',
+      'The same rules, but you must draw the whole path in order starting from the tail.',
     ],
   },
 };
