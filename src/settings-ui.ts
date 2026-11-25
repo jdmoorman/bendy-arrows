@@ -16,7 +16,6 @@ const SWITCHES: { key: keyof Settings; label: string }[] = [
   { key: 'coordinates', label: 'Grid coordinates' },
   { key: 'autoCheck', label: 'Auto-check' },
   { key: 'hintMoves', label: 'Hints show the move' },
-  { key: 'keyboard', label: 'Keyboard controls' },
 ];
 
 /** The settings sheet: one switch per setting, saved as soon as it changes. */

@@ -305,6 +305,10 @@ a.btn {
   fill: rgb(22 163 74);
 }
 /* A tile the editor suggests blacking out. */
+/* The keyboard cursor shows where the focused board is. */
+.board:focus {
+  outline: none;
+}
 .cursor {
   fill: none;
   stroke: var(--accent);

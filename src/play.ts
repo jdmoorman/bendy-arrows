@@ -83,11 +83,16 @@ export class PlayView {
   private caught = false;
   /** The Hints show the move setting. */
   private hintMoves = false;
-  /** Keyboard controls (a setting): the arrow keys or WASD play the board. */
-  private keyboard = false;
-  /** Classic puzzles with keyboard controls: the tile the cursor is on, and whether it shows (it hides when the board is touched). */
+  /** The last input was a key (not a touch or click): a board focused now shows its cursor. */
+  private keyed = false;
+  /**
+   * Classic puzzles: the keyboard cursor's tile, and whether it shows. It only ever shows while the
+   * board has focus, and not after a touch or click (until a key is pressed).
+   */
   private cursor = 0;
   private cursorShown = false;
+  /** The board is being focused by a touch, not the keyboard: the cursor stays hidden. */
+  private touchFocus = false;
   /** Keys held down that mark as the cursor moves: Z draws (or takes back) lines, X puts (or takes off) Xs. */
   private held = new Set<string>();
   /** Solutions of the puzzle, found once in the background when Hint first needs them. */
@@ -146,6 +151,20 @@ export class PlayView {
     this.svg = this.el.querySelector('svg')!;
     // The board sits centred in its space, between the header and the buttons (or beside them).
     this.svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+    // Focused from the keyboard (by Tab, or on loading a level after a key), the board shows its
+    // keyboard cursor; it hides on leaving.
+    this.svg.setAttribute('role', 'application');
+    this.svg.setAttribute('aria-label', 'Board: the arrow keys move; hold Z while moving to draw lines, X for Xs');
+    document.addEventListener('keydown', () => (this.keyed = true), true);
+    document.addEventListener('pointerdown', () => (this.keyed = false), true);
+    this.svg.addEventListener('focus', () => {
+      this.cursorShown = this.keyed && !this.touchFocus;
+      this.render();
+    });
+    this.svg.addEventListener('blur', () => {
+      this.held.clear();
+      this.render();
+    });
     this.status = this.el.querySelector('.status')!;
     this.announce = this.el.querySelector('.announce')!;
     // Upright, the hint covers the buttons: they're out of reach (by Tab too) until it's put away.
@@ -176,6 +195,12 @@ export class PlayView {
     attachBoardInput(this.svg, () => this.puzzle, {
       kind: () => 'path',
       onGestureStart: () => {
+        // Touching the board gives it focus (so keys go to it after) but hides the cursor.
+        if (this.cursorKeys && document.activeElement !== this.svg) {
+          this.touchFocus = true;
+          this.svg.focus({ preventScroll: true });
+          this.touchFocus = false;
+        }
         if (this.cursorShown) {
           this.cursorShown = false;
           this.render();
@@ -256,15 +281,14 @@ export class PlayView {
     this.announce.textContent = '';
     // The keyboard cursor starts at the arrow's tail (the entrance), or mid-board without ends.
     this.cursor = p.endpoints.length ? endpointCells(p)[0] : cellAt(p, Math.floor((p.h - 1) / 2), Math.floor((p.w - 1) / 2));
-    // With keyboard controls on, a classic level opens with the cursor showing and in charge: a
-    // button left focused (e.g. Next level) lets go, so keys go to the board.
-    this.cursorShown = this.keyboard;
-    if (this.keyboard && !isOneShot(p) && document.activeElement instanceof HTMLElement) document.activeElement.blur();
     this.log.load(p);
     const action = this.solvedAction();
     this.nextBtn.querySelector('span')!.textContent = action?.label ?? '';
     this.nextBtn.classList.toggle('hidden', !action);
     this.render();
+    // A classic level opens with the board focused, so the keys go to it (its cursor showing if
+    // the level was opened from the keyboard).
+    if (this.cursorKeys) this.svg.focus({ preventScroll: true });
   }
 
   /** Reset: empty the board, as one undoable step. */
@@ -368,17 +392,14 @@ export class PlayView {
     this.render();
   }
 
-  /** Whether the arrow keys (or WASD) play the board. */
-  setKeyboard(on: boolean): void {
-    if (on !== this.keyboard) this.cursorShown = on;
-    this.keyboard = on;
-    this.held.clear();
-    this.render();
+  /** Classic puzzles: a keyboard cursor moves (and draws) on the arrow keys or WASD. */
+  private get cursorKeys(): boolean {
+    return !this.strokeMode;
   }
 
-  /** Classic puzzles with keyboard controls: the cursor moves (and draws) on the arrow keys or WASD. */
-  private get cursorKeys(): boolean {
-    return this.keyboard && !this.strokeMode;
+  /** The board has focus: only then do the cursor keys (and Z and X) work on it. */
+  private get boardFocused(): boolean {
+    return document.activeElement === this.svg;
   }
 
   /** A key was let go (or the window lost focus, with no key named): stop marking with it. */
@@ -432,14 +453,14 @@ export class PlayView {
       this.render();
       return true;
     }
-    // Z or U undoes the last move; H gets a hint (like the Hint button). With the keyboard cursor,
-    // Z and X are held down to mark as it moves instead.
+    // U undoes the last move; H gets a hint (like the Hint button). With the keyboard cursor, Z and
+    // X are held down to mark as it moves.
     const plain = !mod && !ev.altKey && ev.key.length === 1 ? ev.key.toLowerCase() : '';
-    if (this.cursorKeys && (plain === 'z' || plain === 'x')) {
+    if (this.cursorKeys && this.boardFocused && (plain === 'z' || plain === 'x')) {
       this.held.add(plain);
       return true;
     }
-    if (plain === 'z' || plain === 'u') {
+    if (plain === 'u') {
       this.undo();
       return true;
     }
@@ -454,14 +475,14 @@ export class PlayView {
       action.run();
       return true;
     }
-    // One-shot mode, with keyboard controls on: the arrow keys (or WASD) move the stroke's head,
+    // One-shot mode: the arrow keys (or WASD) move the stroke's head,
     // back over the stroke to take it back.
     const step = KEY_STEPS[ev.key.length === 1 ? ev.key.toLowerCase() : ev.key];
-    if (this.keyboard && !mod && !ev.altKey && step && this.strokeMode && this.puzzle.endpoints.length) {
+    if (!mod && !ev.altKey && step && this.strokeMode && this.puzzle.endpoints.length) {
       this.strokeKey(step[0], step[1]);
       return true;
     }
-    if (this.cursorKeys && !mod && !ev.altKey && step) {
+    if (this.cursorKeys && this.boardFocused && !mod && !ev.altKey && step) {
       this.cursorKey(step[0], step[1]);
       return true;
     }
@@ -761,8 +782,11 @@ export class PlayView {
       errorEdges,
       solved: this.solved,
       gold: this.gold,
-      cursor: this.cursorKeys && this.cursorShown ? this.cursor : undefined,
+      cursor: this.cursorKeys && this.cursorShown && this.boardFocused ? this.cursor : undefined,
     });
+    // With the keyboard cursor, the board takes its turn in the Tab order.
+    if (this.cursorKeys) this.svg.setAttribute('tabindex', '0');
+    else this.svg.removeAttribute('tabindex');
 
     const kind = hint ? (hint.kind === 'mistake' || hint.kind === 'wrong' ? 'error' : 'hint') : '';
     this.status.classList.toggle('error', kind === 'error');
