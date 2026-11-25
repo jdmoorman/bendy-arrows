@@ -39,6 +39,12 @@ export function openSettingsSheet(current: Settings, onChange: (s: Settings) => 
       current = { ...current, [key]: input.checked };
       onChange(current);
     });
+    // Enter flips a switch too (Space does already, as for any checkbox).
+    input.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      input.click();
+    });
     row.append(text, input);
     body.append(row);
   }
