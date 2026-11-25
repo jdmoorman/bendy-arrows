@@ -76,9 +76,11 @@ export interface Settings {
   coordinates: boolean;
   /** Hints draw the line or X they lead to (otherwise they only point to where to look and why). */
   hintMoves: boolean;
+  /** On solving, the arrow pulls in and spins into a check mark, and the board takes on its colour. */
+  winAnimation: boolean;
 }
 
-export const DEFAULT_SETTINGS: Settings = { checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false, hintMoves: false };
+export const DEFAULT_SETTINGS: Settings = { checkerboard: true, autoCheck: false, darkTheme: false, coordinates: false, hintMoves: false, winAnimation: true };
 
 /** The player app's place: the pack last played, the tab shown, and unfinished boards. */
 export interface PlayerState {

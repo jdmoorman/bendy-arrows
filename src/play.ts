@@ -72,6 +72,8 @@ export class PlayView {
   private caught = false;
   /** The Hints show the move setting. */
   private hintMoves = false;
+  /** The Win animation setting: on solving, the arrow pulls in and spins into a check mark. */
+  private winAnimation = true;
   /** The last input was a key (not a touch or click): a board focused now shows its cursor. */
   private keyed = false;
   /**
@@ -386,6 +388,15 @@ export class PlayView {
 
   /** Whether mistakes are highlighted as the player draws. */
   /** Whether a hint draws the move it leads to, as hints once did (otherwise it only points and explains). */
+  /** Turning it off mid-animation (or after) puts the solved path straight back. */
+  setWinAnimation(on: boolean): void {
+    this.winAnimation = on;
+    if (!on && this.retract) {
+      this.stopRetract();
+      this.render();
+    }
+  }
+
   setHintMoves(on: boolean): void {
     this.hintMoves = on;
     this.render();
@@ -776,7 +787,7 @@ export class PlayView {
    */
   private startRetract() {
     this.stopRetract();
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!this.winAnimation || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const delay = 300;
     // Longer paths take a little longer to pull in, but never drag.
     const pullTime = Math.min(2000, Math.max(700, 400 + this.segments.size * 42));

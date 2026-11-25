@@ -73,6 +73,7 @@ if (packs) {
 }
 play.setAutoCheck(settings.autoCheck);
 play.setHintMoves(settings.hintMoves);
+play.setWinAnimation(settings.winAnimation);
 
 /** The puzzle currently loaded in the play view, and where it came from. */
 let playing: Puzzle = createPuzzle(6, 6);
@@ -251,6 +252,7 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
     editor.render();
     play.setAutoCheck(s.autoCheck);
     play.setHintMoves(s.hintMoves);
+    play.setWinAnimation(s.winAnimation);
     storage.saveSettings(s);
   }, hasLogs() ? exportSolveLogs : undefined, exportPuzzleLog());
 });

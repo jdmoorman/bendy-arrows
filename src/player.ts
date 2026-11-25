@@ -71,6 +71,7 @@ const levels = el('div', 'view levels-view hidden');
 app.querySelector('.views')!.append(play.el, levels);
 play.setAutoCheck(settings.autoCheck);
 play.setHintMoves(settings.hintMoves);
+play.setWinAnimation(settings.winAnimation);
 
 const state: PlayerState = storage.loadPlayer();
 
@@ -397,6 +398,7 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
     play.render();
     play.setAutoCheck(s.autoCheck);
     play.setHintMoves(s.hintMoves);
+    play.setWinAnimation(s.winAnimation);
     storage.saveSettings(s);
   }, hasLogs() ? exportSolveLogs : undefined, exportPuzzleLog());
 });
