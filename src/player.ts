@@ -406,6 +406,11 @@ document.addEventListener('keydown', (ev) => {
   if (target && /^(INPUT|SELECT|TEXTAREA)$/.test(target.tagName)) return;
   if (document.querySelector('dialog[open]') || tab !== 'play') return;
   if (play.handleKey(ev)) ev.preventDefault();
+  // Escape (with no hint to put away) goes back to the level list, like Exit.
+  else if (ev.key === 'Escape' && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !ev.shiftKey) {
+    ev.preventDefault();
+    setTab('levels');
+  }
 });
 document.addEventListener('keyup', (ev) => play.handleKeyUp(ev));
 window.addEventListener('blur', () => play.handleKeyUp());
