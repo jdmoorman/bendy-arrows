@@ -128,7 +128,7 @@ export class PlayView {
         </div>
       </div>
       <div class="solved-row">
-        <button class="btn" data-act="reset">${ICONS.rotateLeft}<span>Reset</span></button>
+        <button class="btn" data-act="reset">${ICONS.reset}<span>Reset</span></button>
         <button class="btn primary" data-act="next"><span>Next level</span></button>
       </div>
       <p class="status" role="status" aria-live="polite"></p>`;

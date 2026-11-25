@@ -28,6 +28,7 @@ export const ICONS = {
   edit: icon('edit.svg'),
   settings: icon('settings.svg'),
   rotateLeft: icon('rotate-left.svg'),
+  reset: icon('reset.svg'),
   rotateRight: icon('rotate-right.svg'),
   flipH: icon('flip-h.svg'),
   flipV: icon('flip-v.svg'),
