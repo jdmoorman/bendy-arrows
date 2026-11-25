@@ -116,8 +116,8 @@ a.btn {
   font-size: 1.2rem;
 }
 
-/* Header buttons with a name: when the title would be cut short, the name goes in small type under
-   the icon (the player sets .compact). */
+/* Header buttons with a name: when even the shortened title would be cut short, the name goes in
+   small type under the icon (the player sets .compact). */
 .app-header.compact .btn.labelled {
   flex-direction: column;
   gap: 1px;
@@ -1627,6 +1627,17 @@ img.icon {
 .app-title .difficulty i {
   width: 9px;
   height: 9px;
+}
+/* Where even the short name and the dots don't fit side by side, the dots go under the name. */
+.app-title.stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  line-height: 1.1;
+}
+.app-title.stacked .difficulty {
+  margin-left: 0;
 }
 /* Solved: the card turns green, with a tick in its corner. */
 .level-btn.solved {

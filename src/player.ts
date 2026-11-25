@@ -117,31 +117,41 @@ function setTab(t: Tab) {
   if (t === 'levels') drawLevels();
   // No tabs: a level is opened from the list, and Exit (shown while playing) goes back to it.
   for (const a of ['exit', 'share']) app.querySelector(`[data-act=${a}]`)!.classList.toggle('hidden', t !== 'play');
-  showTitle();
+  fitHeader();
   save();
 }
 
-function title(): string {
-  return current ? levelName(current) : 'Puzzle';
+function title(short = false): string {
+  if (!current) return 'Puzzle';
+  return short ? `${PACKS[current.pack].name.charAt(0)}. ${current.level + 1}` : levelName(current);
 }
 
 /** The header: the level's name and difficulty while playing, else the app's name. */
-function showTitle() {
-  titleEl.textContent = tab === 'play' ? title() : 'BendyArrows';
+function showTitle(short = false, stacked = false) {
+  titleEl.classList.toggle('stacked', stacked);
+  titleEl.textContent = tab === 'play' ? title(short) : 'BendyArrows';
+  titleEl.title = tab === 'play' && short ? title() : '';
   if (tab === 'play' && currentCode) {
     const d = difficultyBadge(currentCode);
     if (d) titleEl.append(d);
   }
-  fitHeader();
 }
 
 /**
- * The header's buttons show their names beside their icons, unless that cuts the title short:
- * then the names go in small type under the icons. Checked whenever the title or the width changes.
+ * The level's full name, unless the header's buttons would cut it short: then just the pack's
+ * first letter and the level's number ("S. 7"), then that with the difficulty dots under it. If
+ * none of those fit, the buttons' names go under their icons, and the same again from the full name.
+ * Checked whenever the title or the width changes.
  */
 function fitHeader() {
-  header.classList.remove('compact');
-  if (titleEl.scrollWidth > titleEl.clientWidth) header.classList.add('compact');
+  const cut = () => titleEl.scrollWidth > titleEl.clientWidth;
+  for (const compact of [false, true]) {
+    header.classList.toggle('compact', compact);
+    showTitle();
+    if (cut()) showTitle(true);
+    if (cut()) showTitle(true, true);
+    if (!cut()) return;
+  }
 }
 new ResizeObserver(fitHeader).observe(header);
 
@@ -186,7 +196,7 @@ function rateLevels() {
       const d = difficultyBadge(code);
       if (d) card.append(d);
     }
-    if (code === currentCode) showTitle();
+    if (code === currentCode) fitHeader();
     if (--left === 0) worker.terminate();
   };
   worker.postMessage(todo satisfies RatingRequest);
