@@ -188,7 +188,7 @@ export class EditorView {
         </div>
         <div class="toolbar-row simplify-row">
           <button class="btn icon-only" data-act="clear-plan" aria-label="Clear drawn lines" title="Clear the lines drawn with Draw">${ICONS.clear}</button>
-          <button class="btn icon-only" data-act="fill" aria-label="Fill with walls" title="Fill: a wall on every border the unique solution doesn’t cross">${ICONS.fill}</button>
+          <button class="btn" data-act="fill" aria-label="Fill with walls" title="Fill: a wall on every border the unique solution doesn’t cross">Fill</button>
           <span class="simplify-goal">
             <button class="btn" data-goal="easy" aria-pressed="false" title="Colour the walls and black tiles that could each go on its own, keeping the puzzle unique and solved by the easy rules alone">Easy</button>
             <button class="btn icon-only" data-remove-all="easy" aria-label="Remove all (easy)" title="Remove every wall and black tile the easy rules don’t need">${ICONS.eraser}</button>

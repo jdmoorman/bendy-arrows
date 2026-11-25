@@ -40,7 +40,6 @@ export const ICONS = {
   bulb: icon('bulb.svg'),
   chevron: icon('chevron.svg'),
   grid: icon('grid.svg'),
-  fill: icon('fill.svg'),
   eraser: icon('eraser.svg'),
   arrowUp: icon('arrow-up.svg'),
   arrowDown: icon('arrow-down.svg'),
