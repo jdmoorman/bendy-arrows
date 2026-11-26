@@ -1279,7 +1279,7 @@ img.icon {
   min-width: 0;
 }
 
-/* The four editing tools fill their row, each as wide as its name needs. */
+/* The four editing tools fill their row (beside Suggest), each as wide as its name needs. */
 .toolbar-row .segmented .seg-btn {
   padding: 0 6px;
 }
@@ -1293,7 +1293,13 @@ img.icon {
   padding: 0 4px;
 }
 
-/* Transform grid, One-shot and Suggest; Clear obstacles and Fill obstacles: each row shared evenly. */
+/* Suggest, after the tools: as wide as it needs. */
+.tool-row > .btn {
+  flex: 0 0 auto;
+  padding: 0 8px;
+}
+
+/* Transform grid and One-shot; Clear obstacles and Fill obstacles: each row shared evenly. */
 .puzzle-row > .btn,
 .fill-row > .btn {
   min-width: 0;

@@ -209,8 +209,9 @@ export class EditorView {
               <button class="seg-btn" data-tool="tiles">Black tiles</button>
               <button class="seg-btn" data-tool="walls">Walls</button>
               <button class="seg-btn" data-tool="ends">Ends</button>
-              <button class="seg-btn" data-tool="path" title="Draw the lines you want the path to take: logic steps build on them, and Fill obstacles fills in every tile and border without a line">Desired solution</button>
+              <button class="seg-btn" data-tool="path" title="Draw the lines you want the path to take: logic steps build on them, and Fill obstacles fills in every tile and border without a line">Path</button>
             </div>
+            <button class="btn stacked" data-act="suggest" title="Suggest walls: the change (a wall added, taken away or moved) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)">${ICONS.bulb}<span>Suggest</span></button>
           </div>
         </div>
         <div class="toolbar-section" role="group" aria-label="Puzzle">
@@ -218,11 +219,10 @@ export class EditorView {
           <div class="toolbar-row puzzle-row">
             <button class="btn stacked" data-act="grid" aria-pressed="false" title="Edit rows and columns: add or delete them around the board, turn or flip it">${ICONS.grid}<span>Transform grid</span></button>
             <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the tail, and hints and logic follow it">One-shot</button>
-            <button class="btn stacked" data-act="suggest" title="Suggest walls: the change (a wall added, taken away or moved) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)">${ICONS.bulb}<span>Suggest</span></button>
           </div>
         </div>
-        <div class="toolbar-section" role="group" aria-label="Desired Solution">
-          <div class="toolbar-title" aria-hidden="true">Desired Solution</div>
+        <div class="toolbar-section" role="group" aria-label="Path">
+          <div class="toolbar-title" aria-hidden="true">Path</div>
           <div class="toolbar-row fill-row">
             <button class="btn" data-act="clear-obstacles" title="Clear obstacles: delete every wall and black tile">${ICONS.clear}<span>Clear obstacles</span></button>
             <button class="btn" data-act="fill" title="Fill obstacles: a black tile on every open tile no line reaches, and a wall on every other border no line crosses">Fill obstacles</button>
@@ -434,6 +434,7 @@ export class EditorView {
     if (this.autoLogic) this.runAutoLogic();
     if (this.simplifyGoal) this.checkRemovable();
     for (const fn of this.changeListeners) fn(this.puzzle);
+    if (this.tool === 'ends' && missingEnds(this.puzzle)) this.suggestEnds();
   }
 
   /** Make the puzzle a one-shot, or an ordinary puzzle again (one undoable step). */
@@ -744,7 +745,7 @@ export class EditorView {
     this.cancelSimplify();
     const p = this.puzzle;
     const lines = this.logic.segments;
-    if (!lines.size) return this.setMessage('Draw the desired solution first: Fill obstacles fills in everything around it.', 'error');
+    if (!lines.size) return this.setMessage('Draw the path first (Path tool): Fill obstacles fills in everything around it.', 'error');
     const endTiles = new Set(p.endpoints.map((end) => endTile(p, end)));
     const black = openCells(p).filter((c) => !endTiles.has(c) && !cellEdges(p, c).some((e) => lines.has(e)));
     const q = clonePuzzle(p);
@@ -1288,11 +1289,14 @@ export class EditorView {
       this.suggested = null;
       this.endsSuggested = false;
     }
+    const picked = t !== this.tool;
     this.tool = t;
     // Picking a tool means rows and columns are done.
     this.gridEdit = false;
     for (const k of Object.keys(this.toolBtns) as Tool[]) this.toolBtns[k].setAttribute('aria-pressed', String(k === t));
     this.render();
+    // The Ends tool shows where missing ends could go straight away.
+    if (picked && t === 'ends' && missingEnds(this.puzzle)) this.suggestEnds();
   }
 
   /**
@@ -1341,8 +1345,6 @@ export class EditorView {
     if (this.autoLogic) this.runAutoLogic();
     if (this.simplifyGoal) this.checkRemovable();
     for (const fn of this.changeListeners) fn(this.puzzle);
-    // Where ends could go was asked for: after placing (or moving) an end, look again for the
-    // other, so its spots show (and the dots fit the end now placed), until both are placed.
     const fixEnds = this.endsForFix;
     this.stopFixEnds();
     this.fixEndNote = '';
@@ -1379,7 +1381,9 @@ export class EditorView {
         } else this.setMessage(note);
       }
     }
-    if (this.endsSuggested && this.tool === 'ends' && missingEnds(this.puzzle)) this.suggestEnds();
+    // With the Ends tool, where missing ends could go shows: after placing (or taking away) an
+    // end, look again, so the dots fit the ends now placed, until both are placed.
+    if (this.tool === 'ends' && missingEnds(this.puzzle)) this.suggestEnds();
     else this.endsSuggested = false;
   }
 
