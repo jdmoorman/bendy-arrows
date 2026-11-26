@@ -1225,34 +1225,13 @@ img.icon {
   stroke: var(--hint-edge);
 }
 
+/* The logic helper's five controls share their row evenly. */
 .logic-row .btn {
   flex: 1 1 0;
   min-width: 0;
-  padding: 0 8px;
-}
-/* Every logic control is an icon now: they share the row evenly, Play at the right end. */
-.logic-row .btn.icon-only {
-  flex: 1 1 0;
-  padding: 0;
 }
 
-/* Logic helper and the solution check share a row; drop the icons when it's tight. */
-@media (max-width: 480px) {
-  .logic-row > .btn:not(.icon-only) .icon {
-    display: none;
-  }
-}
-/* Six controls share the logic row; squeeze them on the narrowest phones. */
-@media (max-width: 360px) {
-  .logic-row {
-    gap: 4px;
-  }
-  .logic-row .btn {
-    padding: 0 4px;
-  }
-}
-
-/* The editing tools share one row on a phone: the four tools take what One-shot leaves. */
+/* The four editing tools fill their row. */
 .toolbar-row .segmented .seg-btn {
   padding: 0 6px;
 }
@@ -1264,13 +1243,12 @@ img.icon {
   min-width: 0;
   padding: 0 4px;
 }
-.tool-row > .btn.icon-only {
-  flex: 0 0 var(--tap);
-  padding: 0;
-}
-.tool-row > [data-act='oneshot'] {
-  flex: 0 0 auto;
-  padding: 0 12px;
+
+/* Transform grid, One-shot and Suggest; Clear lines and Fill walls: each row shared evenly. */
+.puzzle-row > .btn,
+.fill-row > .btn {
+  min-width: 0;
+  padding: 0 8px;
 }
 
 .status.hint {
@@ -2112,18 +2090,16 @@ img.icon {
   gap: 4px;
   min-width: 0;
 }
+.simplify-row > .simplify-goal {
+  flex: 1 1 auto;
+}
 .simplify-goal > .btn {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
   padding: 0 8px;
 }
-.simplify-goal > .btn.icon-only {
-  flex: 0 0 var(--tap);
-  padding: 0;
-}
-.simplify-row > .btn.icon-only {
-  flex: 0 0 var(--tap);
-  padding: 0;
+.simplify-goal > .btn.stacked {
+  flex: 0 0 auto;
 }
 /* Remove all or Fill at work: a tap again cancels it. */
 .simplify-row .btn.busy {
@@ -2135,11 +2111,8 @@ img.icon {
   }
 }
 
-/* The narrowest phones: the four tools, the grid button and One-shot squeeze into one row. */
+/* The narrowest phones: smaller type, so the tools and the extras still fit their rows. */
 @media (max-width: 360px) {
-  .tool-row {
-    gap: 4px;
-  }
   .tool-row .segmented {
     padding: 2px;
     gap: 1px;
@@ -2148,20 +2121,28 @@ img.icon {
     padding: 0 2px;
     font-size: 0.8rem;
   }
-  .tool-row > .btn.icon-only {
-    flex-basis: 36px;
-  }
-  .tool-row > [data-act='oneshot'] {
-    padding: 0 6px;
-    font-size: 0.8rem;
-  }
   .simplify-row {
     gap: 4px;
   }
-  .simplify-goal > .btn:not(.icon-only) {
-    padding: 0 2px;
+  .simplify-goal > .btn:not(.stacked) {
+    padding: 0 4px;
     font-size: 0.8rem;
   }
+}
+
+/* Buttons with the name in small type under the icon: a row of them takes no more height than
+   icons alone. */
+.toolbar .btn.stacked {
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 3px 4px;
+  font-size: 0.7rem;
+  line-height: 1.1;
+}
+.toolbar .btn.stacked .icon {
+  width: 20px;
+  height: 20px;
 }
 
 /*

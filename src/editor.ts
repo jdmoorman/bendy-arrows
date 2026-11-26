@@ -170,49 +170,53 @@ export class EditorView {
       <div class="toolbar">
         <!-- Turns and flips: shown while editing rows and columns. -->
         <div class="toolbar-row shape-row">
-          <button class="btn" data-turn="rotateLeft" aria-label="Rotate left" title="Rotate left">${ICONS.rotateLeft}</button>
-          <button class="btn" data-turn="rotateRight" aria-label="Rotate right" title="Rotate right">${ICONS.rotateRight}</button>
-          <button class="btn" data-turn="flipH" aria-label="Flip left–right" title="Flip left–right">${ICONS.flipH}</button>
-          <button class="btn" data-turn="flipV" aria-label="Flip up–down" title="Flip up–down">${ICONS.flipV}</button>
+          <button class="btn stacked" data-turn="rotateLeft" title="Rotate left">${ICONS.rotateLeft}<span>Turn left</span></button>
+          <button class="btn stacked" data-turn="rotateRight" title="Rotate right">${ICONS.rotateRight}<span>Turn right</span></button>
+          <button class="btn stacked" data-turn="flipH" title="Flip left–right">${ICONS.flipH}<span>Flip left–right</span></button>
+          <button class="btn stacked" data-turn="flipV" title="Flip up–down">${ICONS.flipV}<span>Flip up–down</span></button>
         </div>
         <div class="toolbar-row tool-row">
           <div class="segmented" role="group" aria-label="Editing tool">
-            <button class="seg-btn" data-tool="tiles">Tiles</button>
+            <button class="seg-btn" data-tool="tiles">Black tiles</button>
             <button class="seg-btn" data-tool="walls">Walls</button>
             <button class="seg-btn" data-tool="ends">Ends</button>
-            <button class="seg-btn" data-tool="path" title="Draw lines you want the path to take; Fill then walls off every border no solution through them crosses">Draw</button>
+            <button class="seg-btn" data-tool="path" title="Draw lines you want the path to take; Fill then walls off every border no solution through them crosses">Draw lines</button>
           </div>
-          <button class="btn icon-only" data-act="grid" aria-pressed="false" aria-label="Edit rows and columns" title="Edit rows and columns: add or delete them around the board, turn or flip it">${ICONS.grid}</button>
+        </div>
+        <div class="toolbar-row puzzle-row">
+          <button class="btn stacked" data-act="grid" aria-pressed="false" title="Edit rows and columns: add or delete them around the board, turn or flip it">${ICONS.grid}<span>Transform grid</span></button>
           <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the entrance, and hints and logic follow it">One-shot</button>
-          <button class="btn icon-only" data-act="suggest" aria-label="Suggest a wall" title="Suggest walls: the change (a wall added, taken away or moved) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)">${ICONS.bulb}</button>
+          <button class="btn stacked" data-act="suggest" title="Suggest walls: the change (a wall added, taken away or moved) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)">${ICONS.bulb}<span>Suggest</span></button>
+        </div>
+        <div class="toolbar-row fill-row">
+          <button class="btn" data-act="clear-plan" title="Clear the lines drawn with Draw lines">${ICONS.clear}<span>Clear lines</span></button>
+          <button class="btn" data-act="fill" title="Fill: a wall on every border the unique solution doesn’t cross">Fill walls</button>
         </div>
         <div class="toolbar-row simplify-row">
-          <button class="btn icon-only" data-act="clear-plan" aria-label="Clear drawn lines" title="Clear the lines drawn with Draw">${ICONS.clear}</button>
-          <button class="btn" data-act="fill" aria-label="Fill with walls" title="Fill: a wall on every border the unique solution doesn’t cross">Fill</button>
           <span class="simplify-goal">
-            <button class="btn" data-goal="easy" aria-pressed="false" title="Colour the walls and black tiles that could each go on its own, keeping the puzzle unique and solved by the easy rules alone">Easy</button>
-            <button class="btn icon-only" data-remove-all="easy" aria-label="Remove all (easy)" title="Remove every wall and black tile the easy rules don’t need">${ICONS.eraser}</button>
+            <button class="btn" data-goal="easy" aria-pressed="false" title="Colour the walls and black tiles that could each go on its own, keeping the puzzle unique and solved by the easy rules alone">Easy extras</button>
+            <button class="btn stacked" data-remove-all="easy" aria-label="Remove easy extras" title="Remove every wall and black tile the easy rules don’t need">${ICONS.eraser}<span>Remove</span></button>
           </span>
           <span class="simplify-goal">
-            <button class="btn" data-goal="minimal" aria-pressed="false" title="Colour the walls and black tiles that could each go on its own, keeping the solution unique">Minimal</button>
-            <button class="btn icon-only" data-remove-all="minimal" aria-label="Remove all (minimal)" title="Remove every wall and black tile the unique solution doesn’t need">${ICONS.eraser}</button>
+            <button class="btn" data-goal="minimal" aria-pressed="false" title="Colour the walls and black tiles that could each go on its own, keeping the solution unique">Minimal extras</button>
+            <button class="btn stacked" data-remove-all="minimal" aria-label="Remove minimal extras" title="Remove every wall and black tile the unique solution doesn’t need">${ICONS.eraser}<span>Remove</span></button>
           </span>
         </div>
         <div class="toolbar-row logic-row">
-          <button class="btn icon-only" data-logic="rules" aria-label="Logic rules" title="Logic rules">${ICONS.list}</button>
-          <button class="btn icon-only" data-logic="reset" aria-label="Reset logic" title="Reset logic">${ICONS.rewind}</button>
-          <button class="btn icon-only" data-logic="back" aria-label="Undo the last logic step" title="Undo the last logic step">${ICONS.stepBack}</button>
-          <button class="btn icon-only" data-logic="step" aria-label="Logic step" title="Logic step">${ICONS.step}</button>
-          <button class="btn icon-only" data-logic="fast" aria-label="Apply easy rules until stuck" title="Apply easy rules until stuck">${ICONS.fastForward}</button>
+          <button class="btn stacked" data-logic="rules" title="Logic rules">${ICONS.list}<span>Rules</span></button>
+          <button class="btn stacked" data-logic="reset" title="Reset logic">${ICONS.rewind}<span>Reset</span></button>
+          <button class="btn stacked" data-logic="back" title="Undo the last logic step">${ICONS.stepBack}<span>Back</span></button>
+          <button class="btn stacked" data-logic="step" title="Logic step">${ICONS.step}<span>Step</span></button>
+          <button class="btn stacked" data-logic="fast" title="Apply easy rules until stuck">${ICONS.fastForward}<span>Easy rules</span></button>
           <span class="editor-actions"></span>
         </div>
         <div class="toolbar-row actions-row">
-          <button class="btn" data-act="undo" aria-label="Undo">${ICONS.undo}</button>
-          <button class="btn" data-act="redo" aria-label="Redo">${ICONS.redo}</button>
-          <button class="btn" data-act="new" aria-label="New blank puzzle" title="New blank puzzle">${ICONS.plus}</button>
-          <button class="btn" data-act="generate" aria-label="Generate a puzzle" title="Generate a puzzle">${ICONS.dice}</button>
-          <button class="btn" data-act="save" aria-label="Save to the library" title="Save">${ICONS.save}</button>
-          <button class="btn primary" data-act="play" aria-label="Play" title="Play">${ICONS.play}</button>
+          <button class="btn stacked" data-act="undo">${ICONS.undo}<span>Undo</span></button>
+          <button class="btn stacked" data-act="redo">${ICONS.redo}<span>Redo</span></button>
+          <button class="btn stacked" data-act="new" title="New blank puzzle">${ICONS.plus}<span>New</span></button>
+          <button class="btn stacked" data-act="generate" title="Generate a puzzle">${ICONS.dice}<span>Generate</span></button>
+          <button class="btn stacked" data-act="save" title="Save to the library">${ICONS.save}<span>Save</span></button>
+          <button class="btn primary stacked" data-act="play" title="Play">${ICONS.play}<span>Play</span></button>
         </div>
       </div>
       <div class="board-info"></div>`;
