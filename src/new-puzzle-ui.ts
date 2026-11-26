@@ -120,10 +120,47 @@ function sizeRow(picker: { el: HTMLElement }): HTMLElement {
   return row;
 }
 
-/** The editor's New puzzle sheet: an empty grid of any size. */
-export function openBlankPuzzleSheet(ctx: NewPuzzleContext): void {
+type Sheet = { close(): void };
+
+/** The kind of new puzzle last picked (Blank or Generate), for the next time the sheet opens. */
+let lastKind: 'blank' | 'generate' = 'blank';
+
+/** The editor's New puzzle sheet: a blank grid of any size, or a generated puzzle. */
+export function openNewPuzzleSheet(ctx: NewPuzzleContext): void {
   const body = el('div', 'sheet-stack new-puzzle');
   const sheet = openSheet('New puzzle', body);
+  const pane = el('div', 'sheet-stack');
+  let stop: (() => void) | null = null;
+  const show = (kind: 'blank' | 'generate') => {
+    stop?.();
+    stop = null;
+    lastKind = kind;
+    if (kind === 'blank') pane.replaceChildren(blankPane(ctx, sheet));
+    else {
+      const g = generatorPane(ctx, sheet);
+      stop = g.stop;
+      pane.replaceChildren(g.el);
+    }
+  };
+  sheet.dialog.addEventListener('close', () => stop?.());
+  body.append(
+    segmented<'blank' | 'generate'>(
+      'Kind',
+      [
+        ['blank', 'Blank'],
+        ['generate', 'Generate'],
+      ],
+      lastKind,
+      show,
+    ),
+    pane,
+  );
+  show(lastKind);
+}
+
+/** A blank grid of any size. */
+function blankPane(ctx: NewPuzzleContext, sheet: Sheet): HTMLElement {
+  const body = el('div', 'sheet-stack');
   let size = { w: ctx.w, h: ctx.h };
   const picker = sizePicker(size.w, size.h, 1, 30, (w, h) => (size = { w, h }));
   const create = el('button', 'btn primary', `${ICONS.plus}<span>Create</span>`);
@@ -132,14 +169,13 @@ export function openBlankPuzzleSheet(ctx: NewPuzzleContext): void {
     sheet.close();
   });
   body.append(sizeRow(picker), create);
+  return body;
 }
 
-/** The editor's Generate sheet: a random puzzle with the chosen options. */
-export function openGeneratorSheet(ctx: NewPuzzleContext): void {
-  const body = el('div', 'sheet-stack new-puzzle');
-  const sheet = openSheet('Generate a puzzle', body);
+/** A random puzzle with the chosen options; `stop` cancels a run under way. */
+function generatorPane(ctx: NewPuzzleContext, sheet: Sheet): { el: HTMLElement; stop(): void } {
+  const body = el('div', 'sheet-stack');
   let run: GeneratorRun | null = null;
-  sheet.dialog.addEventListener('close', () => run?.cancel());
   let size = { w: clamp(ctx.w, GEN_MIN, GEN_MAX), h: clamp(ctx.h, GEN_MIN, GEN_MAX) };
   const picker = sizePicker(size.w, size.h, GEN_MIN, GEN_MAX, (w, h) => (size = { w, h }));
 
@@ -242,4 +278,11 @@ export function openGeneratorSheet(ctx: NewPuzzleContext): void {
     status,
     genRow,
   );
+  return {
+    el: body,
+    stop() {
+      run?.cancel();
+      run = null;
+    },
+  };
 }

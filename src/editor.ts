@@ -37,7 +37,7 @@ import type { EndFix } from './solver';
 import { suggestInBackground } from './suggest-client';
 import { removableInBackground, type Removable } from './generator-client';
 import type { GoalFailure, SimplifyGoal } from './generator';
-import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from './new-puzzle-ui';
+import { openNewPuzzleSheet, type NewPuzzleContext } from './new-puzzle-ui';
 
 type Tool = 'tiles' | 'walls' | 'ends' | 'path';
 
@@ -243,8 +243,7 @@ export class EditorView {
           <div class="toolbar-row actions-row">
             <button class="btn stacked" data-act="undo">${ICONS.undo}<span>Undo</span></button>
             <button class="btn stacked" data-act="redo">${ICONS.redo}<span>Redo</span></button>
-            <button class="btn stacked" data-act="new" title="New blank puzzle">${ICONS.plus}<span>New</span></button>
-            <button class="btn stacked" data-act="generate" title="Generate a puzzle">${ICONS.dice}<span>Generate</span></button>
+            <button class="btn stacked" data-act="new" title="New puzzle: blank or generated">${ICONS.plus}<span>New</span></button>
             <button class="btn stacked" data-act="save" title="Save to the library">${ICONS.save}<span>Save</span></button>
             <button class="btn primary stacked" data-act="play" title="Play">${ICONS.play}<span>Play</span></button>
           </div>
@@ -336,8 +335,7 @@ export class EditorView {
         );
       },
     });
-    q<HTMLButtonElement>('[data-act=new]').addEventListener('click', () => openBlankPuzzleSheet(newPuzzle()));
-    q<HTMLButtonElement>('[data-act=generate]').addEventListener('click', () => openGeneratorSheet(newPuzzle()));
+    q<HTMLButtonElement>('[data-act=new]').addEventListener('click', () => openNewPuzzleSheet(newPuzzle()));
     q<HTMLButtonElement>('[data-act=save]').addEventListener('click', () => this.onSave?.());
     q<HTMLButtonElement>('[data-act=play]').addEventListener('click', () => this.onPlay?.());
 
