@@ -1187,8 +1187,8 @@ export class EditorView {
                 : `${thing} (dashed)`;
         this.setMessage(
           s
-            ? `Suggested: ${what}. With it a player needs ${s.hints} hint${s.hints === 1 ? '' : 's'}${s.stuck ? ', then gets stuck' : ''}${s.hintsBefore !== undefined ? ` (${s.hintsBefore} now)` : ''}.`
-            : `No ${kind === 'wall' ? 'wall added, taken away or moved' : 'black tile, pair or swap'} makes this puzzle need more hints (or get further with them) while keeping a solution.`,
+            ? `Suggested: ${what}. ${s.stuck ? `With it a player gets stuck after ${s.lines} lines (${s.before} now) and ${s.hints} hint${s.hints === 1 ? '' : 's'}` : `With it a player needs ${s.hints} hint${s.hints === 1 ? '' : 's'}`}${s.hintsBefore !== undefined ? ` (${s.hintsBefore} now)` : ''}.`
+            : `No ${kind === 'wall' ? 'wall added, taken away or moved' : 'black tile, pair or swap'} lets a player finish with more hints (or, stuck, get further) while keeping a solution.`,
         );
       })
       .catch((err) => {

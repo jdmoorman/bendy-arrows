@@ -63,8 +63,13 @@ export interface TileScore {
   lines: number;
 }
 
-/** Best first: hints that finish before those that get stuck, then most hints, then most lines. */
-const order = (x: TileScore, y: TileScore) => Number(x.stuck) - Number(y.stuck) || y.hints - x.hints || y.lines - x.lines;
+/**
+ * Best first: hints that finish before those that get stuck. Among those that finish, most hints
+ * (then most lines). Among those that get stuck, most lines (then most hints): more hints to the
+ * same place only splits the same progress into smaller steps.
+ */
+const order = (x: TileScore, y: TileScore) =>
+  Number(x.stuck) - Number(y.stuck) || (x.stuck ? y.lines - x.lines || y.hints - x.hints : y.hints - x.hints || y.lines - x.lines);
 
 /** The tiles that could go black: open, and not an end. */
 export function tileCandidates(p: Puzzle): number[] {
@@ -205,8 +210,8 @@ export function pairMap(pairs: number[][], scores: (TileScore | null)[]): Map<st
  *     once they're stuck anyway), and each wall that could go. Those that let the player draw no
  *     line at all are dropped.
  *  2. For each addition, every partner (see partners), the pair played through (each pair once):
- *     its best partner by hints, then lines.
- *  3. All of these, best first (finished before stuck, then most hints, then most lines), only
+ *     its best partner (see order).
+ *  3. All of these, best first (see order), only
  *     those that improve on the puzzle as it is: the first that has a solution (one using every
  *     `drawn` line).
  */
