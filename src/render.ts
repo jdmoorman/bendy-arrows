@@ -292,6 +292,20 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   const player = arrow ? [] : [...(o.segments ?? [])];
   if (o.plan?.size) parts.push('<g class="plan">', strokes([...o.plan], 'seg-edge plan'), strokes([...o.plan], 'seg plan'), '</g>');
   if (o.faint?.size) parts.push('<g class="faint">', strokes([...o.faint], 'seg faint'), '</g>');
+  // X marks: over the lines, but under the solve animation's arrow, which flies over them.
+  let xmarks = '';
+  if (o.xMarks?.size) {
+    const s = 12;
+    const marks = [...o.xMarks].map((e) => {
+      const [x1, y1, x2, y2] = borderLine(e);
+      const cx = (x1 + x2) / 2;
+      const cy = (y1 + y2) / 2;
+      const cls = o.highlight?.has(e) ? 'xmark hint' : o.errorEdges?.has(e) ? 'xmark error' : 'xmark';
+      return line(cx - s, cy - s, cx + s, cy + s, cls) + line(cx - s, cy + s, cx + s, cy - s, cls);
+    });
+    xmarks = `<g class="xmarks">${marks.join('')}</g>`;
+  }
+  if (arrow) parts.push(xmarks);
   parts.push('<g class="segments">');
   if (arrow) parts.push(arrow.body);
   const isHi = (e: number) => !!o.highlight?.has(e);
@@ -306,19 +320,7 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
 
   if (markers.length) parts.push('<g class="ends">', ...markers.map((m) => m.fill), '</g>');
 
-  // X marks.
-  if (o.xMarks?.size) {
-    parts.push('<g class="xmarks">');
-    const s = 12;
-    for (const e of o.xMarks) {
-      const [x1, y1, x2, y2] = borderLine(e);
-      const cx = (x1 + x2) / 2;
-      const cy = (y1 + y2) / 2;
-      const cls = o.highlight?.has(e) ? 'xmark hint' : o.errorEdges?.has(e) ? 'xmark error' : 'xmark';
-      parts.push(line(cx - s, cy - s, cx + s, cy + s, cls), line(cx - s, cy + s, cx + s, cy - s, cls));
-    }
-    parts.push('</g>');
-  }
+  if (!arrow) parts.push(xmarks);
 
 
   for (const e of o.suggestWalls ?? []) {

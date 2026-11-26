@@ -487,6 +487,9 @@ a.btn {
 .board.solved .wall:not(.removable, .suggest) {
   stroke: color-mix(in srgb, var(--solved-edge) calc(var(--celebrate, 0) * 45%), var(--wall));
 }
+.board.solved .xmark:not(.hint, .error) {
+  stroke: color-mix(in srgb, var(--solved-edge) calc(var(--celebrate, 0) * 45%), var(--xmark));
+}
 
 /* ---------- Status & toolbars ---------- */
 .status {
