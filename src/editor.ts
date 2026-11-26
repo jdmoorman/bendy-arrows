@@ -1053,7 +1053,7 @@ export class EditorView {
         for (const [port, status] of moves.flatMap((f) => f.ports)) if (this.fixEndSpots.get(port) !== 'unique') this.fixEndSpots.set(port, status);
         // Each kind of fix that gives the puzzle a solution, one bullet each.
         const items = [
-          fixes.some((f) => f.add) ? 'Make a ringed tile black' : '',
+          fixes.some((f) => f.add) ? 'Make an indicated tile black' : '',
           fixes.some((f) => !f.add) ? 'Delete a black tile' : '',
           ...endFixes.map(endFixItem),
         ].filter((i) => i !== '');

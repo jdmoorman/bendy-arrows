@@ -2,6 +2,10 @@ import { cellCount, cellRC, edgeCells, edgeCount, edgeTouchesBlocked, isHorizont
 
 /** Size of one tile in SVG user units. */
 export const CELL = 100;
+/** A suggested fix's square on a tile: its inset from the tile's edge, side and corner radius. */
+const FIX_INSET = CELL * 0.125;
+const FIX_SIDE = CELL - 2 * FIX_INSET;
+const FIX_RX = 14;
 /** Space around the grid so the outer border and touches near it fit. */
 export const PAD = 10;
 /**
@@ -64,7 +68,7 @@ export interface RenderOptions {
   /** Borders to suggest walls on, drawn dashed on top; and walls to suggest taking away, in red. */
   suggestWalls?: number[];
   suggestClearWalls?: number[];
-  /** Tiles to suggest blacking out, outlined dashed on top; and black tiles to suggest clearing, ringed. */
+  /** Tiles to suggest blacking out, outlined dashed on top; and black tiles to suggest clearing, X'd. */
   suggestTiles?: number[];
   suggestClear?: number[];
   /** The puzzle's one end is its head (its tail was taken away), so it's drawn as one. */
@@ -212,12 +216,21 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   }
 
   if (o.tileFixes?.size) {
+    // Dashes that land centred on each rounded corner: a whole number of dash-and-gap repeats
+    // from corner to corner (dash to gap 14:10). A rect's outline starts on the top side, just
+    // after the top-left corner's curve.
+    const straight = FIX_SIDE - 2 * FIX_RX;
+    const arc = (Math.PI * FIX_RX) / 2;
+    const repeat = (straight + arc) / Math.max(1, Math.round((straight + arc) / 24));
+    const dash = (repeat * 14) / 24;
+    const offset = (((dash / 2 - straight - arc / 2) % repeat) + repeat) % repeat;
+    const fixDashes = `stroke-dasharray:${dash.toFixed(2)} ${(repeat - dash).toFixed(2)};stroke-dashoffset:${offset.toFixed(2)}`;
     parts.push('<g class="tile-fixes">');
     for (const [cell, status] of o.tileFixes) {
       // A black tile to clear gets a red X instead (drawn on top, below).
       if (p.blocked.has(cell)) continue;
       const [r, c] = cellRC(p, cell);
-      parts.push(`<circle class="tile-fix ${status}" cx="${pad + c * CELL + CELL / 2}" cy="${pad + r * CELL + CELL / 2}" r="${CELL * 0.3}"/>`);
+      parts.push(`<rect class="tile-fix ${status}" style="${fixDashes}" x="${pad + c * CELL + FIX_INSET}" y="${pad + r * CELL + FIX_INSET}" width="${FIX_SIDE}" height="${FIX_SIDE}" rx="${FIX_RX}"/>`);
     }
     parts.push('</g>');
   }

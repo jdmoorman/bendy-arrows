@@ -374,7 +374,7 @@ a.btn {
 .tile-fix {
   fill: none;
   stroke-width: 8;
-  stroke-dasharray: 14 10;
+  /* render.ts sets the dashes, to land on the corners. */
 }
 .tile-fix.unique {
   stroke: var(--success);
