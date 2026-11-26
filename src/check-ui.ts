@@ -93,7 +93,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
     // One solution or several: the overlay already shows which (the solution, or every line some
     // solution uses), so no label; for one, the hint count follows.
     if (last.status === 'unique') setChip('unique', '');
-    else if (last.status === 'none') setChip('none', 'No solution');
+    else if (last.status === 'none') setChip('none', editor.drawnPath.length ? 'No solution with the drawn path' : 'No solution');
     else if (last.status === 'multiple') setChip('multiple', '');
     else setChip('aborted', 'Too big');
   };
@@ -105,16 +105,22 @@ export function attachUniquenessCheck(editor: EditorView): void {
     if (!last || (last.status !== 'unique' && last.status !== 'multiple')) return editor.showGhost(null);
     // Show the solutions found so far at once, then every line any solution uses as it's found.
     editor.showGhost(last.solutions.flat());
-    if (last.status !== 'multiple') return;
-    const thisRun = solutionUnionInBackground(editor.current, (edges) => {
-      if (union === thisRun) editor.showGhost(edges);
-    });
+    // Fill keeps every line shown: ready once they all are.
+    if (last.status !== 'multiple') return editor.setFillReady(true);
+    const thisRun = solutionUnionInBackground(
+      editor.current,
+      (edges) => {
+        if (union === thisRun) editor.showGhost(edges);
+      },
+      editor.drawnPath,
+    );
     union = thisRun;
     thisRun.result.then(
       (r) => {
         if (union !== thisRun) return;
         union = null;
         editor.showGhost(r.edges);
+        editor.setFillReady(true);
         const n = r.unchecked.length;
         if (n) editor.setMessage(`Showing every line some solution uses. (${n} border${n === 1 ? '' : 's'} too slow to check.)`, 'error');
       },
@@ -151,7 +157,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
       for (const e of o.edges) lines.add(e);
       editor.showGhost(lines);
       show(false);
-    }, check, newFirst);
+    }, check, newFirst, editor.drawnPath);
     ends = thisRun;
     try {
       await thisRun.result;
@@ -179,7 +185,8 @@ export function attachUniquenessCheck(editor: EditorView): void {
   const start = async () => {
     // Short of ends: nothing to check until they're placed (Suggest finds where they could go).
     if (missingEnds(editor.current)) return setChip('checking', missingText());
-    const thisRun = solveInBackground(editor.current);
+    // Only solutions that use every line drawn with the Path tool count.
+    const thisRun = solveInBackground(editor.current, undefined, { mustUse: editor.drawnPath });
     run = thisRun;
     try {
       const r = await thisRun.result;
@@ -196,8 +203,8 @@ export function attachUniquenessCheck(editor: EditorView): void {
     }
   };
 
-  // Re-check after every change to the puzzle; the old overlay no longer fits.
-  editor.changeListeners.push(() => {
+  // Re-check after every change to the puzzle or the drawn path; the old overlay no longer fits.
+  const changed = () => {
     run?.cancel();
     run = null;
     union?.cancel();
@@ -207,11 +214,14 @@ export function attachUniquenessCheck(editor: EditorView): void {
     editor.showEndOptions(null);
     last = null;
     editor.showGhost(null);
+    editor.setFillReady(false);
     stopRating();
     refreshChip();
     clearTimeout(timer);
     timer = window.setTimeout(start, DEBOUNCE_MS);
-  });
+  };
+  editor.changeListeners.push(changed);
+  editor.pathListeners.push(changed);
 
 
   refreshChip();

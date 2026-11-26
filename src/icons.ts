@@ -44,6 +44,7 @@ export const ICONS = {
   chevron: icon('chevron.svg'),
   grid: icon('grid.svg'),
   eraser: icon('eraser.svg'),
+  paintBucket: icon('paint-bucket.svg'),
   arrowUp: icon('arrow-up.svg'),
   arrowDown: icon('arrow-down.svg'),
   close: icon('close.svg'),

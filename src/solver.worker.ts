@@ -26,13 +26,14 @@ ctx.onmessage = (ev: MessageEvent<SolverRequest>) => {
     if (ev.data.fixes) {
       // A puzzle with no solution: the one-tile changes among these tiles that give it one, and
       // the ends that could move (or be placed) to give it one.
-      const fixes = tileFixes(p, ev.data.fixes, { ok, onFound: (fix) => ctx.postMessage({ type: 'fix', fix } satisfies SolverMessage) });
-      ctx.postMessage({ type: 'fixes-done', fixes, endFixes: endFixes(p, { ok, newFirst: ev.data.newFirst }) } satisfies SolverMessage);
+      const mustUse = ev.data.mustUse;
+      const fixes = tileFixes(p, ev.data.fixes, { ok, mustUse, onFound: (fix) => ctx.postMessage({ type: 'fix', fix } satisfies SolverMessage) });
+      ctx.postMessage({ type: 'fixes-done', fixes, endFixes: endFixes(p, { ok, newFirst: ev.data.newFirst, mustUse }) } satisfies SolverMessage);
       return;
     }
     if (ev.data.ends) {
       // A puzzle short of ends: the placements that give it a solution, each as it's found.
-      const r = endPlacements(p, { union: true, ok, newFirst: ev.data.newFirst, onFound: (option) => ctx.postMessage({ type: 'end', option } satisfies SolverMessage) });
+      const r = endPlacements(p, { union: true, ok, newFirst: ev.data.newFirst, mustUse: ev.data.mustUse, onFound: (option) => ctx.postMessage({ type: 'end', option } satisfies SolverMessage) });
       ctx.postMessage({ type: 'ends-done', ...r } satisfies SolverMessage);
       return;
     }
@@ -40,6 +41,7 @@ ctx.onmessage = (ev: MessageEvent<SolverRequest>) => {
       // Every line used by some solution, reported as it grows.
       const result = solutionUnion(p, {
         nodeLimit: ev.data.nodeLimit,
+        mustUse: ev.data.mustUse,
         onUpdate: (edges) => ctx.postMessage({ type: 'union', edges } satisfies SolverMessage),
       });
       ctx.postMessage({ type: 'union-done', result } satisfies SolverMessage);

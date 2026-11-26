@@ -28,9 +28,19 @@ export interface Suggestion {
   hintsBefore?: number;
 }
 
-/** The editor's Suggest, in one go (the editor splits it across workers: see suggest-client). */
-export function suggest(p: Puzzle, kind: SuggestKind, rules: RuleId[], opts: LogicOptions = {}, onProgress?: (done: number, total: number) => void): Suggestion | null {
-  return suggestChanges(p, kind, rules, opts, (f) => onProgress?.(Math.round(f * 1000), 1000));
+/**
+ * The editor's Suggest, in one go (the editor splits it across workers: see suggest-client).
+ * `drawn`: lines drawn in the editor, which every change leaves alone and the solution keeps.
+ */
+export function suggest(
+  p: Puzzle,
+  kind: SuggestKind,
+  rules: RuleId[],
+  opts: LogicOptions = {},
+  onProgress?: (done: number, total: number) => void,
+  drawn: number[] = [],
+): Suggestion | null {
+  return suggestChanges(p, kind, rules, opts, (f) => onProgress?.(Math.round(f * 1000), 1000), drawn);
 }
 
 /**
@@ -62,12 +72,19 @@ export function tileCandidates(p: Puzzle): number[] {
   return openCells(p).filter((c) => !ends.has(c));
 }
 
-/** What could be added: open tiles to make black (not ends), or borders between open tiles to wall. */
-export function changeCandidates(p: Puzzle, kind: SuggestKind): number[] {
-  if (kind === 'tile') return tileCandidates(p);
+/**
+ * What could be added: open tiles to make black (not ends), or borders between open tiles to
+ * wall; none on the `drawn` lines (no wall across one, no black tile one reaches).
+ */
+export function changeCandidates(p: Puzzle, kind: SuggestKind, drawn: number[] = []): number[] {
+  if (kind === 'tile') {
+    const onPath = new Set(drawn.flatMap((e) => edgeCells(p, e)));
+    return tileCandidates(p).filter((c) => !onPath.has(c));
+  }
+  const lines = new Set(drawn);
   const out: number[] = [];
   for (let e = 0; e < edgeCount(p); e++) {
-    if (p.walls.has(e)) continue;
+    if (p.walls.has(e) || lines.has(e)) continue;
     const [a, b] = edgeCells(p, e);
     if (!p.blocked.has(a) && !p.blocked.has(b)) out.push(e);
   }
@@ -149,6 +166,7 @@ export function finishChanges(
   pairScores: Map<string, TileScore | null>,
   rules: RuleId[],
   opts: LogicOptions,
+  drawn: number[] = [],
 ): Suggestion | null {
   const before = playThrough(p, rules, opts);
   const options: TileScore[] = [];
@@ -168,7 +186,7 @@ export function finishChanges(
   const now: TileScore = { at: [], ...before };
   for (const o of options) {
     if (order(o, now) >= 0) break;
-    if (solve(applyChange(p, kind, o.at), { maxSolutions: 1, nodeLimit: 200_000 }).status === 'none') continue;
+    if (solve(applyChange(p, kind, o.at), { maxSolutions: 1, nodeLimit: 200_000, mustUse: drawn }).status === 'none') continue;
     const remove = o.at.filter((c) => c < 0).map((c) => -c - 1);
     return { kind, at: o.at.filter((c) => c >= 0), ...(remove.length ? { remove } : {}), lines: o.lines, before: before.lines, hints: o.hints, stuck: o.stuck, hintsBefore: before.hints };
   }
@@ -189,17 +207,18 @@ export function pairMap(pairs: number[][], scores: (TileScore | null)[]): Map<st
  *  2. For each addition, every partner (see partners), the pair played through (each pair once):
  *     its best partner by hints, then lines.
  *  3. All of these, best first (finished before stuck, then most hints, then most lines), only
- *     those that improve on the puzzle as it is: the first that has a solution.
+ *     those that improve on the puzzle as it is: the first that has a solution (one using every
+ *     `drawn` line).
  */
-function suggestChanges(p: Puzzle, kind: SuggestKind, rules: RuleId[], opts: LogicOptions, progress: (f: number) => void): Suggestion | null {
-  const candidates = changeCandidates(p, kind);
+function suggestChanges(p: Puzzle, kind: SuggestKind, rules: RuleId[], opts: LogicOptions, progress: (f: number) => void, drawn: number[]): Suggestion | null {
+  const candidates = changeCandidates(p, kind, drawn);
   const singleSets = singleChanges(p, kind, candidates);
   let done = 0;
   const singles = keepSingles(scoreChanges(p, kind, singleSets, rules, opts, () => progress((0.1 * ++done) / singleSets.length)));
   const pairs = changePairs(p, kind, singles, candidates);
   done = 0;
   const pairScores = pairMap(pairs, scoreChanges(p, kind, pairs, rules, opts, () => progress(0.1 + (0.85 * ++done) / pairs.length)));
-  const s = finishChanges(p, kind, candidates, singles, pairScores, rules, opts);
+  const s = finishChanges(p, kind, candidates, singles, pairScores, rules, opts, drawn);
   progress(1);
   return s;
 }

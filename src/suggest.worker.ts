@@ -10,9 +10,20 @@ import { finishChanges, scoreChanges, suggest, type SuggestKind, type Suggestion
  *  - finish: pick the change from every score (see finishChanges).
  */
 export type SuggestRequest =
-  | { task: 'suggest'; code: string; kind: SuggestKind; rules: RuleId[]; opts?: LogicOptions }
+  | { task: 'suggest'; code: string; kind: SuggestKind; rules: RuleId[]; opts?: LogicOptions; drawn?: number[] }
   | { task: 'score'; code: string; kind: SuggestKind; sets: number[][]; rules: RuleId[]; opts?: LogicOptions }
-  | { task: 'finish'; code: string; kind: SuggestKind; candidates: number[]; singles: TileScore[]; pairs: [string, TileScore | null][]; rules: RuleId[]; opts?: LogicOptions };
+  | {
+      task: 'finish';
+      code: string;
+      kind: SuggestKind;
+      candidates: number[];
+      singles: TileScore[];
+      pairs: [string, TileScore | null][];
+      rules: RuleId[];
+      opts?: LogicOptions;
+      /** Lines drawn in the editor: the change picked must leave a solution using them all. */
+      drawn?: number[];
+    };
 export type SuggestMessage =
   | { type: 'progress'; done: number; total: number }
   | { type: 'scores'; scores: (TileScore | null)[] }
@@ -33,7 +44,7 @@ ctx.onmessage = (ev: MessageEvent<SuggestRequest>) => {
       return;
     }
     if (m.task === 'finish') {
-      ctx.postMessage({ type: 'done', suggestion: finishChanges(p, m.kind, m.candidates, m.singles, new Map(m.pairs), m.rules, opts) } satisfies SuggestMessage);
+      ctx.postMessage({ type: 'done', suggestion: finishChanges(p, m.kind, m.candidates, m.singles, new Map(m.pairs), m.rules, opts, m.drawn) } satisfies SuggestMessage);
       return;
     }
     let last = 0;
@@ -43,7 +54,7 @@ ctx.onmessage = (ev: MessageEvent<SuggestRequest>) => {
         last = done;
         ctx.postMessage({ type: 'progress', done, total } satisfies SuggestMessage);
       }
-    });
+    }, m.drawn);
     ctx.postMessage({ type: 'done', suggestion } satisfies SuggestMessage);
   } catch (err) {
     ctx.postMessage({ type: 'error', message: err instanceof Error ? err.message : String(err) } satisfies SuggestMessage);

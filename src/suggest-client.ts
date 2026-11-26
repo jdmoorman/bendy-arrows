@@ -30,10 +30,18 @@ function ask(worker: Worker, req: SuggestRequest, onProgress?: (done: number) =>
 
 /**
  * The editor's suggested walls or black tiles, worked out in background workers; `onProgress`
- * sees how far it is (0 to 1). The work is split across several workers (see suggestChanges for
+ * sees how far it is (0 to 1). No change touches the `drawn` lines, and the puzzle after it must
+ * have a solution using them all. The work is split across several workers (see suggestChanges for
  * the search): first every single change, then every pair, then one worker picks.
  */
-export function suggestInBackground(p: Puzzle, kind: SuggestKind, rules: RuleId[], opts: LogicOptions, onProgress: (fraction: number) => void): SuggestRun {
+export function suggestInBackground(
+  p: Puzzle,
+  kind: SuggestKind,
+  rules: RuleId[],
+  opts: LogicOptions,
+  onProgress: (fraction: number) => void,
+  drawn: number[] = [],
+): SuggestRun {
   const code = encodePuzzle(p);
   const workers: Worker[] = [];
   let cancelled = false;
@@ -60,11 +68,11 @@ export function suggestInBackground(p: Puzzle, kind: SuggestKind, rules: RuleId[
       });
       return out;
     };
-    const candidates = changeCandidates(p, kind);
+    const candidates = changeCandidates(p, kind, drawn);
     const singles = keepSingles(await score(singleChanges(p, kind, candidates), 0, 0.1));
     const pairs = changePairs(p, kind, singles, candidates);
     const pairScores = pairMap(pairs, await score(pairs, 0.1, 0.95));
-    const m = await ask(workers[0], { task: 'finish', code, kind, candidates, singles, pairs: [...pairScores], rules, opts });
+    const m = await ask(workers[0], { task: 'finish', code, kind, candidates, singles, pairs: [...pairScores], rules, opts, drawn });
     onProgress(1);
     return m.type === 'done' ? m.suggestion : null;
   };

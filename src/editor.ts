@@ -60,6 +60,8 @@ export class EditorView {
   readonly el: HTMLElement;
   /** Called after every change to the puzzle. */
   readonly changeListeners: ((p: Puzzle) => void)[] = [];
+  /** Called when the lines drawn with the Path tool change (but not the puzzle). */
+  readonly pathListeners: (() => void)[] = [];
   /** Called when the user asks to play the puzzle. */
   onPlay?: () => void;
   /** Called when the Save button is pressed. */
@@ -207,8 +209,8 @@ export class EditorView {
             <button class="btn stacked" data-act="suggest" title="Suggest walls: the change (a wall added, taken away or moved) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)">${ICONS.bulb}<span>Suggest</span></button>
           </div>
         </div>
-        <div class="toolbar-section" role="group" aria-label="Puzzle">
-          <div class="toolbar-title" aria-hidden="true">Puzzle</div>
+        <div class="toolbar-section" role="group" aria-label="Transform Grid">
+          <div class="toolbar-title" aria-hidden="true">Transform Grid</div>
           <div class="toolbar-row puzzle-row">
             <button class="btn stacked" data-act="grid" aria-pressed="false" title="Resize: add or delete rows and columns around the board">${ICONS.grid}<span>Resize</span></button>
             <button class="btn stacked" data-turn="rotateLeft" title="Rotate left">${ICONS.rotateLeft}<span>Turn left</span></button>
@@ -217,16 +219,13 @@ export class EditorView {
             <button class="btn stacked" data-turn="flipV" title="Flip up–down">${ICONS.flipV}<span>Flip V</span></button>
           </div>
         </div>
-        <div class="toolbar-section" role="group" aria-label="Path">
-          <div class="toolbar-title" aria-hidden="true">Path</div>
+        <div class="toolbar-section" role="group" aria-label="Obstacles">
+          <div class="toolbar-title" aria-hidden="true">Obstacles</div>
           <div class="toolbar-row fill-row">
-            <button class="btn" data-act="clear-obstacles" title="Clear obstacles: delete every wall and black tile">${ICONS.clear}<span>Clear obstacles</span></button>
-            <button class="btn" data-act="fill" title="Fill obstacles: a black tile on every open tile no line reaches, and a wall on every other border no line crosses">Fill obstacles</button>
+            <button class="btn" data-act="clear-obstacles" title="Clear obstacles: delete every wall and black tile">${ICONS.clear}<span>Clear</span></button>
+            <button class="btn" data-act="fill" title="Fill obstacles: a black tile on every open tile no line reaches, and a wall on every other border no line crosses">${ICONS.paintBucket}<span>Fill</span></button>
             <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the tail, and hints and logic follow it">One-shot</button>
           </div>
-        </div>
-        <div class="toolbar-section" role="group" aria-label="Simplify">
-          <div class="toolbar-title" aria-hidden="true">Simplify</div>
           <div class="toolbar-row simplify-row">
             <span class="simplify-goal">
               <button class="btn" data-goal="easy" aria-pressed="false" title="Colour the walls and black tiles that could each go on its own, keeping the puzzle unique and solved by the easy rules alone">Easy extras</button>
@@ -303,6 +302,7 @@ export class EditorView {
     }
     this.fillBtn = q<HTMLButtonElement>('[data-act=fill]');
     this.fillBtn.addEventListener('click', () => this.fill());
+    this.fillBtn.disabled = true;
     this.clearObstaclesBtn = q<HTMLButtonElement>('[data-act=clear-obstacles]');
     this.clearObstaclesBtn.addEventListener('click', () => this.clearObstacles());
     this.suggestBtn = q<HTMLButtonElement>('[data-act=suggest]');
@@ -316,10 +316,12 @@ export class EditorView {
     q<HTMLButtonElement>('[data-logic=fast]').addEventListener('click', () => this.fastForwardLogic());
     q<HTMLButtonElement>('[data-logic=reset]').addEventListener('click', () => {
       this.cancelAutoLogic();
+      const drawn = this.plan.size > 0;
       this.plan.clear();
       this.resetLogic();
       this.clearMessage();
       this.render();
+      if (drawn) this.pathChanged();
     });
     q<HTMLButtonElement>('[data-logic=rules]').addEventListener('click', () => this.openRulesSheet());
     this.undoBtn.addEventListener('click', () => this.undo());
@@ -673,7 +675,17 @@ export class EditorView {
     this.logic.xs.delete(e);
     this.faintLines = new Set();
     this.render();
+    this.pathChanged();
     return true;
+  }
+
+  /** The lines drawn with the Path tool: the solution check only counts solutions that use them all. */
+  get drawnPath(): number[] {
+    return [...this.plan];
+  }
+
+  private pathChanged() {
+    for (const fn of this.pathListeners) fn();
   }
 
   /** Whether the lines already run from one tile to the other (a line between would close a loop). */
@@ -698,6 +710,7 @@ export class EditorView {
       this.faintLines = new Set();
       this.render();
     }
+    if (drawn) this.pathChanged();
   }
 
   /** After an edit: the wanted path loses lines through walls or black tiles (or off the board, after an undone resize). */
@@ -734,14 +747,16 @@ export class EditorView {
   }
 
   /**
-   * Fill obstacles around the lines (drawn, or found by the logic helper), as
-   * one undoable step: every open tile no line reaches turns black (unless an end is on it), and
-   * every other border no line crosses gets a wall.
+   * Fill obstacles around the lines shown (drawn, found by the logic helper, or the solution
+   * overlay: the solution, or every line some solution uses), as one undoable step, so the path
+   * shown stays as it is: every open tile no line reaches turns black (unless an end is on it),
+   * and every other border no line crosses gets a wall.
    */
   private fill() {
+    if (this.fillBtn.disabled) return;
     this.cancelSimplify();
     const p = this.puzzle;
-    const lines = this.logic.segments;
+    const lines = new Set([...this.logic.segments, ...(this.ghost ?? [])]);
     if (!lines.size) return this.setMessage('Draw the path first (Path tool): Fill obstacles fills in everything around it.', 'error');
     const endTiles = new Set(p.endpoints.map((end) => endTile(p, end)));
     const black = openCells(p).filter((c) => !endTiles.has(c) && !cellEdges(p, c).some((e) => lines.has(e)));
@@ -1038,6 +1053,7 @@ export class EditorView {
       },
       this.fixCheck(),
       this.loneHead,
+      [...this.plan],
     );
     this.fixRun = run;
     run.result
@@ -1135,6 +1151,14 @@ export class EditorView {
     this.render();
   }
 
+  /**
+   * Whether Fill can be used: only once the check is done and found a solution, so the overlay
+   * shows every line a solution uses (the uniqueness chip decides when).
+   */
+  setFillReady(ready: boolean): void {
+    this.fillBtn.disabled = !ready;
+  }
+
   /** Overlay solution lines faintly on the board (the uniqueness chip decides when). */
   showGhost(edges: Iterable<number> | null): void {
     this.ghost = edges ? new Set(edges) : null;
@@ -1176,7 +1200,7 @@ export class EditorView {
     const fill = this.suggestBar.querySelector('span')!;
     fill.style.width = '0%';
     this.setMessage(`Looking for the ${kind === 'wall' ? 'walls' : 'black tiles'} that make a player need the most hints…`);
-    const run = suggestInBackground(this.puzzle, kind, [...this.logicRules], this.logicOpts, (f) => (fill.style.width = `${Math.round(f * 100)}%`));
+    const run = suggestInBackground(this.puzzle, kind, [...this.logicRules], this.logicOpts, (f) => (fill.style.width = `${Math.round(f * 100)}%`), [...this.plan]);
     this.suggestRun = run;
     this.render();
     run.result

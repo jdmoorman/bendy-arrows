@@ -429,6 +429,8 @@ export function endPlacements(
     ok?: (q: Puzzle) => boolean;
     /** The puzzle's one end is its head: the end placed is the tail (it matters for a one-shot). */
     newFirst?: boolean;
+    /** Only solutions that use all of these lines count (e.g. lines drawn in the editor). */
+    mustUse?: number[];
   } = {},
 ): { options: EndOption[]; unchecked: number } {
   const byCell = new Map<number, number[]>();
@@ -455,14 +457,14 @@ export function endPlacements(
     const q = clonePuzzle(p);
     q.endpoints = opts.newFirst ? [portEnd(b), portEnd(a)] : [portEnd(a), portEnd(b)];
     if (!parityCheck(q).ok || (opts.ok && !opts.ok(q))) continue;
-    const r = solve(q, { maxSolutions: 2, nodeLimit: opts.nodeLimit ?? 200_000, shouldAbort: opts.shouldAbort });
+    const r = solve(q, { maxSolutions: 2, nodeLimit: opts.nodeLimit ?? 200_000, shouldAbort: opts.shouldAbort, mustUse: opts.mustUse });
     if (r.status === 'aborted') unchecked++;
     if (r.status !== 'unique' && r.status !== 'multiple') continue;
     // Every port of each end's tile works the same way.
     const edges =
       r.status === 'multiple' && opts.union
         ? (() => {
-            const u = solutionUnion(q, { nodeLimit: opts.nodeLimit ?? 200_000, perEdgeNodeLimit: 100_000, shouldAbort: opts.shouldAbort });
+            const u = solutionUnion(q, { nodeLimit: opts.nodeLimit ?? 200_000, perEdgeNodeLimit: 100_000, shouldAbort: opts.shouldAbort, mustUse: opts.mustUse });
             unchecked += u.unchecked.length ? 1 : 0;
             return u.edges;
           })()
@@ -487,7 +489,7 @@ export interface EndFix {
   ports: [number, 'unique' | 'multiple'][];
 }
 
-export function endFixes(p: Puzzle, opts: { nodeLimit?: number; ok?: (q: Puzzle) => boolean; newFirst?: boolean } = {}): EndFix[] {
+export function endFixes(p: Puzzle, opts: { nodeLimit?: number; ok?: (q: Puzzle) => boolean; newFirst?: boolean; mustUse?: number[] } = {}): EndFix[] {
   const tally = (end: number, options: EndOption[], both = false): EndFix[] => {
     if (!options.length) return [];
     // The placed end's ports (both ends' with none placed before), one solution beating several.
@@ -514,9 +516,14 @@ export interface TileFix {
 /**
  * For a puzzle with no solution: each change of one tile among `cells` (an open tile made black,
  * or a black tile made open; end tiles stay open), and whether the puzzle then has a solution.
- * Only the changes that give it one are returned, each as it's found to `onFound`.
+ * Only the changes that give it one are returned, each as it's found to `onFound`. With
+ * `mustUse`, only solutions using all of those lines count.
  */
-export function tileFixes(p: Puzzle, cells: Iterable<number>, opts: { nodeLimit?: number; onFound?: (f: TileFix) => void; ok?: (q: Puzzle) => boolean } = {}): TileFix[] {
+export function tileFixes(
+  p: Puzzle,
+  cells: Iterable<number>,
+  opts: { nodeLimit?: number; onFound?: (f: TileFix) => void; ok?: (q: Puzzle) => boolean; mustUse?: number[] } = {},
+): TileFix[] {
   const ends = new Set(endpointCells(p));
   const out: TileFix[] = [];
   for (const cell of new Set(cells)) {
@@ -527,7 +534,7 @@ export function tileFixes(p: Puzzle, cells: Iterable<number>, opts: { nodeLimit?
     else q.blocked.delete(cell);
     // A change the caller rejects (e.g. one leaving the logic rules a contradiction) isn't a fix.
     if (opts.ok && !opts.ok(q)) continue;
-    const r = solve(q, { maxSolutions: 2, nodeLimit: opts.nodeLimit ?? 200_000 });
+    const r = solve(q, { maxSolutions: 2, nodeLimit: opts.nodeLimit ?? 200_000, mustUse: opts.mustUse });
     if (r.status !== 'unique' && r.status !== 'multiple') continue;
     const f = { cell, add, status: r.status };
     out.push(f);
