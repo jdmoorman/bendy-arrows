@@ -402,13 +402,6 @@ a.btn {
 .seg.faint {
   stroke: color-mix(in srgb, var(--path) 35%, var(--tile));
 }
-/* The editor's drawn path (Draw mode): teal, apart from the logic helper's and players' lines. */
-.seg.plan {
-  stroke: rgb(20 184 166);
-}
-.seg-edge.plan {
-  stroke: rgb(15 118 110);
-}
 .seg-edge.error {
   stroke: var(--error-edge);
 }
@@ -1231,7 +1224,7 @@ img.icon {
   min-width: 0;
 }
 
-/* The four editing tools fill their row. */
+/* The four editing tools fill their row, each as wide as its name needs. */
 .toolbar-row .segmented .seg-btn {
   padding: 0 6px;
 }
@@ -1240,11 +1233,12 @@ img.icon {
   min-width: 0;
 }
 .tool-row .segmented .seg-btn {
+  flex: 1 1 auto;
   min-width: 0;
   padding: 0 4px;
 }
 
-/* Transform grid, One-shot and Suggest; Clear lines and Fill walls: each row shared evenly. */
+/* Transform grid, One-shot and Suggest; Clear solution and Fill obstacles: each row shared evenly. */
 .puzzle-row > .btn,
 .fill-row > .btn {
   min-width: 0;
@@ -2101,7 +2095,7 @@ img.icon {
 .simplify-goal > .btn.stacked {
   flex: 0 0 auto;
 }
-/* Remove all or Fill at work: a tap again cancels it. */
+/* Remove all at work: a tap again cancels it. */
 .simplify-row .btn.busy {
   animation: simplify-busy 1s ease-in-out infinite alternate;
 }

@@ -25,7 +25,7 @@ export function columnName(c: number): string {
 
 export interface RenderOptions {
   segments?: Set<number>;
-  /** The editor's drawn path (Draw mode), in its own colour under any other lines. */
+  /** The editor's desired solution: drawn like the logic helper's lines, merged with `segments`. */
   plan?: Set<number>;
   xMarks?: Set<number>;
   errorCells?: Set<number>;
@@ -289,8 +289,8 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   // Path segments. Each continuous run is one stroke with round joins, so
   // corners are seamless.
   const isErr = (e: number) => !!o.errorEdges?.has(e);
-  const player = arrow ? [] : [...(o.segments ?? [])];
-  if (o.plan?.size) parts.push('<g class="plan">', strokes([...o.plan], 'seg-edge plan'), strokes([...o.plan], 'seg plan'), '</g>');
+  // The editor's desired solution is drawn just like the logic helper's lines, as one set with them.
+  const player = arrow ? [] : [...new Set([...(o.segments ?? []), ...(o.plan ?? [])])];
   if (o.faint?.size) parts.push('<g class="faint">', strokes([...o.faint], 'seg faint'), '</g>');
   // X marks: over the lines, but under the solve animation's arrow, which flies over them.
   let xmarks = '';

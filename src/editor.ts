@@ -34,7 +34,7 @@ import { Storage } from './storage';
 import { openSheet } from './ui';
 import { tileFixesInBackground, type FixesRun } from './solver-client';
 import { suggestInBackground } from './suggest-client';
-import { fillInBackground, removableInBackground, simplifyInBackground, type Removable } from './generator-client';
+import { removableInBackground, simplifyInBackground, type Removable } from './generator-client';
 import type { GoalFailure, SimplifyGoal } from './generator';
 import { openBlankPuzzleSheet, openGeneratorSheet, type NewPuzzleContext } from './new-puzzle-ui';
 
@@ -46,7 +46,7 @@ const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
   walls: 'Tap or drag along borders to add walls.',
   ends: 'Tap a dot on the frame to add the entrance, then the exit.',
-  path: 'Drag to draw the lines you want the path to take; drag along them to erase. Fill then walls off every border no solution through them crosses.',
+  path: 'Drag to draw the lines you want the path to take; drag along them to erase. Fill obstacles then fills in every tile and border without a line.',
 };
 
 /** Why Simplify can't start, by goal failure. */
@@ -142,8 +142,8 @@ export class EditorView {
   private simplifyGoal: SimplifyGoal | null = null;
   private removable: Removable | null = null;
   private removableRun: { cancel(): void } | null = null;
-  /** A Remove all (for a goal) or Fill in progress. */
-  private simplifyRun: { goal: SimplifyGoal | 'fill'; cancel(): void } | null = null;
+  /** A Remove all (for a goal) in progress. */
+  private simplifyRun: { goal: SimplifyGoal; cancel(): void } | null = null;
   /** What Remove all just did, kept at the front of the highlight's message that follows it. */
   private simplifyNote = '';
   private goalBtns!: Record<SimplifyGoal, HTMLButtonElement>;
@@ -180,7 +180,7 @@ export class EditorView {
             <button class="seg-btn" data-tool="tiles">Black tiles</button>
             <button class="seg-btn" data-tool="walls">Walls</button>
             <button class="seg-btn" data-tool="ends">Ends</button>
-            <button class="seg-btn" data-tool="path" title="Draw lines you want the path to take; Fill then walls off every border no solution through them crosses">Draw lines</button>
+            <button class="seg-btn" data-tool="path" title="Draw the lines you want the path to take; Fill obstacles then fills in every tile and border without a line">Desired solution</button>
           </div>
         </div>
         <div class="toolbar-row puzzle-row">
@@ -189,8 +189,8 @@ export class EditorView {
           <button class="btn stacked" data-act="suggest" title="Suggest walls: the change (a wall added, taken away or moved) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)">${ICONS.bulb}<span>Suggest</span></button>
         </div>
         <div class="toolbar-row fill-row">
-          <button class="btn" data-act="clear-plan" title="Clear the lines drawn with Draw lines">${ICONS.clear}<span>Clear lines</span></button>
-          <button class="btn" data-act="fill" title="Fill: a wall on every border the unique solution doesn’t cross">Fill walls</button>
+          <button class="btn" data-act="clear-plan" title="Clear the desired solution">${ICONS.clear}<span>Clear solution</span></button>
+          <button class="btn" data-act="fill" title="Fill obstacles: a black tile on every open tile no line reaches, and a wall on every other border no line crosses">Fill obstacles</button>
         </div>
         <div class="toolbar-row simplify-row">
           <span class="simplify-goal">
@@ -594,7 +594,7 @@ export class EditorView {
     );
   }
 
-  /** A Draw drag moved a tile: draw the line between (if the path can take it) or erase it. */
+  /** A desired-solution drag moved a tile: draw the line between (clearing any wall or black tile in the way) or erase it. */
   private planStep(from: number, to: number): boolean {
     const p = this.puzzle;
     const e = edgeBetween(p, from, to);
@@ -605,7 +605,13 @@ export class EditorView {
     }
     if (this.plan.has(e)) return true;
     const degree = (c: number) => cellEdges(p, c).filter((x) => this.plan.has(x)).length;
-    if (!isUsableEdge(p, e) || degree(from) >= 2 || degree(to) >= 2 || this.planJoins(from, to)) return false;
+    if (degree(from) >= 2 || degree(to) >= 2 || this.planJoins(from, to)) return false;
+    // Drawing over a wall or a black tile takes it away (each its own undo step, as when placing).
+    if (!isUsableEdge(p, e)) {
+      this.placing();
+      p.walls.delete(e);
+      for (const c of [from, to]) p.blocked.delete(c);
+    }
     this.plan.add(e);
     this.render();
     return true;
@@ -652,45 +658,32 @@ export class EditorView {
     this.simplifyRun = null;
   }
 
-  /** Wall off every border the unique solution doesn't cross (one undoable step); again to cancel. */
+  /**
+   * Fill obstacles around the lines (the desired solution's, or the logic helper's on show), as
+   * one undoable step: every open tile no line reaches turns black (unless an end is on it), and
+   * every other border no line crosses gets a wall.
+   */
   private fill() {
-    const running = this.simplifyRun;
     this.cancelSimplify();
-    if (running) {
-      this.render();
-      if (running.goal === 'fill') return this.setMessage('Fill cancelled.');
-    }
     const p = this.puzzle;
-    const drawn = this.plan.size > 0;
-    const run = fillInBackground(p, this.plan);
-    const handle = { goal: 'fill' as const, cancel: run.cancel };
-    this.simplifyRun = handle;
-    this.setMessage(drawn ? 'Walling off every border no solution through the drawn lines crosses…' : 'Walling off every border no solution crosses…');
-    run.result.then(
-      (r) => {
-        if (this.simplifyRun !== handle) return;
-        this.simplifyRun = null;
-        this.render();
-        if (r === 'none') return this.setMessage(drawn ? 'No solution follows the drawn lines.' : 'No solution to fill around.', 'error');
-        if (r === 'aborted') return this.setMessage('Too big to check: Fill needs to find the solutions.', 'error');
-        const q = r.puzzle;
-        const added = q.walls.size - p.walls.size;
-        const which = r.status === 'unique' ? 'the solution' : 'any solution';
-        const slow = r.unchecked ? ` (${r.unchecked} border${r.unchecked === 1 ? '' : 's'} too slow to check, left open)` : '';
-        if (!added) return this.setMessage(`Nothing to fill: every border ${which} doesn’t cross already has a wall${slow}.`);
-        const done = `Added ${added} wall${added === 1 ? '' : 's'}${r.status === 'multiple' ? ', keeping every solution' + (drawn ? ' through the drawn lines' : '') : ''}${slow}. `;
-        this.edit(() => q);
-        if (this.removableRun) this.simplifyNote = done;
-        this.setMessage(done.trim(), 'success');
-      },
-      (err) => {
-        if (this.simplifyRun !== handle) return;
-        this.simplifyRun = null;
-        this.render();
-        if (!(err instanceof DOMException)) this.setMessage(err instanceof Error ? err.message : String(err));
-      },
-    );
-    this.render();
+    const lines = new Set(this.plan);
+    if (this.logicSteps > 0 || this.logicBad.length > 0) for (const e of this.logic.segments) lines.add(e);
+    if (!lines.size) return this.setMessage('Draw the desired solution first: Fill obstacles fills in everything around it.', 'error');
+    const endTiles = new Set(p.endpoints.map((end) => endTile(p, end)));
+    const black = openCells(p).filter((c) => !endTiles.has(c) && !cellEdges(p, c).some((e) => lines.has(e)));
+    const q = clonePuzzle(p);
+    for (const c of black) {
+      q.blocked.add(c);
+      for (const e of cellEdges(q, c)) q.walls.delete(e);
+    }
+    const walls: number[] = [];
+    for (let e = 0; e < edgeCount(q); e++) if (isUsableEdge(q, e) && !lines.has(e)) walls.push(e);
+    if (!black.length && !walls.length) return this.setMessage('Nothing to fill: every tile and border without a line is already filled.');
+    for (const e of walls) q.walls.add(e);
+    this.edit(() => q);
+    const count = (n: number, what: string) => `${n} ${what}${n === 1 ? '' : 's'}`;
+    const added = [black.length ? count(black.length, 'black tile') : '', walls.length ? count(walls.length, 'wall') : ''].filter(Boolean).join(' and ');
+    this.setMessage(`Added ${added}.`, 'success');
   }
 
   /** Take away every obstacle the goal doesn't need, in the background (one undoable step); again to cancel. */
@@ -1341,7 +1334,6 @@ export class EditorView {
       this.removeAllBtns[g].classList.toggle('busy', this.simplifyRun?.goal === g);
     }
     this.clearPlanBtn.disabled = !this.plan.size;
-    this.fillBtn.classList.toggle('busy', this.simplifyRun?.goal === 'fill');
     this.drawGridHandles();
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;
