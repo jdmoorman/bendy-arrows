@@ -1626,7 +1626,9 @@ img.icon {
   background: var(--surface);
   -webkit-tap-highlight-color: transparent;
 }
-.level-btn:focus-visible {
+/* Focused from the keyboard, or the level just played (marked the same way). */
+.level-btn:focus-visible,
+.level-btn.current {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -1719,9 +1721,6 @@ img.icon {
 .level-check .icon {
   width: 14px;
   height: 14px;
-}
-.level-btn.current {
-  box-shadow: 0 0 0 2px var(--accent);
 }
 
 /* ---------- Pack organiser (creator) ---------- */
