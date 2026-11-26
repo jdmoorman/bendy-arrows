@@ -796,7 +796,7 @@ export class PlayView {
     const delay = 300;
     // Longer paths take a little longer to pull in, but never drag.
     const pullTime = Math.min(2000, Math.max(700, 400 + this.segments.size * 42));
-    const spinTime = 1000;
+    const spinTime = 1300;
     const start = performance.now() + delay;
     const tick = (now: number) => {
       const pull = Math.max(0, Math.min(1, (now - start) / pullTime));
