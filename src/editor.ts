@@ -209,16 +209,6 @@ export class EditorView {
             <button class="btn stacked" data-act="suggest" title="Suggest walls: the change (a wall added, taken away or moved) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)">${ICONS.bulb}<span>Suggest</span></button>
           </div>
         </div>
-        <div class="toolbar-section" role="group" aria-label="Transform Grid">
-          <div class="toolbar-title" aria-hidden="true">Transform Grid</div>
-          <div class="toolbar-row puzzle-row">
-            <button class="btn stacked" data-act="grid" aria-pressed="false" title="Resize: add or delete rows and columns around the board">${ICONS.grid}<span>Resize</span></button>
-            <button class="btn stacked" data-turn="rotateLeft" title="Rotate left">${ICONS.rotateLeft}<span>Turn left</span></button>
-            <button class="btn stacked" data-turn="rotateRight" title="Rotate right">${ICONS.rotateRight}<span>Turn right</span></button>
-            <button class="btn stacked" data-turn="flipH" title="Flip left–right">${ICONS.flipH}<span>Flip H</span></button>
-            <button class="btn stacked" data-turn="flipV" title="Flip up–down">${ICONS.flipV}<span>Flip V</span></button>
-          </div>
-        </div>
         <div class="toolbar-section" role="group" aria-label="Obstacles">
           <div class="toolbar-title" aria-hidden="true">Obstacles</div>
           <div class="toolbar-row fill-row">
@@ -246,6 +236,16 @@ export class EditorView {
             <button class="btn stacked" data-logic="step" title="Logic step">${ICONS.step}<span>Step</span></button>
             <button class="btn stacked" data-logic="fast" title="Apply easy rules until stuck">${ICONS.fastForward}<span>Easy rules</span></button>
             <span class="editor-actions"></span>
+          </div>
+        </div>
+        <div class="toolbar-section" role="group" aria-label="Transform Grid">
+          <div class="toolbar-title" aria-hidden="true">Transform Grid</div>
+          <div class="toolbar-row puzzle-row">
+            <button class="btn stacked" data-act="grid" aria-pressed="false" title="Resize: add or delete rows and columns around the board">${ICONS.grid}<span>Resize</span></button>
+            <button class="btn stacked" data-turn="rotateLeft" title="Rotate left">${ICONS.rotateLeft}<span>Turn left</span></button>
+            <button class="btn stacked" data-turn="rotateRight" title="Rotate right">${ICONS.rotateRight}<span>Turn right</span></button>
+            <button class="btn stacked" data-turn="flipH" title="Flip left–right">${ICONS.flipH}<span>Flip H</span></button>
+            <button class="btn stacked" data-turn="flipV" title="Flip up–down">${ICONS.flipV}<span>Flip V</span></button>
           </div>
         </div>
         <div class="toolbar-section" role="group" aria-label="Level">
