@@ -164,20 +164,10 @@ export function attachUniquenessCheck(editor: EditorView): void {
     }
   };
 
-  // Where missing ends could go: only on request (the Suggest button with the Ends tool).
-  editor.endSuggester = () => ({
-    result: findEnds(),
-    cancel: () => {
-      ends?.cancel();
-      ends = null;
-      setChip('checking', missingText());
-    },
-  });
-  const missingText = () => (editor.current.endpoints.length ? 'No second end yet' : 'No ends yet');
 
   const start = async () => {
-    // Short of ends: nothing to check until they're placed (Suggest finds where they could go).
-    if (missingEnds(editor.current)) return setChip('checking', missingText());
+    // Short of ends: show where they could go (always, whatever the tool).
+    if (missingEnds(editor.current)) return void findEnds();
     const thisRun = solveInBackground(editor.current);
     run = thisRun;
     try {

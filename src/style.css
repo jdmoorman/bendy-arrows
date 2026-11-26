@@ -2230,16 +2230,3 @@ img.icon {
 .tool-row .btn.busy {
   animation: simplify-busy 1s ease-in-out infinite alternate;
 }
-/* Suggest working without a known length (where ends could go): a sliding bar. */
-.suggest-progress.indeterminate span {
-  width: 30%;
-  animation: suggest-slide 1.2s ease-in-out infinite;
-}
-@keyframes suggest-slide {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(340%);
-  }
-}

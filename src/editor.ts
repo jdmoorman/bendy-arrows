@@ -92,10 +92,6 @@ export class EditorView {
   private suggestBtn!: HTMLButtonElement;
   private suggestBar!: HTMLElement;
   private suggestRun: { cancel(): void } | null = null;
-  /** Suggest was asked where ends could go: it looks again after each end is placed, until both are. */
-  private endsSuggested = false;
-  /** Suggest with the Ends tool: where the missing ends could go (set up by the uniqueness check). */
-  endSuggester: (() => { result: Promise<void>; cancel(): void }) | null = null;
   private message = '';
   private messageKind: '' | 'success' | 'error' = '';
 
@@ -1069,12 +1065,7 @@ export class EditorView {
    * dashed; tapping it places it.
    */
   private suggest() {
-    if (this.suggestRun) {
-      // Stopped by hand: no more looking again after each end, either.
-      this.endsSuggested = false;
-      return this.cancelSuggest();
-    }
-    if (this.tool === 'ends') return this.suggestEnds();
+    if (this.suggestRun) return this.cancelSuggest();
     if (this.tool !== 'walls' && this.tool !== 'tiles') return;
     const kind = this.tool === 'walls' ? 'wall' : 'tile';
     this.suggested = null;
@@ -1116,24 +1107,6 @@ export class EditorView {
   }
 
   /** Suggest with the Ends tool: mark every frame spot where a missing end gives a solution. */
-  private suggestEnds() {
-    if (!missingEnds(this.puzzle) || !this.endSuggester) return;
-    this.endsSuggested = true;
-    this.suggestBar.hidden = false;
-    this.suggestBar.classList.add('indeterminate');
-    const run = this.endSuggester();
-    this.suggestRun = run;
-    this.render();
-    const done = () => {
-      if (this.suggestRun !== run) return;
-      this.suggestRun = null;
-      this.suggestBar.hidden = true;
-      this.suggestBar.classList.remove('indeterminate');
-      this.render();
-    };
-    run.result.then(done, done);
-  }
-
   /**
    * After an edit: a suggestion stays while the only changes are suggested walls or tiles being
    * placed (the rest of a suggested pair still shows); any other edit ends it.
@@ -1157,7 +1130,6 @@ export class EditorView {
     this.suggestRun.cancel();
     this.suggestRun = null;
     this.suggestBar.hidden = true;
-    this.suggestBar.classList.remove('indeterminate');
     this.clearMessage();
     this.render();
   }
@@ -1184,7 +1156,6 @@ export class EditorView {
     if (t !== this.tool) {
       this.cancelSuggest();
       this.suggested = null;
-      this.endsSuggested = false;
     }
     this.tool = t;
     // Picking a tool means rows and columns are done.
@@ -1236,10 +1207,6 @@ export class EditorView {
     if (this.autoLogic) this.runAutoLogic();
     if (this.simplifyGoal) this.checkRemovable();
     for (const fn of this.changeListeners) fn(this.puzzle);
-    // Where ends could go was asked for: after placing (or moving) an end, look again for the
-    // other, so its spots show (and the dots fit the end now placed), until both are placed.
-    if (this.endsSuggested && this.tool === 'ends' && missingEnds(this.puzzle)) this.suggestEnds();
-    else this.endsSuggested = false;
   }
 
   private undo() {
@@ -1352,8 +1319,8 @@ export class EditorView {
       showBorderTargets: this.tool === 'walls',
       showPortTargets: this.tool === 'ends',
       ghost: this.ghost ?? undefined,
-      // Where ends could go: only while placing ends.
-      endOptions: this.tool === 'ends' ? (this.endOptions ?? undefined) : undefined,
+      // Where missing ends could go: shown whatever the tool.
+      endOptions: this.endOptions ?? undefined,
       suggestWalls: this.suggested?.kind === 'wall' ? this.suggested.at : undefined,
       suggestClearWalls: this.suggested?.kind === 'wall' && this.suggested.remove.length ? this.suggested.remove : undefined,
       suggestTiles: this.suggested?.kind === 'tile' ? this.suggested.at : undefined,
@@ -1368,12 +1335,9 @@ export class EditorView {
       faint: this.faintLines.size ? this.faintLines : undefined,
     });
     this.oneShotBtn.setAttribute('aria-pressed', String(!!p.oneShot));
-    const canSuggest = this.tool === 'walls' || this.tool === 'tiles' || (this.tool === 'ends' && !!missingEnds(p));
+    const canSuggest = this.tool === 'walls' || this.tool === 'tiles';
     this.suggestBtn.disabled = !canSuggest && !this.suggestRun;
-    this.suggestBtn.title =
-      this.tool === 'ends'
-        ? 'Suggest ends: mark every spot on the frame where a missing end gives a solution (tap again to stop)'
-        : `Suggest ${this.tool === 'tiles' ? 'black tiles' : 'walls'}: the change (${this.tool === 'tiles' ? 'a tile or pair added, or a tile moved' : 'a wall added, taken away or moved'}) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)`;
+    this.suggestBtn.title = `Suggest ${this.tool === 'tiles' ? 'black tiles' : 'walls'}: the change (${this.tool === 'tiles' ? 'a tile or pair added, or a tile moved' : 'a wall added, taken away or moved'}) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)`;
     this.suggestBtn.classList.toggle('busy', !!this.suggestRun);
     this.gridBtn.setAttribute('aria-pressed', String(this.gridEdit));
     for (const g of ['easy', 'minimal'] as const) {
