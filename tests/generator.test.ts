@@ -73,6 +73,20 @@ describe('removableObstacles', async () => {
       }
     }
   });
+  test('each pair of black tiles it lists can go together, and each it leaves out cannot', () => {
+    const { puzzle } = generate({ w: 5, h: 5, difficulties: ['easy', 'medium'], clues: 'mixed', minimal: false, attempts: 30, seed: 7 });
+    const r = removableObstacles(puzzle)!;
+    const tiles = [...puzzle.blocked];
+    for (let i = 0; i < tiles.length; i++) {
+      for (let j = i + 1; j < tiles.length; j++) {
+        const q = { ...puzzle, blocked: new Set(puzzle.blocked) };
+        q.blocked.delete(tiles[i]);
+        q.blocked.delete(tiles[j]);
+        const listed = r.pairs.some(([a, b]) => a === tiles[i] && b === tiles[j]);
+        expect(solve(q, { maxSolutions: 2 }).status === 'unique', `${tiles[i]},${tiles[j]}`).toBe(listed);
+      }
+    }
+  });
   test('a puzzle without exactly one solution has none to list', () => {
     expect(removableObstacles(createPuzzle(4, 4))).toBeNull();
   });
@@ -91,7 +105,7 @@ describe('Simplify goals', async () => {
     const q = simplifyPuzzle(p, 3, 'easy')!;
     expect(easyRulesSolve(q)).toBe(true);
     expect(solve(q, { maxSolutions: 2 }).status).toBe('unique');
-    expect(removableObstacles(q, 'easy')).toEqual({ walls: [], blocked: [] });
+    expect(removableObstacles(q, 'easy')).toEqual({ walls: [], blocked: [], pairs: [] });
     const easy = removableObstacles(p, 'easy')!;
     const minimal = removableObstacles(p, 'minimal')!;
     for (const w of easy.walls) expect(minimal.walls).toContain(w);
@@ -101,7 +115,7 @@ describe('Simplify goals', async () => {
   test('minimal: unique, with nothing more to remove', () => {
     const q = simplifyPuzzle(spare(), 5, 'minimal')!;
     expect(solve(q, { maxSolutions: 2 }).status).toBe('unique');
-    expect(removableObstacles(q, 'minimal')).toEqual({ walls: [], blocked: [] });
+    expect(removableObstacles(q, 'minimal')).toEqual({ walls: [], blocked: [], pairs: [] });
   }, 60000);
 
   test('a puzzle the easy rules can’t solve fails the easy goal, and one without a single solution fails both', () => {

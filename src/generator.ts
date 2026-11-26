@@ -20,7 +20,7 @@ import {
   type Side,
   type Transform,
 } from './model';
-import { solutionUnion, solve } from './solver';
+import { parityCheck, solutionUnion, solve } from './solver';
 
 /**
  * Procedural puzzle generation. Everything is driven by a seeded random
@@ -379,7 +379,8 @@ function uniqueByTiles(p: Puzzle, rand: () => number): Puzzle | null {
 
 /**
  * What the editor's Simplify aims for: 'easy' keeps the puzzle unique and solved by the easy
- * rules alone (every line forced, for a one-shot); 'minimal' only keeps it unique.
+ * rules alone, or by the rules given (every line forced, for a one-shot); 'minimal' only keeps it
+ * unique.
  */
 export type SimplifyGoal = 'easy' | 'minimal';
 /** Why a puzzle doesn't meet a Simplify goal. */
@@ -388,21 +389,21 @@ export type GoalFailure = 'not unique' | 'not easy';
 /** The editor's Easy rules group (everything but the checkerboard rules), as hint counts use. */
 const EASY_GROUP = ALL_RULES.filter((r) => !ADVANCED_RULES.includes(r));
 const isUnique = (p: Puzzle) => solve(p, { maxSolutions: 2, nodeLimit: NODE_LIMIT }).status === 'unique';
-/** Whether the easy rules alone solve the puzzle (draw the whole stroke, for a one-shot). */
-export function easyRulesSolve(p: Puzzle, opts: LogicOptions = {}): boolean {
-  return (isOneShot(p) ? runStroke(p, EASY_GROUP, undefined, opts) : runLogic(p, EASY_GROUP, undefined, opts)).solved;
+/** Whether the easy rules alone (or the rules given) solve the puzzle (draw the whole stroke, for a one-shot). */
+export function easyRulesSolve(p: Puzzle, opts: LogicOptions = {}, rules: RuleId[] = EASY_GROUP): boolean {
+  return (isOneShot(p) ? runStroke(p, rules, undefined, opts) : runLogic(p, rules, undefined, opts)).solved;
 }
 
-/** Why the puzzle misses the goal, or null if it meets it. */
-export function goalFailure(p: Puzzle, goal: SimplifyGoal, opts: LogicOptions = {}): GoalFailure | null {
-  // The easy rules are the cheaper check, so they go first; they don't show uniqueness, though.
-  if (goal === 'easy' && !easyRulesSolve(p, opts)) return 'not easy';
+/** Why the puzzle misses the goal, or null if it meets it; `rules` for 'easy' (the easy rules by default). */
+export function goalFailure(p: Puzzle, goal: SimplifyGoal, opts: LogicOptions = {}, rules?: RuleId[]): GoalFailure | null {
+  // The rules are the cheaper check, so they go first; they don't show uniqueness, though.
+  if (goal === 'easy' && !easyRulesSolve(p, opts, rules)) return 'not easy';
   return isUnique(p) ? null : 'not unique';
 }
 
 /** Whether the puzzle still meets the goal, taking for granted that it did before a black tile or wall went. */
-function stillMeets(p: Puzzle, goal: SimplifyGoal, opts: LogicOptions, tileWent: boolean): boolean {
-  return (!tileWent || openTilesOk(p)) && goalFailure(p, goal, opts) === null;
+function stillMeets(p: Puzzle, goal: SimplifyGoal, opts: LogicOptions, tileWent: boolean, rules?: RuleId[]): boolean {
+  return (!tileWent || openTilesOk(p)) && goalFailure(p, goal, opts, rules) === null;
 }
 
 /** How long Simplify (minimal) spends trying other orders to take obstacles away in. */
@@ -414,15 +415,15 @@ const MINIMAL_MS = 2000;
  * For 'minimal', several orders are tried and the one leaving the fewest obstacles kept.
  * Null if the puzzle doesn't meet the goal to begin with.
  */
-export function simplifyPuzzle(p: Puzzle, seed: number, goal: SimplifyGoal = 'minimal', opts: LogicOptions = {}): Puzzle | null {
-  if (goalFailure(p, goal, opts)) return null;
+export function simplifyPuzzle(p: Puzzle, seed: number, goal: SimplifyGoal = 'minimal', opts: LogicOptions = {}, rules?: RuleId[]): Puzzle | null {
+  if (goalFailure(p, goal, opts, rules)) return null;
   const rand = seededRandom(seed);
   const start = performance.now();
   let best: Puzzle | null = null;
   for (let i = 0; i < (goal === 'minimal' ? MINIMAL_TRIES : 1); i++) {
     if (best && performance.now() - start > MINIMAL_MS) break;
     const q = clonePuzzle(p);
-    minimise(q, rand, (r, tileWent) => stillMeets(r, goal, opts, tileWent));
+    minimise(q, rand, (r, tileWent) => stillMeets(r, goal, opts, tileWent, rules));
     if (!best || obstacleCount(q) < obstacleCount(best)) best = q;
   }
   return best;
@@ -456,18 +457,36 @@ export function fillWalls(p: Puzzle, drawn: Iterable<number> = []): FillResult |
 
 /**
  * The obstacles the puzzle could lose one at a time and still meet the goal: each wall and
- * black tile, taken away on its own. (Taking several away together may not.) Null if the
- * puzzle doesn't meet the goal to begin with.
+ * black tile, taken away on its own. (Taking several away together may not.) And the pairs of
+ * black tiles that could go together: with both ends placed, one black tile on its own never
+ * can (it puts the checkerboard counts out by one), but two of different colours can. Null if
+ * the puzzle doesn't meet the goal to begin with.
  */
-export function removableObstacles(p: Puzzle, goal: SimplifyGoal = 'minimal', opts: LogicOptions = {}): { walls: number[]; blocked: number[] } | null {
-  if (goalFailure(p, goal, opts)) return null;
+export function removableObstacles(
+  p: Puzzle,
+  goal: SimplifyGoal = 'minimal',
+  opts: LogicOptions = {},
+  rules?: RuleId[],
+): { walls: number[]; blocked: number[]; pairs: [number, number][] } | null {
+  if (goalFailure(p, goal, opts, rules)) return null;
   const q = clonePuzzle(p);
-  const out = { walls: [] as number[], blocked: [] as number[] };
+  const out = { walls: [] as number[], blocked: [] as number[], pairs: [] as [number, number][] };
   for (const [set, list, wall] of [[q.walls, out.walls, true], [q.blocked, out.blocked, false]] as const) {
     for (const id of [...set]) {
       set.delete(id);
-      if (stillMeets(q, goal, opts, !wall)) list.push(id);
+      // (The checkerboard counts first: much the cheaper check.)
+      if ((wall || parityCheck(q).ok) && stillMeets(q, goal, opts, !wall, rules)) list.push(id);
       set.add(id);
+    }
+  }
+  const tiles = [...p.blocked];
+  for (let i = 0; i < tiles.length; i++) {
+    for (let j = i + 1; j < tiles.length; j++) {
+      q.blocked.delete(tiles[i]);
+      q.blocked.delete(tiles[j]);
+      if (parityCheck(q).ok && stillMeets(q, goal, opts, true, rules)) out.pairs.push([tiles[i], tiles[j]]);
+      q.blocked.add(tiles[i]);
+      q.blocked.add(tiles[j]);
     }
   }
   return out;

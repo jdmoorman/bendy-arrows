@@ -1273,7 +1273,7 @@ img.icon {
   stroke: var(--hint-edge);
 }
 
-/* The logic helper's five controls share their row evenly. */
+/* The Solver section's rows (Logic rules and One-shot; Reset, Back, Step and Easy rules): each shared evenly. */
 .logic-row .btn {
   flex: 1 1 0;
   min-width: 0;
@@ -1299,7 +1299,7 @@ img.icon {
   padding: 0 8px;
 }
 
-/* Resize, the turns and the flips; Clear obstacles, Fill obstacles and One-shot: each row shared evenly. */
+/* Resize, the turns and the flips; Clear, Fill and Simplify: each row shared evenly. */
 .puzzle-row > .btn,
 .fill-row > .btn {
   min-width: 0;
@@ -2162,37 +2162,13 @@ img.icon {
   color: var(--text-muted);
 }
 
-/* The editor's Simplify row: a label, then per goal a highlight toggle and Remove all. */
-.simplify-row {
-  align-items: center;
-}
-.simplify-goal {
-  display: flex;
-  gap: 4px;
-  min-width: 0;
-}
-.simplify-row > .simplify-goal {
-  flex: 1 1 auto;
-}
-.simplify-goal > .btn {
-  flex: 1 1 auto;
-  min-width: 0;
-  padding: 0 8px;
-}
-.simplify-goal > .btn.stacked {
-  flex: 0 0 auto;
-}
-/* Remove all at work: a tap again cancels it. */
-.simplify-row .btn.busy {
-  animation: simplify-busy 1s ease-in-out infinite alternate;
-}
 @keyframes simplify-busy {
   to {
     opacity: 0.4;
   }
 }
 
-/* The narrowest phones: smaller type, so the tools and the extras still fit their rows. */
+/* The narrowest phones: smaller type, so the tools still fit their row. */
 @media (max-width: 360px) {
   .tool-row .segmented {
     padding: 2px;
@@ -2200,13 +2176,6 @@ img.icon {
   }
   .tool-row .segmented .seg-btn {
     padding: 0 2px;
-    font-size: 0.8rem;
-  }
-  .simplify-row {
-    gap: 4px;
-  }
-  .simplify-goal > .btn:not(.stacked) {
-    padding: 0 4px;
     font-size: 0.8rem;
   }
 }

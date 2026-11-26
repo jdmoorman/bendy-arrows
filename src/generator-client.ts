@@ -1,6 +1,6 @@
 import { decodePuzzle, encodePuzzle } from './codec';
 import { type Difficulty, type GenOptions, type FillResult, type GoalFailure, type SimplifyGoal } from './generator';
-import type { LogicOptions } from './logic';
+import type { LogicOptions, RuleId } from './logic';
 import type { GeneratorMessage, GeneratorRequest } from './generator.worker';
 import type { Puzzle } from './model';
 
@@ -62,16 +62,18 @@ function askWorker<T>(req: GeneratorRequest, read: (m: GeneratorMessage) => T | 
   };
 }
 
-export type Removable = { walls: Set<number>; blocked: Set<number> };
+/** What could go: walls and black tiles one at a time, and pairs of black tiles together. */
+export type Removable = { walls: Set<number>; blocked: Set<number>; pairs: [number, number][] };
 
 /**
  * The walls and black tiles a puzzle could lose one at a time and still meet the Simplify goal,
- * found in a background worker; or why the puzzle doesn't meet it to begin with.
+ * found in a background worker; or why the puzzle doesn't meet it to begin with. `rules`: for
+ * 'easy', the rules that must solve it (the easy rules by default).
  */
-export function removableInBackground(p: Puzzle, goal: SimplifyGoal, opts: LogicOptions): { result: Promise<Removable | GoalFailure>; cancel(): void } {
+export function removableInBackground(p: Puzzle, goal: SimplifyGoal, opts: LogicOptions, rules?: RuleId[]): { result: Promise<Removable | GoalFailure>; cancel(): void } {
   return askWorker<Removable | GoalFailure>(
-    { removable: encodePuzzle(p), goal, opts },
-    (m) => (m.type !== 'removable' ? undefined : 'failure' in m ? m.failure : { walls: new Set(m.walls), blocked: new Set(m.blocked) }),
+    { removable: encodePuzzle(p), goal, opts, rules },
+    (m) => (m.type !== 'removable' ? undefined : 'failure' in m ? m.failure : { walls: new Set(m.walls), blocked: new Set(m.blocked), pairs: m.pairs }),
     'Checking the obstacles failed.',
   );
 }
