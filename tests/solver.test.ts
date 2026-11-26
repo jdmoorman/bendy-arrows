@@ -347,3 +347,21 @@ describe('end fixes', () => {
     expect(endFixes(p)).toEqual([]);
   });
 });
+
+describe('fixes the logic rules accept', async () => {
+  const { tileFixes } = await import('../src/solver');
+  const { createPuzzle, portEnd, portId, cellAt } = await import('../src/model');
+  const { ALL_RULES, logicContradiction } = await import('../src/logic');
+  test('4×7 with one end at A3 and a black tile at C4: only taking C4 away leaves the rules no contradiction', () => {
+    const p = createPuzzle(4, 7);
+    p.endpoints = [portEnd(portId(p, 'left', 2))];
+    const c4 = cellAt(p, 3, 2);
+    p.blocked.add(c4);
+    const check = { rules: ALL_RULES };
+    expect(logicContradiction(p, check)?.reason).toBe('A tile has too few ways in or out.');
+    const all = Array.from({ length: 28 }, (_, i) => i);
+    // The solver alone (the free end can sit in a dead end) takes many tiles; the rules don't.
+    expect(tileFixes(p, all).length).toBeGreaterThan(1);
+    expect(tileFixes(p, all, { ok: (q) => !logicContradiction(q, check) })).toEqual([{ cell: c4, add: false, status: 'multiple' }]);
+  });
+});

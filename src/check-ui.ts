@@ -1,6 +1,7 @@
 import { decodePuzzle, encodePuzzle } from './codec';
 import { difficultyLevel, ratingHints } from './difficulty';
 import type { EditorView } from './editor';
+import type { LogicCheck } from './logic';
 import { missingEnds } from './rules';
 import type { RatingMessage, RatingRequest } from './rating.worker';
 import { endPlacementsInBackground, solutionUnionInBackground, solveInBackground, type EndsRun, type SolverRun, type UnionRun } from './solver-client';
@@ -125,7 +126,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
    * Short of ends: look for where they could go. Each frame spot that gives a solution gets a dot
    * (green: only one solution; amber: several), and the line under the board counts them.
    */
-  const findEnds = async () => {
+  const findEnds = async (check?: LogicCheck) => {
     const p = editor.current;
     const missing = p.endpoints.length === 0 ? 'both ends' : 'the other end';
     const marks = new Map<number, 'unique' | 'multiple'>();
@@ -150,7 +151,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
       for (const e of o.edges) lines.add(e);
       editor.showGhost(lines);
       show(false);
-    });
+    }, check);
     ends = thisRun;
     try {
       await thisRun.result;
@@ -165,8 +166,8 @@ export function attachUniquenessCheck(editor: EditorView): void {
   };
 
   // Where missing ends could go: only on request (the Suggest button with the Ends tool).
-  editor.endSuggester = () => ({
-    result: findEnds(),
+  editor.endSuggester = (check) => ({
+    result: findEnds(check),
     cancel: () => {
       ends?.cancel();
       ends = null;

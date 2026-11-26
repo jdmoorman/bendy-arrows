@@ -28,7 +28,7 @@ import {
 } from './model';
 import { CELL, padFor, renderBoard } from './render';
 import { missingEnds } from './rules';
-import { ADVANCED_RULES, ALL_RULES, applyStep, AREA_SOURCES, BASIC_RULES, findHint, findStrokeHint, IMBALANCE_RULE, RULES, runLogic, TRIAL_RULE, runStroke, strokeFrom, type AreaSource, type LogicOptions, type LogicState, type RuleId, type RuleInfo } from './logic';
+import { ADVANCED_RULES, ALL_RULES, applyStep, logicContradiction, AREA_SOURCES, BASIC_RULES, findHint, findStrokeHint, IMBALANCE_RULE, RULES, runLogic, TRIAL_RULE, runStroke, strokeFrom, type AreaSource, type LogicCheck, type LogicOptions, type LogicState, type RuleId, type RuleInfo } from './logic';
 import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
@@ -46,7 +46,7 @@ const TOOL_KIND: Record<Tool, DragKind> = { tiles: 'cells', walls: 'edges', ends
 const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
   walls: 'Tap or drag along borders to add walls.',
-  ends: 'Tap a dot on the frame to add the entrance, then the exit.',
+  ends: 'Tap a dot on the frame to add the tail, then the head.',
   path: 'Drag to draw the lines you want the path to take; drag along any line to erase it. Logic steps build on your lines, and Fill obstacles fills in every tile and border without a line.',
 };
 
@@ -95,10 +95,18 @@ export class EditorView {
   private suggestRun: { cancel(): void } | null = null;
   /** Suggest was asked where ends could go: it looks again after each end is placed, until both are. */
   private endsSuggested = false;
-  /** A suggested fix places an end: show where ends could go, whatever the tool, until the next edit. */
-  private endsForFix = false;
+  /**
+   * A suggested fix places an end: where ends could go shows, whatever the tool. This holds how
+   * many ends the puzzle had then; placing one keeps the marks only while the error stays.
+   */
+  private endsForFix: number | null = null;
+  private fixEndsRun: { cancel(): void } | null = null;
+  /** The next Auto-apply result decides whether the fix's end marks stay (see afterChange). */
+  private fixEndsCheck = false;
+  /** Fixes were asked for and an end just placed: a new contradiction lists its fixes at once. */
+  private followFixes = false;
   /** Suggest with the Ends tool: where the missing ends could go (set up by the uniqueness check). */
-  endSuggester: (() => { result: Promise<void>; cancel(): void }) | null = null;
+  endSuggester: ((check?: LogicCheck) => { result: Promise<void>; cancel(): void }) | null = null;
   private message = '';
   private messageKind: '' | 'success' | 'error' = '';
   /** A link at the end of the message, if it offers something. */
@@ -201,7 +209,7 @@ export class EditorView {
           <div class="toolbar-title" aria-hidden="true">Puzzle</div>
           <div class="toolbar-row puzzle-row">
             <button class="btn stacked" data-act="grid" aria-pressed="false" title="Edit rows and columns: add or delete them around the board, turn or flip it">${ICONS.grid}<span>Transform grid</span></button>
-            <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the entrance, and hints and logic follow it">One-shot</button>
+            <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the tail, and hints and logic follow it">One-shot</button>
             <button class="btn stacked" data-act="suggest" title="Suggest walls: the change (a wall added, taken away or moved) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)">${ICONS.bulb}<span>Suggest</span></button>
           </div>
         </div>
@@ -429,7 +437,7 @@ export class EditorView {
       else delete q.oneShot;
       return q;
     });
-    if (on && this.puzzle.endpoints.length < 2) this.setMessage('One-shot: place an entrance and an exit for it to take effect.', 'error');
+    if (on && this.puzzle.endpoints.length < 2) this.setMessage('One-shot: place a tail and a head for it to take effect.', 'error');
   }
 
   // --- Logic helper -------------------------------------------------------
@@ -540,6 +548,10 @@ export class EditorView {
       if (r.segments.length > drawn || r.xs.length) {
         this.logicHistory.push({ logic: { segments: new Set(this.plan), xs: new Set() }, steps: 0 });
         this.logicSteps = 1;
+      }
+      if (this.fixEndsCheck) {
+        this.fixEndsCheck = false;
+        if (!r.contradiction) this.hideFixEnds();
       }
       if (r.contradiction) {
         this.logicBad = r.contradiction.cells ?? [r.contradiction.cell];
@@ -1003,6 +1015,7 @@ export class EditorView {
     const p = this.puzzle;
     const area = new Set(this.logicBad);
     const cells = fixCells ?? [...area, ...[...area].flatMap((c) => neighbors(p, c)).filter((c) => p.blocked.has(c))];
+    if (this.followFixes) return this.suggestFixes(base, cells, fixCells);
     this.setMessage(base, 'error', { left: true, action: { label: 'Suggest a fix?', run: () => this.suggestFixes(base, cells, fixCells) } });
   }
 
@@ -1010,10 +1023,15 @@ export class EditorView {
   private suggestFixes(base: string, cells: number[], fixCells?: number[]) {
     this.clearFixes();
     this.setMessage(`${base} Looking for a fix…`, 'error', { left: true });
-    const run = tileFixesInBackground(this.puzzle, cells, (f) => {
-      this.fixes.set(f.cell, f.status === 'unique' ? 'unique' : 'multiple');
-      this.render();
-    });
+    const run = tileFixesInBackground(
+      this.puzzle,
+      cells,
+      (f) => {
+        this.fixes.set(f.cell, f.status === 'unique' ? 'unique' : 'multiple');
+        this.render();
+      },
+      this.fixCheck(),
+    );
     this.fixRun = run;
     run.result
       .then(({ fixes, endFixes }) => {
@@ -1026,10 +1044,8 @@ export class EditorView {
           ...endFixes.map(endFixItem),
         ].filter((i) => i !== '');
         // "The indicated borders": mark where a missing end could go.
-        if (endFixes.some((f) => f.end < 0) && this.endSuggester) {
-          this.endsForFix = true;
-          this.endSuggester();
-        }
+        if (endFixes.some((f) => f.end < 0)) this.showFixEnds();
+        else if (this.endsForFix !== null) this.hideFixEnds();
         if (items.length) return this.setMessage(`${base} Fixes:`, 'error', { left: true, items });
         // The colour check names no tile when no single black-tile change can fix the colours.
         const none = fixCells && !fixCells.length ? 'No single black-tile change can fix the colours.' : 'No single black-tile change here gives it a solution.';
@@ -1052,6 +1068,43 @@ export class EditorView {
     this.logicBad = c.cells?.length ? c.cells : [c.cell];
     this.showContradiction(`The stroke is stuck, and the rules find a problem elsewhere on the board. ${c.reason}`, c.fixCells);
     return true;
+  }
+
+  /** Mark where the missing ends could go, for a fix that places one (see endsForFix). */
+  private showFixEnds() {
+    // Already marking for this many ends: keep the marks (no flicker).
+    if (!this.endSuggester || (this.fixEndsRun && this.endsForFix === this.puzzle.endpoints.length)) return;
+    this.fixEndsRun?.cancel();
+    this.endsForFix = this.puzzle.endpoints.length;
+    this.fixEndsRun = this.endSuggester(this.fixCheck());
+    this.render();
+  }
+
+  private stopFixEnds() {
+    this.fixEndsRun?.cancel();
+    this.fixEndsRun = null;
+    this.endsForFix = null;
+    this.fixEndsCheck = false;
+  }
+
+  private hideFixEnds() {
+    this.stopFixEnds();
+    if (!this.endsSuggested) this.showEndOptions(null);
+  }
+
+  /**
+   * What a suggested fix must leave the puzzle passing: the rules that find errors (those
+   * Auto-apply runs, or with it off every chosen rule), from the lines drawn, finding no
+   * contradiction.
+   */
+  private fixCheck(): LogicCheck {
+    const rules = this.autoLogic ? this.autoRules : [...this.logicRules];
+    return { rules, opts: this.logicOpts, segments: [...this.plan] };
+  }
+
+  /** The contradiction the fix check's rules find in the puzzle as it is, if any. */
+  private checkContradiction() {
+    return logicContradiction(this.puzzle, this.fixCheck());
   }
 
   private clearFixes() {
@@ -1260,7 +1313,26 @@ export class EditorView {
     for (const fn of this.changeListeners) fn(this.puzzle);
     // Where ends could go was asked for: after placing (or moving) an end, look again for the
     // other, so its spots show (and the dots fit the end now placed), until both are placed.
-    this.endsForFix = false;
+    const fixEnds = this.endsForFix;
+    this.stopFixEnds();
+    // A fix asked for ends and one was just placed: if that clears the error, the marks go. If
+    // it leaves an error (usually a new one), its fixes are listed straight away, marking where
+    // the other end could go if that's among them. With Auto-apply on, its result decides;
+    // otherwise the chosen rules are run here.
+    this.followFixes = fixEnds !== null && this.puzzle.endpoints.length > fixEnds && !!missingEnds(this.puzzle);
+    if (this.followFixes) {
+      if (this.autoLogic) {
+        this.showFixEnds();
+        this.fixEndsCheck = true;
+      } else {
+        const c = this.checkContradiction();
+        if (c) {
+          this.showFixEnds();
+          this.logicBad = c.cells ?? [c.cell];
+          this.showContradiction(c.reason, c.fixCells);
+        }
+      }
+    }
     if (this.endsSuggested && this.tool === 'ends' && missingEnds(this.puzzle)) this.suggestEnds();
     else this.endsSuggested = false;
   }
@@ -1376,7 +1448,7 @@ export class EditorView {
       showPortTargets: this.tool === 'ends',
       ghost: this.ghost ?? undefined,
       // Where ends could go: only while placing ends.
-      endOptions: this.tool === 'ends' || this.endsForFix ? (this.endOptions ?? undefined) : undefined,
+      endOptions: this.tool === 'ends' || this.endsForFix !== null ? (this.endOptions ?? undefined) : undefined,
       suggestWalls: this.suggested?.kind === 'wall' ? this.suggested.at : undefined,
       suggestClearWalls: this.suggested?.kind === 'wall' && this.suggested.remove.length ? this.suggested.remove : undefined,
       suggestTiles: this.suggested?.kind === 'tile' ? this.suggested.at : undefined,
@@ -1510,5 +1582,5 @@ interface MessageAction {
 
 /** A bullet for what moving (or placing) an end would do for a puzzle with no solution. */
 function endFixItem(fix: EndFix): string {
-  return fix.end < 0 ? 'Place an end on one of the indicated borders' : `Move the ${fix.end === 0 ? 'entrance' : 'exit'}`;
+  return fix.end < 0 ? 'Place end(s) on the indicated borders' : `Move the ${fix.end === 0 ? 'tail' : 'head'}`;
 }

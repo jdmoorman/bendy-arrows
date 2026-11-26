@@ -837,6 +837,25 @@ export function findStrokeHint(p: Puzzle, stroke: Set<number>, head: number, opt
  * A one-shot drawn as far as `rules` force it, one hint at a time from the stroke in `start`
  * (only the lines joined to the entrance count).
  */
+/** The rules a suggested fix must pass: once made, they find no contradiction (starting from `segments`). */
+export interface LogicCheck {
+  rules: RuleId[];
+  opts?: LogicOptions;
+  segments?: number[];
+}
+
+/**
+ * The contradiction the rules find in a puzzle, if any: what Auto-apply would show (for a
+ * one-shot whose stroke gets stuck, the rules then run over the whole board).
+ */
+export function logicContradiction(p: Puzzle, check: LogicCheck): Contradiction | undefined {
+  const start = { segments: new Set(check.segments ?? []), xs: new Set<number>() };
+  if (!isOneShot(p)) return runLogic(p, check.rules, start, check.opts).contradiction;
+  const run = runStroke(p, check.rules, start, check.opts);
+  if (run.contradiction || run.solved) return run.contradiction;
+  return runLogic(p, check.rules, run.state, check.opts).contradiction;
+}
+
 export function runStroke(p: Puzzle, rules: Iterable<RuleId>, start: LogicState = { segments: new Set(), xs: new Set() }, opts: LogicOptions = {}): LogicRun {
   const chosen = [...rules];
   let { tiles, lines } = strokeFrom(p, start.segments);

@@ -425,6 +425,8 @@ export function endPlacements(
     onFound?: (o: EndOption) => void;
     /** For placements with several solutions, find every line some solution uses (slower). */
     union?: boolean;
+    /** Only placements this accepts (e.g. ones the logic rules find no contradiction in). */
+    ok?: (q: Puzzle) => boolean;
   } = {},
 ): { options: EndOption[]; unchecked: number } {
   const byCell = new Map<number, number[]>();
@@ -450,7 +452,7 @@ export function endPlacements(
     }
     const q = clonePuzzle(p);
     q.endpoints = [portEnd(a), portEnd(b)];
-    if (!parityCheck(q).ok) continue;
+    if (!parityCheck(q).ok || (opts.ok && !opts.ok(q))) continue;
     const r = solve(q, { maxSolutions: 2, nodeLimit: opts.nodeLimit ?? 200_000, shouldAbort: opts.shouldAbort });
     if (r.status === 'aborted') unchecked++;
     if (r.status !== 'unique' && r.status !== 'multiple') continue;
@@ -481,7 +483,7 @@ export interface EndFix {
   unique: number;
 }
 
-export function endFixes(p: Puzzle, opts: { nodeLimit?: number } = {}): EndFix[] {
+export function endFixes(p: Puzzle, opts: { nodeLimit?: number; ok?: (q: Puzzle) => boolean } = {}): EndFix[] {
   const tally = (end: number, options: EndOption[]): EndFix[] =>
     options.length ? [{ end, spots: options.length, unique: options.filter((o) => o.status === 'unique').length }] : [];
   if (p.endpoints.length < 2) return tally(-1, endPlacements(p, opts).options);
@@ -505,7 +507,7 @@ export interface TileFix {
  * or a black tile made open; end tiles stay open), and whether the puzzle then has a solution.
  * Only the changes that give it one are returned, each as it's found to `onFound`.
  */
-export function tileFixes(p: Puzzle, cells: Iterable<number>, opts: { nodeLimit?: number; onFound?: (f: TileFix) => void } = {}): TileFix[] {
+export function tileFixes(p: Puzzle, cells: Iterable<number>, opts: { nodeLimit?: number; onFound?: (f: TileFix) => void; ok?: (q: Puzzle) => boolean } = {}): TileFix[] {
   const ends = new Set(endpointCells(p));
   const out: TileFix[] = [];
   for (const cell of new Set(cells)) {
@@ -514,6 +516,8 @@ export function tileFixes(p: Puzzle, cells: Iterable<number>, opts: { nodeLimit?
     const q = clonePuzzle(p);
     if (add) q.blocked.add(cell);
     else q.blocked.delete(cell);
+    // A change the caller rejects (e.g. one leaving the logic rules a contradiction) isn't a fix.
+    if (opts.ok && !opts.ok(q)) continue;
     const r = solve(q, { maxSolutions: 2, nodeLimit: opts.nodeLimit ?? 200_000 });
     if (r.status !== 'unique' && r.status !== 'multiple') continue;
     const f = { cell, add, status: r.status };

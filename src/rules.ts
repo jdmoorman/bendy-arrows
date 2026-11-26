@@ -15,8 +15,8 @@ export function canPlace(p: Puzzle, e: number): boolean {
  * so it counts as having no solution.
  */
 export function missingEnds(p: Puzzle): string | null {
-  if (!p.endpoints.length) return 'Place the entrance and exit on the frame first.';
-  if (p.endpoints.length === 1) return 'Place a second end on the frame first — a path needs an entrance and an exit.';
+  if (!p.endpoints.length) return 'Place the tail and head on the frame first.';
+  if (p.endpoints.length === 1) return 'Place a second end on the frame first — a path needs a tail and a head.';
   return null;
 }
 
