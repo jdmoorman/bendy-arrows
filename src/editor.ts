@@ -46,7 +46,7 @@ const TOOL_HINT: Record<Tool, string> = {
   tiles: 'Tap or drag over tiles to make them black.',
   walls: 'Tap or drag along borders to add walls.',
   ends: 'Tap a dot on the frame to add the entrance, then the exit.',
-  path: 'Drag to draw the lines you want the path to take; drag along them to erase. Fill obstacles then fills in every tile and border without a line.',
+  path: 'Drag to draw the lines you want the path to take; drag along any line to erase it. Logic steps build on your lines, and Fill obstacles fills in every tile and border without a line.',
 };
 
 /** Why Simplify can't start, by goal failure. */
@@ -109,6 +109,8 @@ export class EditorView {
 
   // Per-gesture state.
   private changed = false;
+  /** The gesture drew desired-solution lines. */
+  private planDrawn = false;
   private paintAdd = true;
 
   // Logic helper state: deductions so far, the latest step's marks, and the chosen rules.
@@ -149,7 +151,7 @@ export class EditorView {
   private goalBtns!: Record<SimplifyGoal, HTMLButtonElement>;
   private removeAllBtns!: Record<SimplifyGoal, HTMLButtonElement>;
   private fillBtn!: HTMLButtonElement;
-  private clearPlanBtn!: HTMLButtonElement;
+  private clearObstaclesBtn!: HTMLButtonElement;
   /** The wanted path's lines: kept when switching tools, and turned, mirrored or reshaped with the board. */
   private plan = new Set<number>();
   /** A Draw drag only draws or only erases, decided where it starts (as when playing). */
@@ -182,7 +184,7 @@ export class EditorView {
               <button class="seg-btn" data-tool="tiles">Black tiles</button>
               <button class="seg-btn" data-tool="walls">Walls</button>
               <button class="seg-btn" data-tool="ends">Ends</button>
-              <button class="seg-btn" data-tool="path" title="Draw the lines you want the path to take; Fill obstacles then fills in every tile and border without a line">Desired solution</button>
+              <button class="seg-btn" data-tool="path" title="Draw the lines you want the path to take: logic steps build on them, and Fill obstacles fills in every tile and border without a line">Desired solution</button>
             </div>
           </div>
         </div>
@@ -197,7 +199,7 @@ export class EditorView {
         <div class="toolbar-section" role="group" aria-label="Desired Solution">
           <div class="toolbar-title" aria-hidden="true">Desired Solution</div>
           <div class="toolbar-row fill-row">
-            <button class="btn" data-act="clear-plan" title="Clear the desired solution">${ICONS.clear}<span>Clear solution</span></button>
+            <button class="btn" data-act="clear-obstacles" title="Clear obstacles: delete every wall and black tile">${ICONS.clear}<span>Clear obstacles</span></button>
             <button class="btn" data-act="fill" title="Fill obstacles: a black tile on every open tile no line reaches, and a wall on every other border no line crosses">Fill obstacles</button>
           </div>
         </div>
@@ -218,7 +220,7 @@ export class EditorView {
           <div class="toolbar-title" aria-hidden="true">Solution Journey</div>
           <div class="toolbar-row logic-row">
             <button class="btn stacked" data-logic="rules" title="Logic rules">${ICONS.list}<span>Rules</span></button>
-            <button class="btn stacked" data-logic="reset" title="Reset logic">${ICONS.rewind}<span>Reset</span></button>
+            <button class="btn stacked" data-logic="reset" title="Reset: clear every line, drawn or found by logic">${ICONS.rewind}<span>Reset</span></button>
             <button class="btn stacked" data-logic="back" title="Undo the last logic step">${ICONS.stepBack}<span>Back</span></button>
             <button class="btn stacked" data-logic="step" title="Logic step">${ICONS.step}<span>Step</span></button>
             <button class="btn stacked" data-logic="fast" title="Apply easy rules until stuck">${ICONS.fastForward}<span>Easy rules</span></button>
@@ -279,11 +281,8 @@ export class EditorView {
     }
     this.fillBtn = q<HTMLButtonElement>('[data-act=fill]');
     this.fillBtn.addEventListener('click', () => this.fill());
-    this.clearPlanBtn = q<HTMLButtonElement>('[data-act=clear-plan]');
-    this.clearPlanBtn.addEventListener('click', () => {
-      this.plan.clear();
-      this.render();
-    });
+    this.clearObstaclesBtn = q<HTMLButtonElement>('[data-act=clear-obstacles]');
+    this.clearObstaclesBtn.addEventListener('click', () => this.clearObstacles());
     this.suggestBtn = q<HTMLButtonElement>('[data-act=suggest]');
     this.suggestBtn.addEventListener('click', () => this.suggest());
     this.suggestBar = this.el.querySelector<HTMLElement>('.suggest-progress')!;
@@ -295,6 +294,7 @@ export class EditorView {
     q<HTMLButtonElement>('[data-logic=fast]').addEventListener('click', () => this.fastForwardLogic());
     q<HTMLButtonElement>('[data-logic=reset]').addEventListener('click', () => {
       this.cancelAutoLogic();
+      this.plan.clear();
       this.resetLogic();
       this.clearMessage();
       this.render();
@@ -346,12 +346,12 @@ export class EditorView {
     attachBoardInput(this.svg, () => this.puzzle, {
       kind: () => TOOL_KIND[this.tool],
       onPathStart: (cell, edge) => {
-        if (edge >= 0 && this.plan.has(edge)) {
+        if (edge >= 0 && this.logic.segments.has(edge)) {
           this.planMode = 'erase';
           this.erasePlan(edge);
           return;
         }
-        const n = cellEdges(this.puzzle, cell).filter((e) => this.plan.has(e)).length;
+        const n = cellEdges(this.puzzle, cell).filter((e) => this.logic.segments.has(e)).length;
         this.planMode = n === 0 ? 'draw' : n === 1 ? 'undecided' : 'erase';
       },
       onStep: (from, to) => this.planStep(from, to),
@@ -428,7 +428,8 @@ export class EditorView {
   private resetLogic() {
     this.clearFixes();
     this.faintLines = new Set();
-    this.logic = { segments: new Set(), xs: new Set() };
+    // The logic starts from the lines drawn with the Desired solution tool.
+    this.logic = { segments: new Set(this.plan), xs: new Set() };
     this.logicFresh = new Set();
     this.logicSteps = 0;
     this.logicBad = [];
@@ -523,11 +524,12 @@ export class EditorView {
       this.cancelAutoLogic();
       this.clearMessage();
       this.resetLogic();
+      const drawn = this.logic.segments.size;
       this.logic = { segments: new Set(r.segments), xs: new Set(r.xs) };
       this.faintLines = new Set(r.faint);
       // Count the automatic run as one step, so Back clears it and Step carries on from it.
-      if (r.segments.length || r.xs.length) {
-        this.logicHistory.push({ logic: { segments: new Set(), xs: new Set() }, steps: 0 });
+      if (r.segments.length > drawn || r.xs.length) {
+        this.logicHistory.push({ logic: { segments: new Set(this.plan), xs: new Set() }, steps: 0 });
         this.logicSteps = 1;
       }
       if (r.contradiction) {
@@ -539,10 +541,10 @@ export class EditorView {
         this.setMessage('Auto-apply: the chosen rules solve it.', 'success');
         return;
       }
-      this.logicNote = r.segments.length || r.xs.length ? 'Auto-apply: the chosen rules get this far, then get stuck.' : 'Auto-apply: the chosen rules find nothing to fill in.';
+      this.logicNote = r.segments.length > drawn || r.xs.length ? 'Auto-apply: the chosen rules get this far, then get stuck.' : 'Auto-apply: the chosen rules find nothing to fill in.';
       this.render();
     };
-    this.autoWorker.postMessage({ id, code: encodePuzzle(p), rules: this.autoRules, opts: this.logicOpts } satisfies LogicRequest);
+    this.autoWorker.postMessage({ id, code: encodePuzzle(p), rules: this.autoRules, opts: this.logicOpts, segments: [...this.plan] } satisfies LogicRequest);
   }
 
   private cancelAutoLogic() {
@@ -556,7 +558,8 @@ export class EditorView {
     const prev = this.logicHistory.pop();
     if (!prev) return;
     this.clearMessage();
-    this.logic = prev.logic;
+    // Lines drawn since stay drawn.
+    this.logic = { segments: new Set([...prev.logic.segments, ...this.plan]), xs: new Set([...prev.logic.xs].filter((e) => !this.plan.has(e))) };
     this.logicSteps = prev.steps;
     this.logicFresh = new Set();
     this.logicFocus = new Set();
@@ -612,17 +615,22 @@ export class EditorView {
     );
   }
 
-  /** A desired-solution drag moved a tile: draw the line between (clearing any wall or black tile in the way) or erase it. */
+  /**
+   * A desired-solution drag moved a tile: draw the line between (clearing any wall or black tile
+   * in the way) or erase it. The lines are the logic helper's too: its steps build on them, and
+   * any of its lines can be erased.
+   */
   private planStep(from: number, to: number): boolean {
     const p = this.puzzle;
     const e = edgeBetween(p, from, to);
-    if (this.planMode === 'undecided') this.planMode = this.plan.has(e) ? 'erase' : 'draw';
+    const lines = this.logic.segments;
+    if (this.planMode === 'undecided') this.planMode = lines.has(e) ? 'erase' : 'draw';
     if (this.planMode === 'erase') {
       this.erasePlan(e);
       return true;
     }
-    if (this.plan.has(e)) return true;
-    const degree = (c: number) => cellEdges(p, c).filter((x) => this.plan.has(x)).length;
+    if (lines.has(e)) return true;
+    const degree = (c: number) => cellEdges(p, c).filter((x) => lines.has(x)).length;
     if (degree(from) >= 2 || degree(to) >= 2 || this.planJoins(from, to)) return false;
     // Drawing over a wall or a black tile takes it away (each its own undo step, as when placing).
     if (!isUsableEdge(p, e)) {
@@ -631,17 +639,22 @@ export class EditorView {
       for (const c of [from, to]) p.blocked.delete(c);
     }
     this.plan.add(e);
+    this.planDrawn = true;
+    this.logic.segments.add(e);
+    this.logic.xs.delete(e);
+    this.faintLines = new Set();
     this.render();
     return true;
   }
 
-  /** Whether the wanted path already runs from one tile to the other (a line between would close a loop). */
+  /** Whether the lines already run from one tile to the other (a line between would close a loop). */
   private planJoins(a: number, b: number): boolean {
     const p = this.puzzle;
     let cell = a;
     let prev = -1;
-    for (let i = 0; i <= this.plan.size; i++) {
-      const next = neighbors(p, cell).find((n) => n !== prev && this.plan.has(edgeBetween(p, cell, n)));
+    const lines = this.logic.segments;
+    for (let i = 0; i <= lines.size; i++) {
+      const next = neighbors(p, cell).find((n) => n !== prev && lines.has(edgeBetween(p, cell, n)));
       if (next === undefined) return false;
       if (next === b) return true;
       [prev, cell] = [cell, next];
@@ -649,8 +662,13 @@ export class EditorView {
     return false;
   }
 
+  /** Erase a line, drawn or found by logic. */
   private erasePlan(e: number) {
-    if (this.plan.delete(e)) this.render();
+    const drawn = this.plan.delete(e);
+    if (this.logic.segments.delete(e) || drawn) {
+      this.faintLines = new Set();
+      this.render();
+    }
   }
 
   /** After an edit: the wanted path loses lines through walls or black tiles (or off the board, after an undone resize). */
@@ -676,16 +694,25 @@ export class EditorView {
     this.simplifyRun = null;
   }
 
+  /** Delete every wall and black tile (one undoable step). */
+  private clearObstacles() {
+    this.cancelSimplify();
+    const p = this.puzzle;
+    const n = p.walls.size + p.blocked.size;
+    if (!n) return;
+    this.edit((q) => ({ ...clonePuzzle(q), walls: new Set<number>(), blocked: new Set<number>() }));
+    this.setMessage(`Deleted ${n} obstacle${n === 1 ? '' : 's'}.`, 'success');
+  }
+
   /**
-   * Fill obstacles around the lines (the desired solution's, or the logic helper's on show), as
+   * Fill obstacles around the lines (drawn, or found by the logic helper), as
    * one undoable step: every open tile no line reaches turns black (unless an end is on it), and
    * every other border no line crosses gets a wall.
    */
   private fill() {
     this.cancelSimplify();
     const p = this.puzzle;
-    const lines = new Set(this.plan);
-    if (this.logicSteps > 0 || this.logicBad.length > 0) for (const e of this.logic.segments) lines.add(e);
+    const lines = this.logic.segments;
     if (!lines.size) return this.setMessage('Draw the desired solution first: Fill obstacles fills in everything around it.', 'error');
     const endTiles = new Set(p.endpoints.map((end) => endTile(p, end)));
     const black = openCells(p).filter((c) => !endTiles.has(c) && !cellEdges(p, c).some((e) => lines.has(e)));
@@ -1192,7 +1219,10 @@ export class EditorView {
   private commitGesture() {
     // Each placement already saved its own undo step; just catch up after the gesture.
     if (this.changed) this.afterChange();
+    // New desired-solution lines: Auto-apply runs again from them.
+    else if (this.planDrawn && this.autoLogic) this.runAutoLogic();
     this.changed = false;
+    this.planDrawn = false;
   }
 
   private afterChange() {
@@ -1329,8 +1359,7 @@ export class EditorView {
       suggestTiles: this.suggested?.kind === 'tile' ? this.suggested.at : undefined,
       suggestClear: this.suggested?.kind === 'tile' && this.suggested.remove.length ? this.suggested.remove : undefined,
       removable: this.simplifyGoal && this.removable ? { ...this.removable, goal: this.simplifyGoal } : undefined,
-      segments: logic ? this.logic.segments : undefined,
-      plan: this.plan,
+      segments: this.logic.segments,
       xMarks: logic ? this.logic.xs : undefined,
       highlight: logic ? this.logicFresh : undefined,
       focusCells: logic && this.logicFocus.size ? this.logicFocus : undefined,
@@ -1351,7 +1380,7 @@ export class EditorView {
       this.goalBtns[g].setAttribute('aria-pressed', String(this.simplifyGoal === g));
       this.removeAllBtns[g].classList.toggle('busy', this.simplifyRun?.goal === g);
     }
-    this.clearPlanBtn.disabled = !this.plan.size;
+    this.clearObstaclesBtn.disabled = !p.walls.size && !p.blocked.size;
     this.drawGridHandles();
     this.undoBtn.disabled = !this.history.canUndo;
     this.redoBtn.disabled = !this.history.canRedo;

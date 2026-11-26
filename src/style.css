@@ -1254,7 +1254,7 @@ img.icon {
   padding: 0 4px;
 }
 
-/* Transform grid, One-shot and Suggest; Clear solution and Fill obstacles: each row shared evenly. */
+/* Transform grid, One-shot and Suggest; Clear obstacles and Fill obstacles: each row shared evenly. */
 .puzzle-row > .btn,
 .fill-row > .btn {
   min-width: 0;

@@ -3,7 +3,8 @@ import { decodePuzzle } from './codec';
 import { runLogic, runStroke, type Contradiction, type LogicOptions, type RuleId } from './logic';
 import { isOneShot } from './model';
 
-export type LogicRequest = { id: number; code: string; rules: RuleId[]; opts?: LogicOptions };
+/** `segments`: lines to start from (the editor's drawn lines). */
+export type LogicRequest = { id: number; code: string; rules: RuleId[]; opts?: LogicOptions; segments?: number[] };
 export type LogicReply = {
   id: number;
   segments: number[];
@@ -19,9 +20,10 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 /** Run the chosen rules on a puzzle until they get stuck (a one-shot's stroke, from its entrance), off the main thread. */
 ctx.onmessage = (ev: MessageEvent<LogicRequest>) => {
-  const { id, code, rules, opts } = ev.data;
+  const { id, code, rules, opts, segments } = ev.data;
   const p = decodePuzzle(code);
-  const run = isOneShot(p) ? runStroke(p, rules, undefined, opts) : runLogic(p, rules, undefined, opts);
+  const start = segments?.length ? { segments: new Set(segments), xs: new Set<number>() } : undefined;
+  const run = isOneShot(p) ? runStroke(p, rules, start, opts) : runLogic(p, rules, start, opts);
   // A one-shot's stroke that's stuck: the rules over the rest of the board, whose lines are shown
   // faintly, and may find the puzzle can't be solved.
   let faint: number[] = [];
