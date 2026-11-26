@@ -326,10 +326,20 @@ a.btn {
   stroke-dasharray: 2 14;
   stroke-linecap: round;
 }
-/* A black tile the editor suggests clearing. */
-.tile-suggest.clear {
-  fill: none;
+/* A black tile to clear, or a tail or head to move: red from Suggest; from a fix, green if it
+   gives one solution, amber if several. */
+.delete-x {
   stroke: var(--error);
+  stroke-width: 9;
+  stroke-linecap: round;
+  /* Dashed, like the other suggestions (round caps make the dashes beads). */
+  stroke-dasharray: 6 12;
+}
+.delete-x.unique {
+  stroke: var(--success);
+}
+.delete-x.multiple {
+  stroke: rgb(217 119 6);
 }
 /* A wall the editor suggests taking away. */
 .wall.suggest.clear {

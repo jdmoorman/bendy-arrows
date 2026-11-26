@@ -365,3 +365,17 @@ describe('fixes the logic rules accept', async () => {
     expect(tileFixes(p, all, { ok: (q) => !logicContradiction(q, check) })).toEqual([{ cell: c4, add: false, status: 'multiple' }]);
   });
 });
+
+describe('endPlacements newFirst', async () => {
+  const { endPlacements } = await import('../src/solver');
+  const { createPuzzle, portEnd, portId } = await import('../src/model');
+  test('the end placed goes in as the tail, ahead of the head the puzzle keeps', () => {
+    const p = createPuzzle(3, 1);
+    const head = portEnd(portId(p, 'right', 0));
+    p.endpoints = [head];
+    const seen: unknown[] = [];
+    endPlacements(p, { newFirst: true, ok: (q) => (seen.push(q.endpoints[1]), true) });
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen.every((e) => JSON.stringify(e) === JSON.stringify(head))).toBe(true);
+  });
+});

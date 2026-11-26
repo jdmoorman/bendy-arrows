@@ -126,7 +126,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
    * Short of ends: look for where they could go. Each frame spot that gives a solution gets a dot
    * (green: only one solution; amber: several), and the line under the board counts them.
    */
-  const findEnds = async (check?: LogicCheck) => {
+  const findEnds = async (check?: LogicCheck, newFirst?: boolean) => {
     const p = editor.current;
     const missing = p.endpoints.length === 0 ? 'both ends' : 'the other end';
     const marks = new Map<number, 'unique' | 'multiple'>();
@@ -151,7 +151,7 @@ export function attachUniquenessCheck(editor: EditorView): void {
       for (const e of o.edges) lines.add(e);
       editor.showGhost(lines);
       show(false);
-    }, check);
+    }, check, newFirst);
     ends = thisRun;
     try {
       await thisRun.result;
@@ -166,8 +166,8 @@ export function attachUniquenessCheck(editor: EditorView): void {
   };
 
   // Where missing ends could go: only on request (the Suggest button with the Ends tool).
-  editor.endSuggester = (check) => ({
-    result: findEnds(check),
+  editor.endSuggester = (check, newFirst) => ({
+    result: findEnds(check, newFirst),
     cancel: () => {
       ends?.cancel();
       ends = null;

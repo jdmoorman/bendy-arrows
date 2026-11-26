@@ -80,7 +80,7 @@ export interface EndsRun {
 }
 
 /** For a puzzle short of ends, the end placements that give it a solution, in a background worker; `onFound` sees each. */
-export function endPlacementsInBackground(p: Puzzle, onFound: (o: EndOption) => void, check?: LogicCheck): EndsRun {
+export function endPlacementsInBackground(p: Puzzle, onFound: (o: EndOption) => void, check?: LogicCheck, newFirst?: boolean): EndsRun {
   const worker = new Worker(new URL('./solver.worker.ts', import.meta.url), { type: 'module' });
   let settle: { resolve: (r: { options: EndOption[]; unchecked: number }) => void; reject: (e: Error) => void };
   const result = new Promise<{ options: EndOption[]; unchecked: number }>((resolve, reject) => (settle = { resolve, reject }));
@@ -99,7 +99,7 @@ export function endPlacementsInBackground(p: Puzzle, onFound: (o: EndOption) => 
     worker.terminate();
     settle.reject(new Error(ev.message || 'Solver failed.'));
   };
-  worker.postMessage({ code: encodePuzzle(p), ends: true, check } satisfies SolverRequest);
+  worker.postMessage({ code: encodePuzzle(p), ends: true, check, newFirst } satisfies SolverRequest);
   return {
     result,
     cancel() {
@@ -118,7 +118,7 @@ export interface FixesRun {
  * For a puzzle with no solution, in a background worker: the one-tile changes among `cells` that
  * give it one (`onFound` sees each), then the ends that could move (or be placed) to give it one.
  */
-export function tileFixesInBackground(p: Puzzle, cells: number[], onFound: (f: TileFix) => void, check?: LogicCheck): FixesRun {
+export function tileFixesInBackground(p: Puzzle, cells: number[], onFound: (f: TileFix) => void, check?: LogicCheck, newFirst?: boolean): FixesRun {
   const worker = new Worker(new URL('./solver.worker.ts', import.meta.url), { type: 'module' });
   let settle: { resolve: (r: { fixes: TileFix[]; endFixes: EndFix[] }) => void; reject: (e: Error) => void };
   const result = new Promise<{ fixes: TileFix[]; endFixes: EndFix[] }>((resolve, reject) => (settle = { resolve, reject }));
@@ -137,7 +137,7 @@ export function tileFixesInBackground(p: Puzzle, cells: number[], onFound: (f: T
     worker.terminate();
     settle.reject(new Error(ev.message || 'Solver failed.'));
   };
-  worker.postMessage({ code: encodePuzzle(p), fixes: cells, check } satisfies SolverRequest);
+  worker.postMessage({ code: encodePuzzle(p), fixes: cells, check, newFirst } satisfies SolverRequest);
   return {
     result,
     cancel() {

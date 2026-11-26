@@ -84,6 +84,14 @@ export class EditorView {
   private endOptions: Map<number, 'unique' | 'multiple'> | null = null;
   /** After a contradiction: tiles whose change alone gives the puzzle a solution, and the search for them. */
   private fixes = new Map<number, 'unique' | 'multiple'>();
+  /** Ends (0 the tail, 1 the head) a suggested fix moves, X'd to show they'd go: green if a move gives one solution. */
+  private fixMoveEnds: { end: number; status: 'unique' | 'multiple' }[] = [];
+  /** Where those ends could move to (see fixMoveEnds). */
+  private fixEndSpots = new Map<number, 'unique' | 'multiple'>();
+  /** The tail was taken away and the head kept: the next end placed is the tail. */
+  private loneHead = false;
+  /** Said once a moved end is taken away, if no error shows (see afterChange). */
+  private fixEndNote = '';
   private fixRun: FixesRun | null = null;
   /** A one-shot whose stroke stalls: the lines the rules find over the rest of the board, drawn faintly. */
   private faintLines = new Set<number>();
@@ -106,7 +114,7 @@ export class EditorView {
   /** Fixes were asked for and an end just placed: a new contradiction lists its fixes at once. */
   private followFixes = false;
   /** Suggest with the Ends tool: where the missing ends could go (set up by the uniqueness check). */
-  endSuggester: ((check?: LogicCheck) => { result: Promise<void>; cancel(): void }) | null = null;
+  endSuggester: ((check?: LogicCheck, newFirst?: boolean) => { result: Promise<void>; cancel(): void }) | null = null;
   private message = '';
   private messageKind: '' | 'success' | 'error' = '';
   /** A link at the end of the message, if it offers something. */
@@ -416,6 +424,7 @@ export class EditorView {
     this.cancelSimplify();
     this.plan.clear();
     this.puzzle = clonePuzzle(p);
+    this.loneHead = false;
     this.marksStillFit = true;
     this.replaced = false;
     this.resetLogic();
@@ -553,6 +562,7 @@ export class EditorView {
         this.fixEndsCheck = false;
         if (!r.contradiction) this.hideFixEnds();
       }
+      if (!r.contradiction && this.fixEndNote && this.endsForFix !== null) this.setMessage(this.fixEndNote);
       if (r.contradiction) {
         this.logicBad = r.contradiction.cells ?? [r.contradiction.cell];
         this.showContradiction(r.contradiction.reason, r.contradiction.fixCells);
@@ -1031,16 +1041,20 @@ export class EditorView {
         this.render();
       },
       this.fixCheck(),
+      this.loneHead,
     );
     this.fixRun = run;
     run.result
       .then(({ fixes, endFixes }) => {
         if (this.fixRun !== run) return;
         this.fixRun = null;
+        const moves = endFixes.filter((f) => f.end >= 0);
+        this.fixMoveEnds = moves.map((f) => ({ end: f.end, status: f.unique ? 'unique' : 'multiple' }));
+        for (const [port, status] of moves.flatMap((f) => f.ports)) if (this.fixEndSpots.get(port) !== 'unique') this.fixEndSpots.set(port, status);
         // Each kind of fix that gives the puzzle a solution, one bullet each.
         const items = [
           fixes.some((f) => f.add) ? 'Make a ringed tile black' : '',
-          fixes.some((f) => !f.add) ? 'Delete a ringed black tile' : '',
+          fixes.some((f) => !f.add) ? 'Delete a black tile' : '',
           ...endFixes.map(endFixItem),
         ].filter((i) => i !== '');
         // "The indicated borders": mark where a missing end could go.
@@ -1076,7 +1090,7 @@ export class EditorView {
     if (!this.endSuggester || (this.fixEndsRun && this.endsForFix === this.puzzle.endpoints.length)) return;
     this.fixEndsRun?.cancel();
     this.endsForFix = this.puzzle.endpoints.length;
-    this.fixEndsRun = this.endSuggester(this.fixCheck());
+    this.fixEndsRun = this.endSuggester(this.fixCheck(), this.loneHead);
     this.render();
   }
 
@@ -1111,6 +1125,8 @@ export class EditorView {
     this.fixRun?.cancel();
     this.fixRun = null;
     this.fixes = new Map();
+    this.fixMoveEnds = [];
+    this.fixEndSpots = new Map();
   }
 
   /** Show a message under the board until the next edit. */
@@ -1127,6 +1143,16 @@ export class EditorView {
   showGhost(edges: Iterable<number> | null): void {
     this.ghost = edges ? new Set(edges) : null;
     this.render();
+  }
+
+  /**
+   * The frame spots to mark for ends: where missing ends could go (with the Ends tool, or for a
+   * fix that places one), and where a fix would move the tail or head to.
+   */
+  private shownEndOptions(): Map<number, 'unique' | 'multiple'> | undefined {
+    const out = new Map(this.tool === 'ends' || this.endsForFix !== null ? (this.endOptions ?? []) : []);
+    if (this.logicBad.length) for (const [port, status] of this.fixEndSpots) if (out.get(port) !== 'unique') out.set(port, status);
+    return out.size ? out : undefined;
   }
 
   /** Mark the frame spots where an end gives the puzzle a solution, or null to hide them. */
@@ -1193,7 +1219,7 @@ export class EditorView {
     this.endsSuggested = true;
     this.suggestBar.hidden = false;
     this.suggestBar.classList.add('indeterminate');
-    const run = this.endSuggester();
+    const run = this.endSuggester(undefined, this.loneHead);
     this.suggestRun = run;
     this.render();
     const done = () => {
@@ -1301,6 +1327,9 @@ export class EditorView {
   }
 
   private afterChange() {
+    // Fixes listed that move the tail or head, from a puzzle with both ends (before they're reset).
+    const moveFixes = this.logicBad.length > 0 && this.fixMoveEnds.length > 0 && this.puzzle.endpoints.length === 1;
+    if (this.puzzle.endpoints.length !== 1) this.loneHead = false;
     this.cancelSimplify();
     this.cancelSuggest();
     this.keepSuggestion();
@@ -1315,6 +1344,7 @@ export class EditorView {
     // other, so its spots show (and the dots fit the end now placed), until both are placed.
     const fixEnds = this.endsForFix;
     this.stopFixEnds();
+    this.fixEndNote = '';
     // A fix asked for ends and one was just placed: if that clears the error, the marks go. If
     // it leaves an error (usually a new one), its fixes are listed straight away, marking where
     // the other end could go if that's among them. With Auto-apply on, its result decides;
@@ -1333,6 +1363,21 @@ export class EditorView {
         }
       }
     }
+    // A fix moves the tail or head, and one was just taken away: mark where it could go back,
+    // and list any error's fixes straight away.
+    if (moveFixes) {
+      this.followFixes = true;
+      this.showFixEnds();
+      const note = `Place the ${this.loneHead ? 'tail' : 'head'} on one of the indicated borders.`;
+      this.fixEndNote = note;
+      if (!this.autoLogic) {
+        const c = this.checkContradiction();
+        if (c) {
+          this.logicBad = c.cells ?? [c.cell];
+          this.showContradiction(c.reason, c.fixCells);
+        } else this.setMessage(note);
+      }
+    }
     if (this.endsSuggested && this.tool === 'ends' && missingEnds(this.puzzle)) this.suggestEnds();
     else this.endsSuggested = false;
   }
@@ -1341,6 +1386,7 @@ export class EditorView {
     const prev = this.history.undo(clonePuzzle(this.puzzle));
     if (!prev) return;
     this.puzzle = prev;
+    this.loneHead = false;
     this.afterChange();
   }
 
@@ -1348,6 +1394,7 @@ export class EditorView {
     const next = this.history.redo(clonePuzzle(this.puzzle));
     if (!next) return;
     this.puzzle = next;
+    this.loneHead = false;
     this.afterChange();
   }
 
@@ -1376,9 +1423,15 @@ export class EditorView {
     if (p.blocked.has(endTile(p, end))) return;
     this.placing();
     const i = p.endpoints.findIndex((e) => endsEqual(e, end));
-    if (i >= 0) p.endpoints.splice(i, 1);
-    else if (p.endpoints.length < 2) p.endpoints.push(end);
-    else p.endpoints[1] = end; // replace the exit
+    if (i >= 0) {
+      p.endpoints.splice(i, 1);
+      // Taking the tail away keeps the head a head: the next end placed goes in as the tail.
+      this.loneHead = i === 0 && p.endpoints.length === 1;
+    } else if (p.endpoints.length < 2) {
+      if (this.loneHead) p.endpoints.unshift(end);
+      else p.endpoints.push(end);
+      this.loneHead = false;
+    } else p.endpoints[1] = end; // replace the head
     this.render();
   }
 
@@ -1448,7 +1501,7 @@ export class EditorView {
       showPortTargets: this.tool === 'ends',
       ghost: this.ghost ?? undefined,
       // Where ends could go: only while placing ends.
-      endOptions: this.tool === 'ends' || this.endsForFix !== null ? (this.endOptions ?? undefined) : undefined,
+      endOptions: this.shownEndOptions(),
       suggestWalls: this.suggested?.kind === 'wall' ? this.suggested.at : undefined,
       suggestClearWalls: this.suggested?.kind === 'wall' && this.suggested.remove.length ? this.suggested.remove : undefined,
       suggestTiles: this.suggested?.kind === 'tile' ? this.suggested.at : undefined,
@@ -1460,6 +1513,8 @@ export class EditorView {
       focusCells: logic && this.logicFocus.size ? this.logicFocus : undefined,
       errorCells: logic && this.logicBad.length ? new Set(this.logicBad) : undefined,
       tileFixes: this.fixes.size && this.logicBad.length ? this.fixes : undefined,
+      loneHead: this.loneHead || undefined,
+      suggestMoveEnds: this.logicBad.length ? new Map(this.fixMoveEnds.flatMap(({ end, status }) => (p.endpoints[end]?.kind === 'port' ? [[p.endpoints[end].port, status] as const] : []))) : undefined,
       faint: this.faintLines.size ? this.faintLines : undefined,
     });
     this.oneShotBtn.setAttribute('aria-pressed', String(!!p.oneShot));

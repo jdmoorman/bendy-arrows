@@ -427,6 +427,8 @@ export function endPlacements(
     union?: boolean;
     /** Only placements this accepts (e.g. ones the logic rules find no contradiction in). */
     ok?: (q: Puzzle) => boolean;
+    /** The puzzle's one end is its head: the end placed is the tail (it matters for a one-shot). */
+    newFirst?: boolean;
   } = {},
 ): { options: EndOption[]; unchecked: number } {
   const byCell = new Map<number, number[]>();
@@ -451,7 +453,7 @@ export function endPlacements(
       continue;
     }
     const q = clonePuzzle(p);
-    q.endpoints = [portEnd(a), portEnd(b)];
+    q.endpoints = opts.newFirst ? [portEnd(b), portEnd(a)] : [portEnd(a), portEnd(b)];
     if (!parityCheck(q).ok || (opts.ok && !opts.ok(q))) continue;
     const r = solve(q, { maxSolutions: 2, nodeLimit: opts.nodeLimit ?? 200_000, shouldAbort: opts.shouldAbort });
     if (r.status === 'aborted') unchecked++;
@@ -481,17 +483,24 @@ export interface EndFix {
   end: number;
   spots: number;
   unique: number;
+  /** Where the end could go: each port, and whether the puzzle then has one solution or several. */
+  ports: [number, 'unique' | 'multiple'][];
 }
 
-export function endFixes(p: Puzzle, opts: { nodeLimit?: number; ok?: (q: Puzzle) => boolean } = {}): EndFix[] {
-  const tally = (end: number, options: EndOption[]): EndFix[] =>
-    options.length ? [{ end, spots: options.length, unique: options.filter((o) => o.status === 'unique').length }] : [];
-  if (p.endpoints.length < 2) return tally(-1, endPlacements(p, opts).options);
+export function endFixes(p: Puzzle, opts: { nodeLimit?: number; ok?: (q: Puzzle) => boolean; newFirst?: boolean } = {}): EndFix[] {
+  const tally = (end: number, options: EndOption[], both = false): EndFix[] => {
+    if (!options.length) return [];
+    // The placed end's ports (both ends' with none placed before), one solution beating several.
+    const ports = new Map<number, 'unique' | 'multiple'>();
+    for (const o of options) for (const port of both ? o.ports.flat() : o.ports[1]) if (ports.get(port) !== 'unique') ports.set(port, o.status);
+    return [{ end, spots: options.length, unique: options.filter((o) => o.status === 'unique').length, ports: [...ports] }];
+  };
+  if (p.endpoints.length < 2) return tally(-1, endPlacements(p, opts).options, !p.endpoints.length);
   return [0, 1].flatMap((end) => {
     // The other end stays; every other spot for this one is tried.
     const q = clonePuzzle(p);
     q.endpoints = [p.endpoints[1 - end]];
-    return tally(end, endPlacements(q, opts).options);
+    return tally(end, endPlacements(q, { ...opts, newFirst: end === 0 }).options);
   });
 }
 

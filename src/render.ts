@@ -67,6 +67,10 @@ export interface RenderOptions {
   /** Tiles to suggest blacking out, outlined dashed on top; and black tiles to suggest clearing, ringed. */
   suggestTiles?: number[];
   suggestClear?: number[];
+  /** The puzzle's one end is its head (its tail was taken away), so it's drawn as one. */
+  loneHead?: boolean;
+  /** Ends (by port) a suggested fix moves elsewhere, X'd: green if a move gives one solution, amber if only several. */
+  suggestMoveEnds?: Map<number, 'unique' | 'multiple'>;
   /** Walls and black tiles that could go without losing the unique solution, drawn in their own colour. */
   removable?: { walls: Set<number>; blocked: Set<number>; goal?: 'easy' | 'minimal' };
   /**
@@ -210,6 +214,8 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   if (o.tileFixes?.size) {
     parts.push('<g class="tile-fixes">');
     for (const [cell, status] of o.tileFixes) {
+      // A black tile to clear gets a red X instead (drawn on top, below).
+      if (p.blocked.has(cell)) continue;
       const [r, c] = cellRC(p, cell);
       parts.push(`<circle class="tile-fix ${status}" cx="${pad + c * CELL + CELL / 2}" cy="${pad + r * CELL + CELL / 2}" r="${CELL * 0.3}"/>`);
     }
@@ -276,7 +282,7 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
     ? []
     : ends.map((end, i) => {
         const { x, y, d } = portPoint(end.port);
-        return endMarker(center(portCell(p, end.port)), [x, y], d, i === 0 ? 'in' : 'out');
+        return endMarker(center(portCell(p, end.port)), [x, y], d, i === 0 && !o.loneHead ? 'in' : 'out');
       });
   if (markers.length) parts.push('<g class="ends">', ...markers.map((m) => m.edge), '</g>');
 
@@ -331,10 +337,21 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
     const [x1, y1, x2, y2] = borderLine(e);
     parts.push(line(x1, y1, x2, y2, 'wall suggest clear'));
   }
-  for (const cell of o.suggestClear ?? []) {
+  // Black tiles to clear and ends to move: a bold X over each. A fix's X is green if it gives
+  // one solution, amber if several; Suggest's is red.
+  const deleteX = (cx: number, cy: number, s: number, cls: string) => {
+    const c = `delete-x ${cls}`;
+    return line(cx - s, cy - s, cx + s, cy + s, c) + line(cx - s, cy + s, cx + s, cy - s, c);
+  };
+  const tileX = (cell: number, cls: string) => {
     const [r, c] = cellRC(p, cell);
-    const inset = CELL * 0.12;
-    parts.push(`<rect class="tile-suggest clear" x="${pad + c * CELL + inset}" y="${pad + r * CELL + inset}" width="${CELL - 2 * inset}" height="${CELL - 2 * inset}" rx="8"/>`);
+    parts.push(deleteX(pad + c * CELL + CELL / 2, pad + r * CELL + CELL / 2, CELL * 0.26, cls));
+  };
+  for (const cell of o.suggestClear ?? []) tileX(cell, 'suggest');
+  for (const [cell, status] of o.tileFixes ?? []) if (p.blocked.has(cell)) tileX(cell, status);
+  for (const [port, status] of o.suggestMoveEnds ?? []) {
+    const { x, y, d } = portPoint(port);
+    parts.push(deleteX(x + d[0] * 26, y + d[1] * 26, 34, status));
   }
   for (const cell of o.suggestTiles ?? []) {
     const [r, c] = cellRC(p, cell);
