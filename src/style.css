@@ -1299,7 +1299,7 @@ img.icon {
   padding: 0 8px;
 }
 
-/* Transform grid and One-shot; Clear obstacles and Fill obstacles: each row shared evenly. */
+/* Resize, the turns and the flips; Clear obstacles, Fill obstacles and One-shot: each row shared evenly. */
 .puzzle-row > .btn,
 .fill-row > .btn {
   min-width: 0;
@@ -2224,33 +2224,6 @@ img.icon {
 .toolbar .btn.stacked .icon {
   width: 20px;
   height: 20px;
-}
-
-/*
- * Turns and flips, while editing rows and columns: laid over the message just above the
- * toolbar (always at least as tall as the row), so the board and the buttons stay put.
- */
-.editor-view > .toolbar {
-  position: relative;
-}
-.editor-view .shape-row {
-  display: none;
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: calc(100% + 8px);
-  width: auto;
-}
-.editor-view.grid-editing .shape-row {
-  display: flex;
-}
-.editor-view.grid-editing > .status {
-  visibility: hidden;
-}
-@media (min-width: 600px) and (orientation: landscape) {
-  .editor-view .shape-row {
-    left: 0;
-  }
 }
 
 /* Suggest's progress while it works out the best wall. */

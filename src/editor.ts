@@ -195,13 +195,6 @@ export class EditorView {
       <p class="status" role="status" aria-live="polite"></p>
       <div class="suggest-progress" hidden><span></span></div>
       <div class="toolbar">
-        <!-- Turns and flips: shown while editing rows and columns. -->
-        <div class="toolbar-row shape-row">
-          <button class="btn stacked" data-turn="rotateLeft" title="Rotate left">${ICONS.rotateLeft}<span>Turn left</span></button>
-          <button class="btn stacked" data-turn="rotateRight" title="Rotate right">${ICONS.rotateRight}<span>Turn right</span></button>
-          <button class="btn stacked" data-turn="flipH" title="Flip left–right">${ICONS.flipH}<span>Flip left–right</span></button>
-          <button class="btn stacked" data-turn="flipV" title="Flip up–down">${ICONS.flipV}<span>Flip up–down</span></button>
-        </div>
         <div class="toolbar-section" role="group" aria-label="Tools">
           <div class="toolbar-title" aria-hidden="true">Tools</div>
           <div class="toolbar-row tool-row">
@@ -217,8 +210,11 @@ export class EditorView {
         <div class="toolbar-section" role="group" aria-label="Puzzle">
           <div class="toolbar-title" aria-hidden="true">Puzzle</div>
           <div class="toolbar-row puzzle-row">
-            <button class="btn stacked" data-act="grid" aria-pressed="false" title="Edit rows and columns: add or delete them around the board, turn or flip it">${ICONS.grid}<span>Transform grid</span></button>
-            <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the tail, and hints and logic follow it">One-shot</button>
+            <button class="btn stacked" data-act="grid" aria-pressed="false" title="Resize: add or delete rows and columns around the board">${ICONS.grid}<span>Resize</span></button>
+            <button class="btn stacked" data-turn="rotateLeft" title="Rotate left">${ICONS.rotateLeft}<span>Turn left</span></button>
+            <button class="btn stacked" data-turn="rotateRight" title="Rotate right">${ICONS.rotateRight}<span>Turn right</span></button>
+            <button class="btn stacked" data-turn="flipH" title="Flip left–right">${ICONS.flipH}<span>Flip H</span></button>
+            <button class="btn stacked" data-turn="flipV" title="Flip up–down">${ICONS.flipV}<span>Flip V</span></button>
           </div>
         </div>
         <div class="toolbar-section" role="group" aria-label="Path">
@@ -226,6 +222,7 @@ export class EditorView {
           <div class="toolbar-row fill-row">
             <button class="btn" data-act="clear-obstacles" title="Clear obstacles: delete every wall and black tile">${ICONS.clear}<span>Clear obstacles</span></button>
             <button class="btn" data-act="fill" title="Fill obstacles: a black tile on every open tile no line reaches, and a wall on every other border no line crosses">Fill obstacles</button>
+            <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the tail, and hints and logic follow it">One-shot</button>
           </div>
         </div>
         <div class="toolbar-section" role="group" aria-label="Simplify">
@@ -810,9 +807,6 @@ export class EditorView {
   private drawGridHandles() {
     this.handles.replaceChildren();
     this.handles.parentElement!.classList.toggle('grid-editing', this.gridEdit);
-    // Turns and flips show in place of the message while rows and columns are being edited.
-    // (Laid over the message's space, so nothing below or beside moves.)
-    this.el.classList.toggle('grid-editing', this.gridEdit);
     if (!this.gridEdit) return;
     const p = this.puzzle;
     const ctm = this.svg.getScreenCTM();
