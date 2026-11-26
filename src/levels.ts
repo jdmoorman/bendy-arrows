@@ -217,7 +217,7 @@ export const PACKS: LevelPack[] = [
     ],
   },
   {
-    name: 'Misc One-Shots',
+    name: 'Harder One-Shots',
     oneShot: true,
     levels: [
       'B0Y3AiEhKrWI',
