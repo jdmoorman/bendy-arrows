@@ -22,6 +22,8 @@ export type ThemeTokens = Record<
   | 'path-solved'
   | 'path-edge'
   | 'path-solved-edge'
+  | 'path-gold'
+  | 'path-gold-edge'
   | 'error-edge'
   | 'hint'
   | 'hint-edge'
@@ -61,6 +63,9 @@ export const THEMES = {
     'path-solved': '#b5e8a0',
     'path-edge': '#7c5cdb',
     'path-solved-edge': '#7fbf66',
+    // Solved with a gold star (no hints).
+    'path-gold': '#facc15',
+    'path-gold-edge': '#ca8a04',
     'error-edge': '#c23a55',
     hint: '#b5e8a0',
     'hint-edge': '#7fbf66',
@@ -97,7 +102,11 @@ export const THEMES = {
     path: '#9b7cf0',
     'path-solved': '#b8e6a3',
     'path-edge': '#6a46c9',
-    'path-solved-edge': '#6aa852',
+    // Dark enough to stand out against the board's solved tint (about 4:1), as the pale fill can't.
+    'path-solved-edge': '#4d8a38',
+    // Solved with a gold star (no hints); its edge darker for the same reason.
+    'path-gold': '#facc15',
+    'path-gold-edge': '#a16207',
     'error-edge': '#9e1f3a',
     hint: '#b8e6a3',
     'hint-edge': '#6aa852',

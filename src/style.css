@@ -426,8 +426,8 @@ a.btn {
 }
 /* Solved with a gold star: a gold path. */
 .board.solved.gold {
-  --solved-fill: rgb(250 204 21);
-  --solved-edge: rgb(202 138 4);
+  --solved-fill: var(--path-gold);
+  --solved-edge: var(--path-gold-edge);
 }
 .board.solved .seg {
   stroke: var(--solved-fill);
