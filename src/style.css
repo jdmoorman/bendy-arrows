@@ -1386,16 +1386,18 @@ img.icon {
     grid-area: solved;
     padding: 8px 12px 0 0;
   }
-  .play-view .toolbar-row {
-    flex-wrap: wrap;
+  /* Undo, Redo and Hint share one row; a narrow column drops their icons to fit. */
+  .play-view > .toolbar {
+    container-type: inline-size;
   }
-  /* Undo and Redo on one row, Hint on the next. */
-  .play-view .toolbar-row > [data-act='undo'],
-  .play-view .toolbar-row > [data-act='redo'] {
-    flex: 1 1 calc(50% - 3px);
-  }
-  .play-view .toolbar-row > [data-act='hint'] {
-    flex: 1 1 100%;
+  @container (max-width: 300px) {
+    .play-view .toolbar-row > .btn {
+      min-width: 0;
+      padding: 0 8px;
+    }
+    .play-view .toolbar-row > .btn .icon {
+      display: none;
+    }
   }
 }
 
