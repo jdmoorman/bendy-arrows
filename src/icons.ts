@@ -53,4 +53,8 @@ export const ICONS = {
   filterOn: icon('filter-on.svg'),
   /** A star, for a level solved with no hints. */
   star: icon('star.svg'),
+  /** An open eye: a pack players see. */
+  eye: icon('eye.svg'),
+  /** A crossed-out eye: a draft pack, hidden from players. */
+  eyeOff: icon('eye-off.svg'),
 };

@@ -59,8 +59,8 @@ export function levelsWriter() {
           }
         });
       });
-      // POST /__packs with {"packs": [{"name", "oneShot", "levels"}], "was": [same]}: the whole
-      // list of packs, in order, replacing PACKS in src/levels.ts. "was" is the list as the page
+      // POST /__packs with {"packs": [{"name", "oneShot", "draft", "levels"}], "was": [same]}: the whole
+      // list of packs, in order, replacing ALL_PACKS in src/levels.ts. "was" is the list as the page
       // loaded it, and must still be what the file holds.
       server.middlewares.use('/__packs', (req, res) => {
         const reply = (status, body) => {
@@ -76,29 +76,30 @@ export function levelsWriter() {
             const { packs, was, page } = JSON.parse(body);
             const text1 = (x) => typeof x === 'string' && x.trim() !== '' && !/[\n\r]/.test(x);
             const codes = (xs) => Array.isArray(xs) && xs.every((c) => typeof c === 'string' && CODE.test(c));
-            const isPacks = (ps) => Array.isArray(ps) && ps.every((p) => p && text1(p.name) && codes(p.levels) && (p.oneShot === undefined || typeof p.oneShot === 'boolean'));
+            const isPacks = (ps) => Array.isArray(ps) && ps.every((p) => p && text1(p.name) && codes(p.levels) && (p.oneShot === undefined || typeof p.oneShot === 'boolean') && (p.draft === undefined || typeof p.draft === 'boolean'));
             if (!isPacks(packs) || !isPacks(was)) throw new Error('That is not a list of packs.');
             const names = packs.map((p) => p.name.trim());
             if (new Set(names).size !== names.length) throw new Error('Two packs would have the same name.');
             const all = packs.flatMap((p) => p.levels);
             if (new Set(all).size !== all.length) throw new Error('A level would be in the packs twice.');
             const text = readFileSync(FILE, 'utf8');
-            const START = 'export const PACKS: LevelPack[] = [';
+            const START = 'export const ALL_PACKS: LevelPack[] = [';
             const at = text.indexOf(START);
             const end = at < 0 ? -1 : text.indexOf('\n];', at);
-            if (at < 0 || end < 0) throw new Error("Can't find PACKS in src/levels.ts.");
+            if (at < 0 || end < 0) throw new Error("Can't find ALL_PACKS in src/levels.ts.");
             const open = at + START.length;
             // The packs the file holds now, to compare with what the page loaded.
             const unquote = (q) => q.slice(1, -1).replace(/\\(.)/g, '$1');
-            const now = [...text.slice(open, end).matchAll(/\{\s*name: ('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"),\s*(oneShot: true,\s*)?levels: \[([^\]]*)\],?\s*\}/g)].map((m) => ({
+            const now = [...text.slice(open, end).matchAll(/\{\s*name: ('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"),\s*(oneShot: true,\s*)?(draft: true,\s*)?levels: \[([^\]]*)\],?\s*\}/g)].map((m) => ({
               name: unquote(m[1]),
               oneShot: !!m[2],
-              levels: [...m[3].matchAll(/'([A-Za-z0-9_-]+)'/g)].map((c) => c[1]),
+              draft: !!m[3],
+              levels: [...m[4].matchAll(/'([A-Za-z0-9_-]+)'/g)].map((c) => c[1]),
             }));
-            const key = (ps) => JSON.stringify(ps.map((p) => [p.name, !!p.oneShot, p.levels]));
+            const key = (ps) => JSON.stringify(ps.map((p) => [p.name, !!p.oneShot, !!p.draft, p.levels]));
             if (key(now) !== key(was)) throw new Error('The packs in src/levels.ts have changed since this page loaded. Reload and try again.');
             const list = packs
-              .map((p) => `  {\n    name: ${quote(p.name.trim())},\n${p.oneShot ? '    oneShot: true,\n' : ''}    levels: [\n${p.levels.map((c) => `      '${c}',\n`).join('')}    ],\n  },\n`)
+              .map((p) => `  {\n    name: ${quote(p.name.trim())},\n${p.oneShot ? '    oneShot: true,\n' : ''}${p.draft ? '    draft: true,\n' : ''}    levels: [\n${p.levels.map((c) => `      '${c}',\n`).join('')}    ],\n  },\n`)
               .join('');
             writtenBy = typeof page === 'string' ? page : '';
             written = text.slice(0, open) + '\n' + list + text.slice(end + 1);

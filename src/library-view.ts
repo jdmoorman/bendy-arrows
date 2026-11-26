@@ -1,4 +1,4 @@
-import { PACKS } from './levels';
+import { ALL_PACKS } from './levels';
 import { decodePuzzle } from './codec';
 import { ICONS } from './icons';
 import {
@@ -76,7 +76,7 @@ export class LibraryView {
     // Level packs, with those packs chosen in the Pack filter.
     const cf = this.state.filters.collection;
     if (cf && 'values' in cf) {
-      const packs = cf.values.filter((v) => PACKS.some((p) => p.name === v));
+      const packs = cf.values.filter((v) => ALL_PACKS.some((p) => p.name === v));
       if (packs.length) {
         this.state.filters.collection = { values: [...new Set([...cf.values.filter((v) => !packs.includes(v)), COLLECTIONS.levels])] };
         this.state.filters.pack = { values: packs };

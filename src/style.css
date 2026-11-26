@@ -1944,6 +1944,13 @@ img.icon {
   margin: 0 0 4px;
   font-size: 1.35rem;
 }
+/* Drafts: work in progress, hidden from players. */
+.pack-group-note {
+  margin: 0 0 4px;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
 .pack-new {
   margin-top: 14px;
 }

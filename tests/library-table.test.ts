@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { decodePuzzle, encodePuzzle } from '../src/codec';
 import { applyTable, choicesFor, COLUMNS, DEFAULT_TABLE_STATE, libraryRows, type TableState } from '../src/library-table';
-import { PACKS } from '../src/levels';
+import { ALL_PACKS } from '../src/levels';
 import { createPuzzle } from '../src/model';
 import { SAMPLES } from './samples';
 import { Storage, type KeyValueStore } from '../src/storage';
@@ -18,7 +18,7 @@ class MemStore implements KeyValueStore {
 
 const state = (s: Partial<TableState>): TableState => ({ ...DEFAULT_TABLE_STATE, ...s });
 /** The official levels, one row each, in the Level packs collection with their packs. */
-const LEVEL_COUNT = PACKS.reduce((n, p) => n + p.levels.length, 0);
+const LEVEL_COUNT = ALL_PACKS.reduce((n, p) => n + p.levels.length, 0);
 
 describe('library table', () => {
   const storage = new Storage(new MemStore());
@@ -35,7 +35,7 @@ describe('library table', () => {
     expect(rows).toHaveLength(SAMPLES.length + 1 + LEVEL_COUNT);
     const levels = rows.filter((x) => x.key.startsWith('level:'));
     expect(levels.every((x) => x.collection === 'Level packs')).toBe(true);
-    expect(levels.map((x) => x.pack)).toEqual(PACKS.flatMap((p) => p.levels.map(() => p.name)));
+    expect(levels.map((x) => x.pack)).toEqual(ALL_PACKS.flatMap((p) => p.levels.map(() => p.name)));
     const r = rows.find((x) => x.entry?.id === 'm')!;
     expect(r).toMatchObject({ name: 'My little path', collection: 'Yours', w: 3, h: 3, walls: 1, black: 0, obstacles: 1, status: 'New' });
     // Not rated yet.
@@ -51,7 +51,7 @@ describe('library table', () => {
   });
 
   test('the Pack filter picks out the levels of the chosen packs', () => {
-    const [a, b] = PACKS;
+    const [a, b] = ALL_PACKS;
     const picked = applyTable(rows, state({ filters: { pack: { values: [a.name, b.name] } } }));
     // Their levels, and any saved puzzles that are those levels too.
     expect(picked.filter((r) => !r.entry).length).toBe(a.levels.length + b.levels.length);
@@ -60,7 +60,7 @@ describe('library table', () => {
   });
 
   test('the Pack filter’s None keeps the puzzles in no pack, alongside any packs chosen', () => {
-    const pack = PACKS[0];
+    const pack = ALL_PACKS[0];
     const picked = applyTable(rows, state({ filters: { pack: { values: ['None', pack.name] } } }));
     expect(picked.some((r) => r.entry?.id === 'm')).toBe(true);
     expect(picked.every((r) => !r.pack || r.pack === pack.name)).toBe(true);
@@ -117,14 +117,14 @@ describe('a saved puzzle added to a pack', async () => {
   const { orientTail, transformPuzzle } = await import('../src/model');
   test('gains that pack in the Pack column (even turned or made a one-shot on the way), keeping its collection', () => {
     const storage = new Storage(new MemStore());
-    const level = decodePuzzle(PACKS[1].levels[0]);
+    const level = decodePuzzle(ALL_PACKS[1].levels[0]);
     // The Library copy as it was saved: the level turned round and not a one-shot.
     const copy = transformPuzzle({ ...level, oneShot: undefined }, 'rotateRight');
-    expect(encodePuzzle(orientTail(copy))).not.toBe(PACKS[1].levels[0]);
+    expect(encodePuzzle(orientTail(copy))).not.toBe(ALL_PACKS[1].levels[0]);
     storage.put({ id: 'c', name: 'My draft', code: encodePuzzle(copy), created: 1, updated: 1, collection: 'imported-set' });
     storage.put({ id: 'o', name: 'Other', code: encodePuzzle(createPuzzle(3, 3)), created: 2, updated: 2 });
     const rows = libraryRows(storage, {});
-    expect(rows.find((r) => r.entry?.id === 'c')).toMatchObject({ collection: 'imported-set', pack: PACKS[1].name });
+    expect(rows.find((r) => r.entry?.id === 'c')).toMatchObject({ collection: 'imported-set', pack: ALL_PACKS[1].name });
     expect(rows.find((r) => r.entry?.id === 'o')).toMatchObject({ collection: 'Yours', pack: undefined });
   });
 });

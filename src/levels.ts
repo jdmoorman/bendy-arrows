@@ -28,9 +28,12 @@ export interface LevelPack {
   levels: string[];
   /** Every level is a one-shot (and only such packs hold one-shots). */
   oneShot?: boolean;
+  /** Work in progress: kept for the creator (Packs tab, Library), never shown to players. */
+  draft?: boolean;
 }
 
-export const PACKS: LevelPack[] = [
+/** Every pack, drafts too: what the creator's Packs tab edits. */
+export const ALL_PACKS: LevelPack[] = [
   {
     name: 'Sparse',
     levels: [
@@ -102,25 +105,6 @@ export const PACKS: LevelPack[] = [
     ],
   },
   {
-    name: 'ABCs',
-    levels: [
-      'BydVI6gjexKhcACFC6A',
-      'BydUsoghegMRZlQoPoA',
-      'BydVG2gheEJUKLtSPQA',
-      'B0dVCogjegMQoVwoA9A',
-      'B0dUoCQh_wDN9Az-gA',
-      'B0dVE6gj6AETkARdrpA',
-      'B0dVGEwm8CBSo4ghL_av-W5A',
-      'B4dVCYwhkSFQAChIWg___mA',
-      'B2dUoKwrkAWd7AHfCavnyNqaAA',
-      'B2dVEUwjq7ukA7Jp6-I-SxA',
-      'B2dU8agj6UKkgHlQs2A',
-      'B4dUYcwnk4kToTuAB09f7gg',
-      'BylUOWwwuBmQASuampqeX-P_o-NQ',
-      'B2hVKawuWBoBIBIAMQIaGX__L-Y',
-    ],
-  },
-  {
     name: 'Fancy Paths',
     levels: [
       'BydNGShIb_uv0wA',
@@ -143,14 +127,6 @@ export const PACKS: LevelPack[] = [
       'B4hUwIwp_-tSYUxB2k3ACjWhAA',
       'B4dMqHBP44ygz2Ba',
       'B4tc8Mw7__-Sdim0pNbJB4M5ZCAgQBpZgA',
-    ],
-  },
-  {
-    name: 'Misc Classic',
-    levels: [
-      'Byc9MbLIuaA',
-      'ByZFIiPSz3ww',
-      'B2c8pLHf819zOEiEjOA',
     ],
   },
   {
@@ -242,7 +218,39 @@ export const PACKS: LevelPack[] = [
       'B4te6Kgqw1AE1HdfD9rodsA',
     ],
   },
+  {
+    name: 'ABCs',
+    draft: true,
+    levels: [
+      'BydVI6gjexKhcACFC6A',
+      'BydUsoghegMRZlQoPoA',
+      'BydVG2gheEJUKLtSPQA',
+      'B0dVCogjegMQoVwoA9A',
+      'B0dUoCQh_wDN9Az-gA',
+      'B0dVE6gj6AETkARdrpA',
+      'B0dVGEwm8CBSo4ghL_av-W5A',
+      'B4dVCYwhkSFQAChIWg___mA',
+      'B2dUoKwrkAWd7AHfCavnyNqaAA',
+      'B2dVEUwjq7ukA7Jp6-I-SxA',
+      'B2dU8agj6UKkgHlQs2A',
+      'B4dUYcwnk4kToTuAB09f7gg',
+      'BylUOWwwuBmQASuampqeX-P_o-NQ',
+      'B2hVKawuWBoBIBIAMQIaGX__L-Y',
+    ],
+  },
+  {
+    name: 'Misc Classic',
+    draft: true,
+    levels: [
+      'Byc9MbLIuaA',
+      'ByZFIiPSz3ww',
+      'B2c8pLHf819zOEiEjOA',
+    ],
+  },
 ];
+
+/** The packs players see: every pack but the drafts. */
+export const PACKS: LevelPack[] = ALL_PACKS.filter((p) => !p.draft);
 
 /** A level's place: which pack, and which level in it (both from 0). */
 export interface LevelRef {

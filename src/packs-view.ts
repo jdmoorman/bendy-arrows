@@ -1,5 +1,5 @@
 import { decodePuzzle, encodePuzzle } from './codec';
-import { PACKS } from './levels';
+import { ALL_PACKS } from './levels';
 import { pageId } from './levels-sync';
 import type { PackRating, PacksMessage, PacksRequest } from './packs.worker';
 import { isOneShot, levelKey, pathKey } from './model';
@@ -19,16 +19,29 @@ function shapeProblem(code: string): string {
   return Math.max(p.w, p.h) > 2 * Math.min(p.w, p.h) ? 'more than twice as long as it is wide' : '';
 }
 
-/** A pack as edited: its name, kind and levels, and which saved pack it was (none for a new one). */
+/** A pack as edited: its name, kind, whether it's a draft, its levels, and which saved pack it was (none for a new one). */
 interface EditPack {
   name: string;
   oneShot: boolean;
+  draft: boolean;
   levels: string[];
   from: number | null;
 }
 
-/** The packs as saved in src/levels.ts, to edit. */
-const savedPacks = (): EditPack[] => PACKS.map((p, i) => ({ name: p.name, oneShot: !!p.oneShot, levels: [...p.levels], from: i }));
+/** The packs as saved in src/levels.ts (drafts too), to edit. */
+const savedPacks = (): EditPack[] => ALL_PACKS.map((p, i) => ({ name: p.name, oneShot: !!p.oneShot, draft: !!p.draft, levels: [...p.levels], from: i }));
+
+/**
+ * The four groups of packs, in the order the file keeps them: classic, one-shot, then the drafts
+ * (never shown to players) of each kind.
+ */
+const GROUPS = [
+  { oneShot: false, draft: false, title: 'Classic', add: 'New classic pack' },
+  { oneShot: true, draft: false, title: 'One-shot', add: 'New one-shot pack' },
+  { oneShot: false, draft: true, title: 'Classic drafts', add: 'New classic draft' },
+  { oneShot: true, draft: true, title: 'One-shot drafts', add: 'New one-shot draft' },
+];
+const groupOf = (k: { oneShot: boolean; draft: boolean }) => (k.draft ? 2 : 0) + (k.oneShot ? 1 : 0);
 
 /** How long (ms) each step of a hint journey shows when hovering over a level: a hint longer. */
 const STEP_MS = 600;
@@ -45,8 +58,8 @@ const EDGE = 60;
 /**
  * The creator's pack organiser: every pack's levels as their solved boards, in play order.
  * Drag a level (on a touch screen, hold it first) to move it within its pack or into another;
- * tap one to edit it. Packs can be renamed, added, deleted and moved up or down (one-shot packs
- * always after the classic ones), puzzles from the
+ * tap one to edit it. Packs can be renamed, added, deleted, moved up or down (one-shot packs
+ * always after the classic ones) and made drafts (hidden from players) or published, puzzles from the
  * Library added to the end of a pack, and levels removed. Save writes it all to src/levels.ts (through the local dev
  * server, the only place the organiser appears).
  */
@@ -182,7 +195,10 @@ export class PacksView {
   }
 
   private get changed(): boolean {
-    return this.packs.length !== PACKS.length || this.packs.some((k, i) => k.from !== i || k.name !== PACKS[i].name || k.levels.join() !== PACKS[i].levels.join());
+    return (
+      this.packs.length !== ALL_PACKS.length ||
+      this.packs.some((k, i) => k.from !== i || k.name !== ALL_PACKS[i].name || k.draft !== !!ALL_PACKS[i].draft || k.levels.join() !== ALL_PACKS[i].levels.join())
+    );
   }
 
   /** What's wrong with the edited names or the levels, if anything. */
@@ -190,7 +206,7 @@ export class PacksView {
     const names = this.packs.map((k) => k.name.trim());
     if (names.some((n) => !n)) return 'Every pack needs a name.';
     if (new Set(names).size !== names.length) return 'Two packs have the same name.';
-    if (this.packs.some((k) => !k.levels.length)) return 'Every pack needs a level.';
+    if (this.packs.some((k) => !k.draft && !k.levels.length)) return 'Every pack needs a level (a draft may be empty).';
     const wrongKind = this.packs.reduce((n, k) => n + k.levels.filter((c) => isOneShot(decodePuzzle(c)) !== k.oneShot).length, 0);
     if (wrongKind) return `${wrongKind === 1 ? 'A level is' : `${wrongKind} levels are`} in the wrong kind of pack (one-shot or classic).`;
     const shape = this.packs.flatMap((k) => k.levels).filter((c) => shapeProblem(c)).length;
@@ -225,18 +241,19 @@ export class PacksView {
     return out;
   }
 
-  /** Classic packs, then one-shot packs, each kind under its heading with a button for a new pack. */
+  /** Classic packs, one-shot packs, then the drafts of each, each group under its heading with a button for a new pack. */
   private draw() {
-    const groups = [false, true].map((oneShot) => {
-      const group = el('div', 'pack-group');
+    const groups = GROUPS.map((g, gi) => {
+      const group = el('div', `pack-group${g.draft ? ' drafts' : ''}`);
       const title = el('h2', 'pack-group-title');
-      title.textContent = oneShot ? 'One-shot' : 'Classic';
+      title.textContent = g.title;
       group.append(title);
+      if (g.draft) group.append(el('p', 'pack-group-note', 'Work in progress: never shown to players.'));
       this.packs.forEach((k, pi) => {
-        if (k.oneShot === oneShot) group.append(this.packSection(pi));
+        if (groupOf(k) === gi) group.append(this.packSection(pi));
       });
-      const add = el('button', 'btn pack-new', `${ICONS.plus}<span>New ${oneShot ? 'one-shot' : 'classic'} pack</span>`);
-      add.addEventListener('click', () => this.newPack(oneShot));
+      const add = el('button', 'btn pack-new', `${ICONS.plus}<span>${g.add}</span>`);
+      add.addEventListener('click', () => this.newPack(g.oneShot, g.draft));
       group.append(add);
       return group;
     });
@@ -289,8 +306,8 @@ export class PacksView {
       b.addEventListener('click', run);
       return b;
     };
-    // Moving stays within the pack's kind: one-shot packs always come after the classic ones.
-    const sameKind = (j: number) => this.packs[j]?.oneShot === k.oneShot;
+    // Moving stays within the pack's group: one-shot packs always come after the classic ones, and drafts after both.
+    const sameKind = (j: number) => !!this.packs[j] && groupOf(this.packs[j]) === groupOf(k);
     const move = (to: number) => () => {
       [this.packs[pi], this.packs[to]] = [this.packs[to], this.packs[pi]];
       this.draw();
@@ -298,9 +315,14 @@ export class PacksView {
     const up = button('pack-up', ICONS.arrowUp, 'Move this pack up', sameKind(pi - 1), move(pi - 1));
     const down = button('pack-down', ICONS.arrowDown, 'Move this pack down', sameKind(pi + 1), move(pi + 1));
     const del = button('pack-delete', ICONS.clear, 'Delete this pack', true, () => this.deletePack(pi));
+    // Shows whether players see the pack; tap to switch.
+    const draft = el('button', 'pack-tool pack-draft', k.draft ? ICONS.eyeOff : ICONS.eye);
+    draft.title = k.draft ? 'Draft, hidden from players: tap to publish' : 'Shown to players: tap to make it a draft';
+    draft.setAttribute('aria-label', draft.title);
+    draft.addEventListener('click', () => this.setDraft(pi, !k.draft));
     const count = el('span', 'pack-count');
     const head = el('div', 'pack-head');
-    head.append(fold, name, up, down, del, count);
+    head.append(fold, name, draft, up, down, del, count);
     const grid = el('div', 'pack-tiles');
     grid.dataset.pack = String(pi);
     for (const code of k.levels) grid.append(this.tile(code));
@@ -312,13 +334,27 @@ export class PacksView {
     return section;
   }
 
-  /** A new, empty pack at the end of its kind, its name ready to type over. */
-  private newPack(oneShot: boolean) {
+  /** Make a pack a draft (hidden from players) or publish it: it moves to the end of its new group. */
+  private setDraft(pi: number, draft: boolean) {
+    const [k] = this.packs.splice(pi, 1);
+    k.draft = draft;
+    this.packs.splice(this.groupEnd(k), 0, k);
+    this.draw();
+  }
+
+  /** Where a pack goes to be last in its group. */
+  private groupEnd(k: { oneShot: boolean; draft: boolean }): number {
+    return this.packs.filter((j) => groupOf(j) <= groupOf(k)).length;
+  }
+
+  /** A new, empty pack at the end of its group, its name ready to type over. */
+  private newPack(oneShot: boolean, draft: boolean) {
     const taken = new Set(this.packs.map((k) => k.name.trim()));
-    let name = 'New pack';
-    for (let n = 2; taken.has(name); n++) name = `New pack ${n}`;
-    const at = oneShot ? this.packs.length : this.packs.filter((k) => !k.oneShot).length;
-    this.packs.splice(at, 0, { name, oneShot, levels: [], from: null });
+    let name = draft ? 'New draft' : 'New pack';
+    const base = name;
+    for (let n = 2; taken.has(name); n++) name = `${base} ${n}`;
+    const at = this.groupEnd({ oneShot, draft });
+    this.packs.splice(at, 0, { name, oneShot, draft, levels: [], from: null });
     this.draw();
     const input = this.body.querySelector<HTMLElement>(`.pack-tiles[data-pack="${at}"]`)?.closest('.pack-section')?.querySelector<HTMLInputElement>('.pack-name-input');
     input?.scrollIntoView({ block: 'center' });
@@ -421,8 +457,8 @@ export class PacksView {
             : 'counting hints…';
         t.setAttribute('aria-label', `${this.packs[pi].name} ${i + 1}, ${p.w} by ${p.h}`);
         const from = this.packs[pi].from;
-        t.classList.toggle('moved', from === null || PACKS[from].levels[i] !== t.dataset.code);
-        t.classList.toggle('added', !PACKS.some((k) => k.levels.includes(t.dataset.code!)));
+        t.classList.toggle('moved', from === null || ALL_PACKS[from].levels[i] !== t.dataset.code);
+        t.classList.toggle('added', !ALL_PACKS.some((k) => k.levels.includes(t.dataset.code!)));
       });
       const count = grid.parentElement!.querySelector('.pack-count')!;
       const n = tiles.length;
@@ -804,7 +840,7 @@ export class PacksView {
   /** Saved levels taken out of every pack. */
   private get removed(): string[] {
     const kept = new Set(this.packs.flatMap((k) => k.levels));
-    return PACKS.flatMap((p) => p.levels).filter((c) => !kept.has(c));
+    return ALL_PACKS.flatMap((p) => p.levels).filter((c) => !kept.has(c));
   }
 
   private async save() {
@@ -827,15 +863,19 @@ export class PacksView {
       const res = await fetch('/__packs', {
         method: 'POST',
         body: JSON.stringify({
-          packs: this.packs.map((k) => ({ name: k.name.trim(), oneShot: k.oneShot, levels: k.levels })),
-          was: PACKS.map((p) => ({ name: p.name, oneShot: !!p.oneShot, levels: p.levels })),
+          packs: this.packs.map((k) => ({ name: k.name.trim(), oneShot: k.oneShot, draft: k.draft, levels: k.levels })),
+          was: ALL_PACKS.map((p) => ({ name: p.name, oneShot: !!p.oneShot, draft: !!p.draft, levels: p.levels })),
           page: pageId,
         }),
       });
       const reply = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(reply.error ?? 'Saving failed.');
       // The packs in memory follow the file until Vite reloads the page with it.
-      PACKS.splice(0, PACKS.length, ...this.packs.map((k) => ({ name: k.name.trim(), ...(k.oneShot ? { oneShot: true } : {}), levels: [...k.levels] })));
+      ALL_PACKS.splice(
+        0,
+        ALL_PACKS.length,
+        ...this.packs.map((k) => ({ name: k.name.trim(), ...(k.oneShot ? { oneShot: true } : {}), ...(k.draft ? { draft: true } : {}), levels: [...k.levels] })),
+      );
       this.packs = savedPacks();
       this.draw();
       toast('Saved the packs to src/levels.ts.');

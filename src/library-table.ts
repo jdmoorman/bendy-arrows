@@ -1,6 +1,6 @@
 import { decodePuzzle, encodePuzzle } from './codec';
 import { endVariants, openCells, type Puzzle } from './model';
-import { levelName, PACKS } from './levels';
+import { ALL_PACKS } from './levels';
 import type { LibraryEntry, Storage } from './storage';
 import { symmetryOf } from './symmetry';
 
@@ -108,7 +108,7 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
   // A saved puzzle that became a pack level (turned, mirrored, its corner arrows moved or made a
   // one-shot on the way, as the Packs tab does) shows that pack in the Pack column.
   const packOf = new Map<string, string>();
-  for (const pack of PACKS) {
+  for (const pack of ALL_PACKS) {
     for (const code of pack.levels) {
       try {
         for (const q of endVariants(decodePuzzle(code))) {
@@ -131,7 +131,7 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
     rows.push({ key: `saved:${e.id}`, name: e.name, code: e.code, entry: e, collection: e.collection ?? COLLECTIONS.yours, pack: packOf.get(e.code), ...f, unique: r?.unique, ...hintsOf(r), ...play(e.code, e), added: e.created });
   }
   // The official level packs, shipped to everyone: one collection, each level with its pack.
-  PACKS.forEach((pack, pi) =>
+  ALL_PACKS.forEach((pack, pi) =>
     pack.levels.forEach((code, li) => {
       let f;
       try {
@@ -141,7 +141,7 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
       }
       const saved = storage.findByCode(code);
       const r = ratings[code];
-      rows.push({ key: `level:${pi}:${li}`, name: levelName({ pack: pi, level: li }), code, collection: COLLECTIONS.levels, pack: pack.name, ...f, unique: r?.unique, ...hintsOf(r), ...play(code, saved) });
+      rows.push({ key: `level:${pi}:${li}`, name: `${pack.name} ${li + 1}`, code, collection: COLLECTIONS.levels, pack: pack.name, ...f, unique: r?.unique, ...hintsOf(r), ...play(code, saved) });
     }),
   );
   return rows;
@@ -175,7 +175,7 @@ export const COLUMNS: Column[] = [
     // "None" (no pack) is a value too, so the filter can keep puzzles outside the packs.
     value: (r) => r.pack ?? NO_PACK,
     show: (r) => r.pack ?? '—',
-    choices: [NO_PACK, ...PACKS.map((p) => p.name)],
+    choices: [NO_PACK, ...ALL_PACKS.map((p) => p.name)],
   },
   {
     key: 'hints',
