@@ -206,7 +206,7 @@ export class EditorView {
           <div class="toolbar-title" aria-hidden="true">Tools</div>
           <div class="toolbar-row tool-row">
             <div class="segmented" role="group" aria-label="Editing tool">
-              <button class="seg-btn" data-tool="tiles">Black tiles</button>
+              <button class="seg-btn" data-tool="tiles">Tiles</button>
               <button class="seg-btn" data-tool="walls">Walls</button>
               <button class="seg-btn" data-tool="ends">Ends</button>
               <button class="seg-btn" data-tool="path" title="Draw the lines you want the path to take: logic steps build on them, and Fill obstacles fills in every tile and border without a line">Path</button>
