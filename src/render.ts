@@ -517,19 +517,9 @@ function retractedArrow(
   };
   const c0 = bend ? mean((f) => pathAt(from + f * span)) : ([0, 0] as Pt);
   const c1 = bend ? mean((f) => checkAt(toCheck(f))) : ([0, 0] as Pt);
-  // It keeps turning the way the head last turned on its way in (clockwise without a turn). Going
-  // back round a corner, the head swings from the later stretch's way to the earlier one's; with
-  // y down, a positive cross product is clockwise.
-  let turn = 1;
-  const stop = total - Math.max(0, total - mid - HEAD_ARM);
-  for (let i = 1; i <= lastSeg; i++) {
-    if (at[i] <= stop) continue;
-    const c = -cross(i);
-    if (c) {
-      turn = Math.sign(c);
-      break;
-    }
-  }
+  // It always turns anticlockwise: with y down, a negative angle. Between the L's way and the
+  // check's (under half a turn either way) and the full turn, that's one to one and a half turns.
+  const turn = -1;
   // The shape changes with the L turned to lie as the check does (its head's arm along the
   // check's), so the corner keeps its bend; the whole then turns from the L's way to the check's,
   // plus the full turn.
