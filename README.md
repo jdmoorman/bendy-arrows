@@ -40,4 +40,4 @@ Every push to `main` deploys to GitHub Pages through `.github/workflows/deploy.y
 
 ## License
 
-The code is under the [MIT License](LICENSE). The icons are from [Lucide](https://lucide.dev) under their own license; see [LICENSE-icons.txt](LICENSE-icons.txt).
+The code is under the [MIT License](LICENSE). The icons are from [Lucide](https://lucide.dev) under their own license; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

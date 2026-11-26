@@ -1,10 +1,14 @@
-BendyArrows' icons (the image files in public/icons/, listed in src/icons.ts) are copies of
-Lucide icons (https://lucide.dev), some of those from Feather; the filled funnel and star are
-Lucide's funnel and star with a fill, and the die is Lucide's dice-4 with bigger pips. Their
-licence follows. The rest of the project is under LICENSE.
+# Third-Party Notices
 
-ISC License
+BendyArrows' code is under the [MIT License](LICENSE). This file covers the parts that come from elsewhere.
 
+## Lucide icons
+
+The image files in `public/icons/` (listed in `src/icons.ts`) are copies of [Lucide](https://lucide.dev) icons, some of which come from Feather. The filled funnel and star are Lucide's funnel and star with a fill, and the die is Lucide's dice-4 with bigger pips.
+
+### Lucide: ISC License
+
+```
 Copyright (c) 2026 Lucide Icons and Contributors
 
 Permission to use, copy, modify, and/or distribute this software for any
@@ -18,15 +22,15 @@ ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
 WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+```
 
----
+### Feather: MIT License
 
-The following Lucide icons are derived from the Feather project:
+The following Lucide icons are derived from the Feather project, and are also under its license:
 
 airplay, alert-circle, alert-octagon, alert-triangle, aperture, arrow-down-circle, arrow-down-left, arrow-down-right, arrow-down, arrow-left-circle, arrow-left, arrow-right-circle, arrow-right, arrow-up-circle, arrow-up-left, arrow-up-right, arrow-up, at-sign, calendar, cast, check, chevron-down, chevron-left, chevron-right, chevron-up, chevrons-down, chevrons-left, chevrons-right, chevrons-up, circle, clipboard, clock, code, columns, command, compass, corner-down-left, corner-down-right, corner-left-down, corner-left-up, corner-right-down, corner-right-up, corner-up-left, corner-up-right, crosshair, database, divide-circle, divide-square, dollar-sign, download, external-link, feather, frown, hash, headphones, help-circle, info, italic, key, layout, life-buoy, link-2, link, loader, lock, log-in, log-out, maximize, meh, minimize, minimize-2, minus-circle, minus-square, minus, monitor, moon, more-horizontal, more-vertical, move, music, navigation-2, navigation, octagon, pause-circle, percent, plus-circle, plus-square, plus, power, radio, rss, search, server, share, shopping-bag, sidebar, smartphone, smile, square, table-2, tablet, target, terminal, trash-2, trash, triangle, tv, type, upload, x-circle, x-octagon, x-square, x, zoom-in, zoom-out
 
-The MIT License (MIT) (for the icons listed above)
-
+```
 Copyright (c) 2013-present Cole Bemis
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -46,3 +50,4 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
