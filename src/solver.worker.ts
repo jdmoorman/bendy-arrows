@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { decodePuzzle } from './codec';
-import { endPlacements, solutionUnion, solve, tileFixes, type EndOption, type TileFix, type UnionResult } from './solver';
+import { endFixes, endPlacements, solutionUnion, solve, tileFixes, type EndFix, type EndOption, type TileFix, type UnionResult } from './solver';
 
 export type SolverRequest = { code: string; maxSolutions?: number; nodeLimit?: number; mustUse?: number[]; union?: boolean; ends?: boolean; fixes?: number[] };
 export type SolverMessage =
@@ -11,7 +11,7 @@ export type SolverMessage =
   | { type: 'end'; option: EndOption }
   | { type: 'ends-done'; options: EndOption[]; unchecked: number }
   | { type: 'fix'; fix: TileFix }
-  | { type: 'fixes-done'; fixes: TileFix[] }
+  | { type: 'fixes-done'; fixes: TileFix[]; endFixes: EndFix[] }
   | { type: 'error'; message: string };
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
@@ -20,9 +20,10 @@ ctx.onmessage = (ev: MessageEvent<SolverRequest>) => {
   try {
     const p = decodePuzzle(ev.data.code);
     if (ev.data.fixes) {
-      // A puzzle with no solution: the one-tile changes among these tiles that give it one.
+      // A puzzle with no solution: the one-tile changes among these tiles that give it one, and
+      // the ends that could move (or be placed) to give it one.
       const fixes = tileFixes(p, ev.data.fixes, { onFound: (fix) => ctx.postMessage({ type: 'fix', fix } satisfies SolverMessage) });
-      ctx.postMessage({ type: 'fixes-done', fixes } satisfies SolverMessage);
+      ctx.postMessage({ type: 'fixes-done', fixes, endFixes: endFixes(p) } satisfies SolverMessage);
       return;
     }
     if (ev.data.ends) {

@@ -470,6 +470,29 @@ export function endPlacements(
   return { options, unchecked };
 }
 
+/**
+ * For a puzzle with no solution: which end could move (0 the entrance, 1 the exit) or, for a
+ * puzzle short of ends, be placed (-1) somewhere that gives it a solution, and how many spots give
+ * one (and how many exactly one). Only ends that can fix it are returned.
+ */
+export interface EndFix {
+  end: number;
+  spots: number;
+  unique: number;
+}
+
+export function endFixes(p: Puzzle, opts: { nodeLimit?: number } = {}): EndFix[] {
+  const tally = (end: number, options: EndOption[]): EndFix[] =>
+    options.length ? [{ end, spots: options.length, unique: options.filter((o) => o.status === 'unique').length }] : [];
+  if (p.endpoints.length < 2) return tally(-1, endPlacements(p, opts).options);
+  return [0, 1].flatMap((end) => {
+    // The other end stays; every other spot for this one is tried.
+    const q = clonePuzzle(p);
+    q.endpoints = [p.endpoints[1 - end]];
+    return tally(end, endPlacements(q, opts).options);
+  });
+}
+
 /** What a single black-tile change does to a puzzle: the tile, whether it's added or taken away, and the solutions after. */
 export interface TileFix {
   cell: number;

@@ -33,6 +33,7 @@ import type { LogicReply, LogicRequest } from './logic.worker';
 import { Storage } from './storage';
 import { openSheet } from './ui';
 import { tileFixesInBackground, type FixesRun } from './solver-client';
+import type { EndFix } from './solver';
 import { suggestInBackground } from './suggest-client';
 import { removableInBackground, simplifyInBackground, type Removable } from './generator-client';
 import type { GoalFailure, SimplifyGoal } from './generator';
@@ -92,8 +93,20 @@ export class EditorView {
   private suggestBtn!: HTMLButtonElement;
   private suggestBar!: HTMLElement;
   private suggestRun: { cancel(): void } | null = null;
+  /** Suggest was asked where ends could go: it looks again after each end is placed, until both are. */
+  private endsSuggested = false;
+  /** A suggested fix places an end: show where ends could go, whatever the tool, until the next edit. */
+  private endsForFix = false;
+  /** Suggest with the Ends tool: where the missing ends could go (set up by the uniqueness check). */
+  endSuggester: (() => { result: Promise<void>; cancel(): void }) | null = null;
   private message = '';
   private messageKind: '' | 'success' | 'error' = '';
+  /** A link at the end of the message, if it offers something. */
+  private messageAction: MessageAction | null = null;
+  /** A bulleted list right under the message (e.g. the fixes found for a contradiction). */
+  private messageItems: string[] = [];
+  /** Left-aligned rather than centred (a contradiction's message, which can run long). */
+  private messageLeft = false;
 
   private svg: SVGSVGElement;
   private status: HTMLElement;
@@ -449,7 +462,7 @@ export class EditorView {
     this.logicFocus = new Set();
     this.logicBad = hint.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
     if (hint.kind === 'mistake') {
-      this.showContradiction(hint.text, hint.fixCells);
+      this.showContradiction(hint.reason ?? hint.text, hint.fixCells);
       return;
     }
     if (hint.kind === 'solved') {
@@ -979,41 +992,48 @@ export class EditorView {
   }
 
   /**
-   * A contradiction the logic found: say why, then look for one-tile changes in and around the
-   * highlighted tiles (an open tile made black, or a black tile beside them made open) that give
-   * the puzzle a solution, and ring them.
+   * A contradiction the logic found: say why, and offer to suggest a fix. Asked, look for
+   * one-tile changes in and around the highlighted tiles (an open tile made black, or a black
+   * tile beside them made open) that give the puzzle a solution, and ring them; and say if
+   * placing or moving an end gives it one too.
    */
   private showContradiction(why: string, fixCells?: number[]) {
     this.clearFixes();
-    const base = `Contradiction: ${why} This puzzle has no solution.`;
+    const base = why.replace(/(^|\. )A tile /, '$1This tile ');
     const p = this.puzzle;
     const area = new Set(this.logicBad);
     const cells = fixCells ?? [...area, ...[...area].flatMap((c) => neighbors(p, c)).filter((c) => p.blocked.has(c))];
-    if (!cells.length) {
-      // The colour check found no one tile that fixes it: only moving an end can.
-      this.setMessage(fixCells ? `${base} No single black-tile change can fix the colours: move an end.` : base, 'error');
-      return;
-    }
-    this.setMessage(`${base} Looking for a one-tile fix…`, 'error');
-    const run = tileFixesInBackground(p, cells, (f) => {
+    this.setMessage(base, 'error', { left: true, action: { label: 'Suggest a fix?', run: () => this.suggestFixes(base, cells, fixCells) } });
+  }
+
+  /** Look for the fixes a contradiction's message offers (see showContradiction). */
+  private suggestFixes(base: string, cells: number[], fixCells?: number[]) {
+    this.clearFixes();
+    this.setMessage(`${base} Looking for a fix…`, 'error', { left: true });
+    const run = tileFixesInBackground(this.puzzle, cells, (f) => {
       this.fixes.set(f.cell, f.status === 'unique' ? 'unique' : 'multiple');
       this.render();
     });
     this.fixRun = run;
     run.result
-      .then((fixes) => {
+      .then(({ fixes, endFixes }) => {
         if (this.fixRun !== run) return;
         this.fixRun = null;
-        const unique = fixes.filter((f) => f.status === 'unique').length;
-        const add = fixes.some((f) => f.add);
-        const remove = fixes.some((f) => !f.add);
-        const how = add && remove ? 'Making a ringed tile black (or a ringed black tile open)' : add ? 'Making a ringed tile black' : 'Making a ringed black tile open';
-        this.setMessage(
-          fixes.length
-            ? `${base} ${how} gives it a solution${unique ? ` — exactly one for the ${unique === fixes.length ? '' : `${unique} `}green one${unique === 1 ? '' : 's'}` : ', though more than one'}.`
-            : `${base} No single black-tile change here gives it a solution.`,
-          'error',
-        );
+        // Each kind of fix that gives the puzzle a solution, one bullet each.
+        const items = [
+          fixes.some((f) => f.add) ? 'Make a ringed tile black' : '',
+          fixes.some((f) => !f.add) ? 'Delete a ringed black tile' : '',
+          ...endFixes.map(endFixItem),
+        ].filter((i) => i !== '');
+        // "The indicated borders": mark where a missing end could go.
+        if (endFixes.some((f) => f.end < 0) && this.endSuggester) {
+          this.endsForFix = true;
+          this.endSuggester();
+        }
+        if (items.length) return this.setMessage(`${base} Fixes:`, 'error', { left: true, items });
+        // The colour check names no tile when no single black-tile change can fix the colours.
+        const none = fixCells && !fixCells.length ? 'No single black-tile change can fix the colours.' : 'No single black-tile change here gives it a solution.';
+        this.setMessage(`${base} ${none}`, 'error', { left: true });
       })
       .catch(() => {});
   }
@@ -1041,9 +1061,12 @@ export class EditorView {
   }
 
   /** Show a message under the board until the next edit. */
-  setMessage(text: string, kind: '' | 'success' | 'error' = ''): void {
+  setMessage(text: string, kind: '' | 'success' | 'error' = '', opts: MessageOptions = {}): void {
     this.message = text;
     this.messageKind = kind;
+    this.messageAction = opts.action ?? null;
+    this.messageItems = opts.items ?? [];
+    this.messageLeft = opts.left ?? false;
     this.render();
   }
 
@@ -1065,7 +1088,12 @@ export class EditorView {
    * dashed; tapping it places it.
    */
   private suggest() {
-    if (this.suggestRun) return this.cancelSuggest();
+    if (this.suggestRun) {
+      // Stopped by hand: no more looking again after each end, either.
+      this.endsSuggested = false;
+      return this.cancelSuggest();
+    }
+    if (this.tool === 'ends') return this.suggestEnds();
     if (this.tool !== 'walls' && this.tool !== 'tiles') return;
     const kind = this.tool === 'walls' ? 'wall' : 'tile';
     this.suggested = null;
@@ -1107,6 +1135,24 @@ export class EditorView {
   }
 
   /** Suggest with the Ends tool: mark every frame spot where a missing end gives a solution. */
+  private suggestEnds() {
+    if (!missingEnds(this.puzzle) || !this.endSuggester) return;
+    this.endsSuggested = true;
+    this.suggestBar.hidden = false;
+    this.suggestBar.classList.add('indeterminate');
+    const run = this.endSuggester();
+    this.suggestRun = run;
+    this.render();
+    const done = () => {
+      if (this.suggestRun !== run) return;
+      this.suggestRun = null;
+      this.suggestBar.hidden = true;
+      this.suggestBar.classList.remove('indeterminate');
+      this.render();
+    };
+    run.result.then(done, done);
+  }
+
   /**
    * After an edit: a suggestion stays while the only changes are suggested walls or tiles being
    * placed (the rest of a suggested pair still shows); any other edit ends it.
@@ -1130,6 +1176,7 @@ export class EditorView {
     this.suggestRun.cancel();
     this.suggestRun = null;
     this.suggestBar.hidden = true;
+    this.suggestBar.classList.remove('indeterminate');
     this.clearMessage();
     this.render();
   }
@@ -1150,12 +1197,16 @@ export class EditorView {
   private clearMessage() {
     this.message = '';
     this.messageKind = '';
+    this.messageAction = null;
+    this.messageItems = [];
+    this.messageLeft = false;
   }
 
   private setTool(t: Tool) {
     if (t !== this.tool) {
       this.cancelSuggest();
       this.suggested = null;
+      this.endsSuggested = false;
     }
     this.tool = t;
     // Picking a tool means rows and columns are done.
@@ -1207,6 +1258,11 @@ export class EditorView {
     if (this.autoLogic) this.runAutoLogic();
     if (this.simplifyGoal) this.checkRemovable();
     for (const fn of this.changeListeners) fn(this.puzzle);
+    // Where ends could go was asked for: after placing (or moving) an end, look again for the
+    // other, so its spots show (and the dots fit the end now placed), until both are placed.
+    this.endsForFix = false;
+    if (this.endsSuggested && this.tool === 'ends' && missingEnds(this.puzzle)) this.suggestEnds();
+    else this.endsSuggested = false;
   }
 
   private undo() {
@@ -1319,8 +1375,8 @@ export class EditorView {
       showBorderTargets: this.tool === 'walls',
       showPortTargets: this.tool === 'ends',
       ghost: this.ghost ?? undefined,
-      // Where missing ends could go: shown whatever the tool.
-      endOptions: this.endOptions ?? undefined,
+      // Where ends could go: only while placing ends.
+      endOptions: this.tool === 'ends' || this.endsForFix ? (this.endOptions ?? undefined) : undefined,
       suggestWalls: this.suggested?.kind === 'wall' ? this.suggested.at : undefined,
       suggestClearWalls: this.suggested?.kind === 'wall' && this.suggested.remove.length ? this.suggested.remove : undefined,
       suggestTiles: this.suggested?.kind === 'tile' ? this.suggested.at : undefined,
@@ -1335,9 +1391,12 @@ export class EditorView {
       faint: this.faintLines.size ? this.faintLines : undefined,
     });
     this.oneShotBtn.setAttribute('aria-pressed', String(!!p.oneShot));
-    const canSuggest = this.tool === 'walls' || this.tool === 'tiles';
+    const canSuggest = this.tool === 'walls' || this.tool === 'tiles' || (this.tool === 'ends' && !!missingEnds(p));
     this.suggestBtn.disabled = !canSuggest && !this.suggestRun;
-    this.suggestBtn.title = `Suggest ${this.tool === 'tiles' ? 'black tiles' : 'walls'}: the change (${this.tool === 'tiles' ? 'a tile or pair added, or a tile moved' : 'a wall added, taken away or moved'}) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)`;
+    this.suggestBtn.title =
+      this.tool === 'ends'
+        ? 'Suggest ends: mark every spot on the frame where a missing end gives a solution (tap again to stop)'
+        : `Suggest ${this.tool === 'tiles' ? 'black tiles' : 'walls'}: the change (${this.tool === 'tiles' ? 'a tile or pair added, or a tile moved' : 'a wall added, taken away or moved'}) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)`;
     this.suggestBtn.classList.toggle('busy', !!this.suggestRun);
     this.gridBtn.setAttribute('aria-pressed', String(this.gridEdit));
     for (const g of ['easy', 'minimal'] as const) {
@@ -1352,8 +1411,37 @@ export class EditorView {
 
     this.status.classList.toggle('success', this.messageKind === 'success');
     this.status.classList.toggle('error', this.messageKind === 'error');
+    this.status.classList.toggle('left', !!this.message && this.messageLeft);
     if (this.message) {
       this.status.textContent = this.message;
+      const action = this.messageAction;
+      if (action) {
+        // The text and the link are flex items: the link sits after the text when both fit on a
+        // line, and otherwise drops whole to the next line, the text keeping its own wrapping.
+        const text = document.createElement('span');
+        text.textContent = this.message;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'status-action';
+        btn.textContent = action.label;
+        btn.addEventListener('click', () => action.run());
+        this.status.replaceChildren(text, btn);
+      } else if (this.messageItems.length) {
+        // The list sits right under the message, as part of it.
+        const box = document.createElement('div');
+        box.className = 'status-body';
+        const text = document.createElement('div');
+        text.textContent = this.message;
+        const list = document.createElement('ul');
+        list.className = 'status-list';
+        for (const item of this.messageItems) {
+          const li = document.createElement('li');
+          li.textContent = item;
+          list.append(li);
+        }
+        box.append(text, list);
+        this.status.replaceChildren(box);
+      }
     } else {
       const open = openCells(p).length;
       this.status.textContent = this.logicNote || `${p.w}×${p.h} · ${open} open tiles. ${TOOL_HINT[this.tool]}`;
@@ -1403,4 +1491,24 @@ function loadRuleChoice(storage: Storage): Set<RuleId> {
   // Checkerboard imbalance and the one-step trial are off unless chosen.
   const chosen = ALL_RULES.filter((r) => on.has(r) || !known.has(r));
   return new Set([...chosen, ...[IMBALANCE_RULE.id, TRIAL_RULE.id].filter((r) => on.has(r))]);
+}
+
+/** A link offered at the end of the message under the board. */
+interface MessageOptions {
+  /** A link at the end of the message. */
+  action?: MessageAction;
+  /** A bulleted list right under the message. */
+  items?: string[];
+  /** Left-align it. */
+  left?: boolean;
+}
+
+interface MessageAction {
+  label: string;
+  run: () => void;
+}
+
+/** A bullet for what moving (or placing) an end would do for a puzzle with no solution. */
+function endFixItem(fix: EndFix): string {
+  return fix.end < 0 ? 'Place an end on one of the indicated borders' : `Move the ${fix.end === 0 ? 'entrance' : 'exit'}`;
 }

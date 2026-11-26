@@ -267,6 +267,10 @@ a.btn {
 .tile.error {
   fill: var(--error-fill);
 }
+/* The editor's contradiction tiles: a stronger tint, so "This tile" is easy to find. */
+.editor-view .tile.error {
+  fill: color-mix(in srgb, var(--error) 40%, transparent);
+}
 
 .grid-line {
   stroke: var(--grid-line);
@@ -565,6 +569,31 @@ a.btn {
 
 .status.error {
   color: var(--error);
+}
+
+.status:has(.status-action) {
+  flex-wrap: wrap;
+  column-gap: 0.3em;
+}
+/* A contradiction's message (and the fixes under it) reads from the left. */
+.status.left {
+  justify-content: flex-start;
+  text-align: left;
+}
+.status-list {
+  margin: 0.2em 0 0;
+  padding-left: 1.2em;
+}
+.status-action {
+  padding: 4px 0;
+  white-space: nowrap;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .toolbar {
@@ -2229,4 +2258,17 @@ img.icon {
 }
 .tool-row .btn.busy {
   animation: simplify-busy 1s ease-in-out infinite alternate;
+}
+/* Suggest working without a known length (where ends could go): a sliding bar. */
+.suggest-progress.indeterminate span {
+  width: 30%;
+  animation: suggest-slide 1.2s ease-in-out infinite;
+}
+@keyframes suggest-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
 }

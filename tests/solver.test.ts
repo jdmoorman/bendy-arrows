@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { createPuzzle, edgeBetween, edgeCount, isUsableEdge, portCount, portEnd, portId, endsEqual, type Puzzle } from '../src/model';
 import { checkSolution } from '../src/rules';
-import { parityCheck, solve } from '../src/solver';
+import { endFixes, parityCheck, solve } from '../src/solver';
 import { decodePuzzle } from '../src/codec';
 import { endsBottomRight } from './helpers';
 
@@ -320,4 +320,30 @@ describe('suggest', async () => {
       expect(solve(q, { maxSolutions: 1 }).status).not.toBe('none');
     }
   }, 300_000);
+});
+
+describe('end fixes', () => {
+  test('a puzzle broken by moving its exit is fixed by moving the exit back', () => {
+    const level = decodePuzzle('ByIdliA');
+    const home = level.endpoints[1].port;
+    // The first other spot for the exit that leaves the puzzle with no solution.
+    let broken: Puzzle | undefined;
+    for (let port = 0; port < portCount(level) && !broken; port++) {
+      if (port === home || port === level.endpoints[0].port) continue;
+      const q = { ...level, endpoints: [level.endpoints[0], portEnd(port)] };
+      if (solve(q).status === 'none') broken = q;
+    }
+    expect(broken).toBeDefined();
+    const exit = endFixes(broken!).find((f) => f.end === 1);
+    expect(exit?.spots).toBeGreaterThanOrEqual(1);
+    expect(exit!.unique).toBeGreaterThanOrEqual(1);
+  });
+
+  test('a puzzle with nothing that could fix it by its ends gets none', () => {
+    // A black tile splitting a 3×1 strip: no ends anywhere give a path through every tile.
+    const p = createPuzzle(3, 1);
+    p.blocked.add(1);
+    p.endpoints = [portEnd(0)];
+    expect(endFixes(p)).toEqual([]);
+  });
 });
