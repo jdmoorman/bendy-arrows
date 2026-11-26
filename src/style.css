@@ -589,6 +589,22 @@ a.btn {
   flex: 1 1 0;
 }
 
+/* The editor's buttons in titled sections, one row each. */
+.toolbar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+.toolbar-title {
+  padding: 0 4px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .hidden {
   display: none !important;
 }
