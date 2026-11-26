@@ -1853,6 +1853,12 @@ img.icon {
   font-size: 1.15rem;
   font-weight: 650;
 }
+/* The level count, the same width whatever the number (up to "99 levels"), so every
+   pack's buttons line up. */
+.pack-section .pack-count {
+  min-width: 4.5em;
+  text-align: right;
+}
 .pack-name-input:hover {
   border-color: var(--border);
 }
