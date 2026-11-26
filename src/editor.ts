@@ -825,11 +825,12 @@ export class EditorView {
     const [x0, y0] = at(0, 0);
     const [x1, y1] = at(p.w, p.h);
     const cell = (x1 - x0) / p.w;
-    // − buttons halfway across the margin; + buttons further out, so the two at the
-    // bottom-right corner don't overlap.
+    // Every button halfway across the margin. The + buttons at the bottom-right corner (a row's
+    // on the right, a column's along the bottom) are that far apart times √2: if that's too close
+    // for two 28px buttons, both lines of + buttons move out just enough.
     const padPx = (pad / CELL) * cell;
     const gap = padPx / 2;
-    const out = padPx * 0.78;
+    const out = Math.max(gap, 30 / Math.SQRT2);
     const button = (text: string, label: string, x: number, y: number, enabled: boolean, run: (p: Puzzle) => Puzzle) => {
       const b = document.createElement('button');
       b.className = `grid-handle ${text === '+' ? 'add' : 'remove'}`;
