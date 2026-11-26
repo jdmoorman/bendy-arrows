@@ -340,8 +340,15 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   // Black tiles to clear and ends to move: a bold X over each. A fix's X is green if it gives
   // one solution, amber if several; Suggest's is red.
   const deleteX = (cx: number, cy: number, s: number, cls: string) => {
-    const c = `delete-x ${cls}`;
-    return line(cx - s, cy - s, cx + s, cy + s, c) + line(cx - s, cy + s, cx + s, cy - s, c);
+    // Dashes sized to fit each stroke exactly: one at each tip, and (an odd count) one through
+    // the middle, where the strokes cross. Dash to gap is 1:2, dashes about 6 long.
+    const len = 2 * Math.SQRT2 * s;
+    const n = 2 * Math.max(1, Math.round(((len / 6 + 2) / 3 - 1) / 2)) + 1;
+    const dash = len / (3 * n - 2);
+    const style = `stroke-dasharray:${dash.toFixed(2)} ${(2 * dash).toFixed(2)}`;
+    const stroke = (x1: number, y1: number, x2: number, y2: number) =>
+      `<line class="delete-x ${cls}" style="${style}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+    return stroke(cx - s, cy - s, cx + s, cy + s) + stroke(cx - s, cy + s, cx + s, cy - s);
   };
   const tileX = (cell: number, cls: string) => {
     const [r, c] = cellRC(p, cell);
@@ -351,7 +358,7 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   for (const [cell, status] of o.tileFixes ?? []) if (p.blocked.has(cell)) tileX(cell, status);
   for (const [port, status] of o.suggestMoveEnds ?? []) {
     const { x, y, d } = portPoint(port);
-    parts.push(deleteX(x + d[0] * 26, y + d[1] * 26, 34, status));
+    parts.push(deleteX(x + d[0] * 26, y + d[1] * 26, CELL * 0.26, status));
   }
   for (const cell of o.suggestTiles ?? []) {
     const [r, c] = cellRC(p, cell);

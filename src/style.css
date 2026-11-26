@@ -332,8 +332,8 @@ a.btn {
   stroke: var(--error);
   stroke-width: 9;
   stroke-linecap: round;
-  /* Dashed, like the other suggestions (round caps make the dashes beads). */
-  stroke-dasharray: 6 12;
+  /* Dashed, like the other suggestions (round caps make the dashes beads); render.ts sizes the
+     dashes to each stroke. */
 }
 .delete-x.unique {
   stroke: var(--success);
