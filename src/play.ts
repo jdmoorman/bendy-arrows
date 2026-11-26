@@ -381,7 +381,7 @@ export class PlayView {
   private strokeWarning(): false {
     if (!this.strokeWarned) {
       this.strokeWarned = true;
-      toast('This is a one-shot level: draw from the tail to the head in one stroke, carrying on from the end of your line.');
+      toast('This is a one-shot level: you must draw one continuous path beginning at the tail of the arrow.');
     }
     return false;
   }
