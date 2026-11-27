@@ -194,8 +194,8 @@ export class EditorView {
       <p class="status" role="status" aria-live="polite"></p>
       <div class="suggest-progress" hidden><span></span></div>
       <div class="toolbar">
-        <div class="toolbar-section" role="group" aria-label="Tools">
-          <div class="toolbar-title" aria-hidden="true">Tools</div>
+        <details class="toolbar-section" open data-section="Tools">
+          <summary class="toolbar-title"><span class="toolbar-chevron">${ICONS.chevron}</span>Tools</summary>
           <div class="toolbar-row tool-row">
             <div class="segmented" role="group" aria-label="Editing tool">
               <button class="seg-btn" data-tool="tiles">Tiles</button>
@@ -205,17 +205,17 @@ export class EditorView {
             </div>
             <button class="btn stacked" data-act="suggest" title="Suggest walls: the change (a wall added, taken away or moved) after which a player needs the most hints with the chosen rules (takes a moment; tap again to stop)">${ICONS.bulb}<span>Suggest</span></button>
           </div>
-        </div>
-        <div class="toolbar-section" role="group" aria-label="Obstacles">
-          <div class="toolbar-title" aria-hidden="true">Obstacles</div>
+        </details>
+        <details class="toolbar-section" open data-section="Obstacles">
+          <summary class="toolbar-title"><span class="toolbar-chevron">${ICONS.chevron}</span>Obstacles</summary>
           <div class="toolbar-row fill-row">
             <button class="btn" data-act="clear-obstacles" title="Clear obstacles: delete every wall and black tile">${ICONS.clear}<span>Clear</span></button>
             <button class="btn" data-act="fill" title="Fill obstacles: a black tile on every open tile no line reaches, and a wall on every other border no line crosses">${ICONS.paintBucket}<span>Fill</span></button>
             <button class="btn" data-act="simplify" aria-pressed="false" title="Simplify: colour the walls and black tiles that could each go on its own, the chosen logic rules still solving the puzzle">${ICONS.eraser}<span>Simplify</span></button>
           </div>
-        </div>
-        <div class="toolbar-section" role="group" aria-label="Solver">
-          <div class="toolbar-title" aria-hidden="true">Solver</div>
+        </details>
+        <details class="toolbar-section" open data-section="Solver">
+          <summary class="toolbar-title"><span class="toolbar-chevron">${ICONS.chevron}</span>Solver</summary>
           <div class="toolbar-row logic-row">
             <button class="btn" data-logic="rules" title="Logic rules">${ICONS.list}<span>Logic rules</span></button>
             <button class="btn" data-act="oneshot" aria-pressed="false" title="One-shot: the path is drawn in one stroke from the tail, and hints and logic follow it">One-shot</button>
@@ -227,9 +227,9 @@ export class EditorView {
             <button class="btn stacked" data-logic="step" title="Logic step">${ICONS.step}<span>Step</span></button>
             <button class="btn stacked" data-logic="fast" title="Apply easy rules until stuck">${ICONS.fastForward}<span>Easy rules</span></button>
           </div>
-        </div>
-        <div class="toolbar-section" role="group" aria-label="Transform Grid">
-          <div class="toolbar-title" aria-hidden="true">Transform Grid</div>
+        </details>
+        <details class="toolbar-section" open data-section="Transform Grid">
+          <summary class="toolbar-title"><span class="toolbar-chevron">${ICONS.chevron}</span>Transform Grid</summary>
           <div class="toolbar-row puzzle-row">
             <button class="btn stacked" data-act="grid" aria-pressed="false" title="Resize: add or delete rows and columns around the board">${ICONS.grid}<span>Resize</span></button>
             <button class="btn stacked" data-turn="rotateLeft" title="Rotate left">${ICONS.rotateLeft}<span>Turn left</span></button>
@@ -237,9 +237,9 @@ export class EditorView {
             <button class="btn stacked" data-turn="flipH" title="Flip left–right">${ICONS.flipH}<span>Flip H</span></button>
             <button class="btn stacked" data-turn="flipV" title="Flip up–down">${ICONS.flipV}<span>Flip V</span></button>
           </div>
-        </div>
-        <div class="toolbar-section" role="group" aria-label="Level">
-          <div class="toolbar-title" aria-hidden="true">Level</div>
+        </details>
+        <details class="toolbar-section" open data-section="Level">
+          <summary class="toolbar-title"><span class="toolbar-chevron">${ICONS.chevron}</span>Level</summary>
           <div class="toolbar-row actions-row">
             <button class="btn stacked" data-act="undo">${ICONS.undo}<span>Undo</span></button>
             <button class="btn stacked" data-act="redo">${ICONS.redo}<span>Redo</span></button>
@@ -247,10 +247,21 @@ export class EditorView {
             <button class="btn stacked" data-act="save" title="Save to the library">${ICONS.save}<span>Save</span></button>
             <button class="btn primary stacked" data-act="play" title="Play">${ICONS.play}<span>Play</span></button>
           </div>
-        </div>
+        </details>
       </div>
       <div class="board-info"></div>`;
     this.svg = this.el.querySelector('svg')!;
+    // Sections fold shut with a tap on their titles, and stay folded next time.
+    const folded = new Set(this.storage.loadEditorFolded());
+    for (const d of this.el.querySelectorAll<HTMLDetailsElement>('details.toolbar-section')) {
+      const title = d.dataset.section!;
+      d.open = !folded.has(title);
+      d.addEventListener('toggle', () => {
+        if (d.open) folded.delete(title);
+        else folded.add(title);
+        this.storage.saveEditorFolded([...folded]);
+      });
+    }
     this.status = this.el.querySelector('.status')!;
     this.undoBtn = this.el.querySelector('[data-act=undo]')!;
     this.redoBtn = this.el.querySelector('[data-act=redo]')!;

@@ -47,6 +47,8 @@ const TIMES_KEY = 'hamiltonian.times.v1';
 const OLD_PREFIX = 'hamiltonian.';
 const LOGIC_KEY = 'bendyarrows.logic.v1';
 const GENERATOR_KEY = 'bendyarrows.generator.v1';
+/** The editor's button sections folded shut. */
+const EDITOR_FOLDED_KEY = 'bendyarrows.editorfolded.v1';
 const TABLE_KEY = 'bendyarrows.libtable.v1';
 const RATINGS_KEY = 'bendyarrows.ratings.v1';
 const PACK_CACHE_KEY = 'bendyarrows.packcache.v1';
@@ -299,6 +301,15 @@ export class Storage {
   loadGeneratorOptions(): Record<string, unknown> | null {
     const o = this.read<unknown>(GENERATOR_KEY, null);
     return o && typeof o === 'object' ? (o as Record<string, unknown>) : null;
+  }
+
+  /** The editor's button sections folded shut, by title. */
+  loadEditorFolded(): string[] {
+    const v = this.read<unknown>(EDITOR_FOLDED_KEY, []);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  }
+  saveEditorFolded(titles: string[]): void {
+    this.write(EDITOR_FOLDED_KEY, titles);
   }
 
   saveGeneratorOptions(o: object): void {

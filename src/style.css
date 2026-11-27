@@ -636,20 +636,57 @@ a.btn {
   flex: 1 1 0;
 }
 
-/* The editor's buttons in titled sections, one row each. */
+/* The editor's buttons in titled sections, one row each; a tap on a title folds its section shut. */
+.editor-view > .toolbar {
+  row-gap: 2px;
+}
 .toolbar-section {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
   width: 100%;
 }
+.toolbar-section[open] {
+  padding-bottom: 4px;
+}
+.toolbar-section > .toolbar-row + .toolbar-row {
+  margin-top: var(--gap);
+}
 .toolbar-title {
-  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 26px;
+  padding: 0 4px 0 0;
   color: var(--text-muted);
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+}
+.toolbar-title::-webkit-details-marker {
+  display: none;
+}
+.toolbar-title:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+.toolbar-chevron {
+  display: inline-flex;
+  transition: transform 0.15s;
+}
+.toolbar-chevron .icon {
+  width: 14px;
+  height: 14px;
+}
+.toolbar-section[open] .toolbar-chevron {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .toolbar-chevron {
+    transition: none;
+  }
 }
 
 .hidden {
