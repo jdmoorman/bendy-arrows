@@ -416,6 +416,14 @@ a.btn {
 .seg.faint {
   stroke: color-mix(in srgb, var(--path) 35%, var(--tile));
 }
+/* A One-step trial hint: the path supposing a line leads to, which can't be, so in reds (pale,
+   outlined in the error edge so it stands out on the hint's tinted tiles). */
+.seg.trial {
+  stroke: color-mix(in srgb, var(--error) 40%, var(--tile));
+}
+.seg-edge.trial {
+  stroke: var(--error-edge);
+}
 .seg-edge.error {
   stroke: var(--error-edge);
 }

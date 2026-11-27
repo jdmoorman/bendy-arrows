@@ -821,7 +821,7 @@ export class PlayView {
     const d = hint?.kind === 'deduction' ? hint.deduction : null;
     const prompt = d ? hintPrompt(this.puzzle, { segments: this.segments, xs: this.xMarks }, d) : null;
     const focus = prompt ? prompt.cells : d ? (d.cells ?? [d.cell]) : hint?.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
-    // A One-step trial hint: the lines its supposition leads to, faintly, and where that breaks.
+    // A One-step trial hint: the lines its supposition leads to, in pale red (a path that can't be), and where that breaks.
     // In a one-shot, only those carrying the stroke on from its head (the path from the tail)
     // (and those where it breaks; the tiles the hint is about stay green even where it breaks).
     const trial = d?.rule === 'trial' ? trialPreview(this.puzzle, this.segments, d) : null;
@@ -832,7 +832,7 @@ export class PlayView {
       tightCoordinates: true,
       segments: this.segments,
       xMarks: this.xMarks,
-      faint: phantom.size ? phantom : undefined,
+      trial: phantom.size ? phantom : undefined,
       focusCells: focus.length ? new Set(focus) : undefined,
       errorCells,
       errorEdges,

@@ -48,6 +48,8 @@ export interface RenderOptions {
   endOptions?: Map<number, 'unique' | 'multiple'>;
   /** Lines drawn faintly under the path: the rules' lines over the rest of a one-shot's board once its stroke stalls. */
   faint?: Set<number>;
+  /** A One-step trial's lines: where supposing a line leads, a path that can't be, in pale red. */
+  trial?: Set<number>;
   /** Tiles whose change alone (made black, or a black tile made open) gives a puzzle with no solution one: exactly one, or several. */
   tileFixes?: Map<number, 'unique' | 'multiple'>;
   /** Margin around the grid in SVG units (default PAD). */
@@ -311,6 +313,8 @@ export function renderBoard(svg: SVGSVGElement, p: Puzzle, o: RenderOptions = {}
   // The editor's desired solution is drawn just like the logic helper's lines, as one set with them.
   const player = arrow ? [] : [...new Set([...(o.segments ?? []), ...(o.plan ?? [])])];
   if (o.faint?.size) parts.push('<g class="faint">', strokes([...o.faint], 'seg faint'), '</g>');
+  // Outlined like the path (outlines first, then fills), so they stand out on tinted tiles too.
+  if (o.trial?.size) parts.push('<g class="trial">', strokes(o.trial, 'seg-edge trial'), strokes(o.trial, 'seg trial'), '</g>');
   // X marks: over the lines, but under the solve animation's arrow, which flies over them.
   let xmarks = '';
   if (o.xMarks?.size) {
