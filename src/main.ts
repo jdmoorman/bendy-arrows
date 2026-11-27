@@ -417,16 +417,15 @@ function start() {
   }
   if (fromLink) {
     const same = session && sessionPuzzle && puzzlesEqual(fromLink, sessionPuzzle);
-    loadPuzzle(fromLink, same ? { progress: session.progress, id: session.libraryId } : {});
+    loadPuzzle(fromLink, same ? { progress: session.progress, id: session.libraryId } : {}, 'edit');
   } else if (session && sessionPuzzle) {
-    loadPuzzle(sessionPuzzle, { progress: session.progress, id: session.libraryId });
+    loadPuzzle(sessionPuzzle, { progress: session.progress, id: session.libraryId }, 'edit');
   } else {
-    // First visit: open the library, where the levels are.
-    loadPuzzle(createPuzzle(6, 6), {}, 'library');
+    // First visit: a blank board in the editor.
+    loadPuzzle(createPuzzle(6, 6), {}, 'edit');
   }
   // The address always holds the current puzzle, so a reload looks like a link: only a reload
-  // goes back to the tab you were on (and its unsaved editor work). A link opened anew (e.g.
-  // from the Library into a new tab) opens in Play, or in the editor when it ends in "&edit".
+  // goes back to the tab you were on (and its unsaved editor work). Otherwise it opens on Create.
   const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
   const reload = nav?.type === 'reload' || !fromLink;
   if (reload && session?.tab === 'edit' && session.editorCode && sessionPuzzle && puzzlesEqual(playing, sessionPuzzle)) {
