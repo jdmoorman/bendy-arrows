@@ -1068,6 +1068,64 @@ img.icon {
   flex-wrap: wrap;
   margin-top: 28px;
 }
+/* Export: tap puzzles to choose them; the boards scroll between the count and the buttons. */
+.sheet-body:has(> .lib-export) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.lib-export {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+.lib-export-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--gap);
+  font-size: 0.9rem;
+}
+.lib-export-note {
+  color: var(--text-muted);
+}
+.lib-export-grid {
+  overflow-y: auto;
+  min-height: 0;
+  container-type: inline-size;
+}
+.lib-export-head {
+  margin: 4px 0 6px;
+  font-size: 0.9rem;
+}
+.lib-export-head + .pack-tiles {
+  margin-bottom: 10px;
+}
+.lib-export-mark {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  align-items: center;
+  justify-content: center;
+}
+.lib-export-mark .icon {
+  width: 12px;
+  height: 12px;
+}
+.lib-export-tile.chosen {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.lib-export-tile.chosen .lib-export-mark {
+  display: flex;
+}
 /* Import: name the collection the file's puzzles go into. */
 .lib-import .field-label {
   display: flex;

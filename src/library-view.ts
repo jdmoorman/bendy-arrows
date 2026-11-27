@@ -62,16 +62,11 @@ export class LibraryView {
 
   // --- Export and import ------------------------------------------------------
 
-  /** Buttons to move every saved puzzle to or from a text file of links. */
+  /** Buttons to move saved puzzles to or from a text file of links. */
   private transferRow(): HTMLElement {
     const row = el('div', 'lib-transfer');
-    const exp = el('button', 'btn', `${ICONS.share}<span>Export saved</span>`);
-    exp.addEventListener('click', () => {
-      const entries = this.storage.list();
-      if (!entries.length) return toast('No saved puzzles to export yet.');
-      downloadText(`bendy-arrows-puzzles-${dateKey()}.txt`, exportText(entries, location.href));
-      toast(`Exported ${entries.length} puzzle${entries.length === 1 ? '' : 's'}.`);
-    });
+    const exp = el('button', 'btn', `${ICONS.share}<span>Export</span>`);
+    exp.addEventListener('click', () => (this.rows.length ? this.openExportSheet() : toast('No saved puzzles to export yet.')));
     const file = el('input') as HTMLInputElement;
     file.type = 'file';
     file.accept = '.txt,text/plain';
@@ -87,6 +82,70 @@ export class LibraryView {
     imp.addEventListener('click', () => file.click());
     row.append(exp, imp, file);
     return row;
+  }
+
+  /** Pick the puzzles to export (tap boards to choose), or export them all. */
+  private openExportSheet() {
+    const chosen = new Set<string>();
+    const body = el('div', 'lib-export');
+    const top = el('div', 'lib-export-top');
+    const note = el('span', 'lib-export-note');
+    const toggle = el('button', 'link-btn');
+    top.append(note, toggle);
+    const grid = el('div', 'lib-export-grid');
+    const tiles = new Map<string, HTMLElement>();
+    // Classic puzzles first, then one-shots, as on the tab.
+    for (const { oneShot, title } of SECTIONS) {
+      const rows = this.rows.filter((r) => r.oneShot === oneShot);
+      if (!rows.length) continue;
+      grid.append(el('h3', 'lib-export-head', title));
+      const tilesEl = el('div', 'pack-tiles lib-cards');
+      for (const r of rows) {
+        const t = el('button', 'pack-tile lib-card lib-export-tile');
+        t.type = 'button';
+        t.setAttribute('aria-pressed', 'false');
+        t.setAttribute('aria-label', `${oneShot ? 'One-shot' : 'Classic'} puzzle, ${r.puzzle.w} by ${r.puzzle.h}`);
+        t.append(this.board(r), el('span', 'lib-card-size', `${r.puzzle.w}×${r.puzzle.h}`), el('span', 'lib-export-mark', ICONS.check));
+        t.addEventListener('click', () => {
+          if (chosen.has(r.entry.id)) chosen.delete(r.entry.id);
+          else chosen.add(r.entry.id);
+          update();
+        });
+        tiles.set(r.entry.id, t);
+        tilesEl.append(t);
+      }
+      grid.append(tilesEl);
+    }
+    const actions = el('div', 'sheet-row');
+    const all = el('button', 'btn', '<span>Export all</span>');
+    const some = el('button', 'btn primary', '');
+    actions.append(all, some);
+    body.append(top, grid, actions);
+    const sheet = openSheet('Export', body);
+    const update = () => {
+      for (const [id, t] of tiles) {
+        t.classList.toggle('chosen', chosen.has(id));
+        t.setAttribute('aria-pressed', String(chosen.has(id)));
+      }
+      const n = chosen.size;
+      note.textContent = n ? `${n} of ${this.rows.length} chosen` : 'Tap puzzles to choose them.';
+      toggle.textContent = n === this.rows.length ? 'Choose none' : 'Choose all';
+      some.innerHTML = `${ICONS.share}<span>Export ${n || ''}</span>`;
+      some.toggleAttribute('disabled', !n);
+    };
+    toggle.addEventListener('click', () => {
+      if (chosen.size === this.rows.length) chosen.clear();
+      else for (const r of this.rows) chosen.add(r.entry.id);
+      update();
+    });
+    const exportEntries = (entries: LibraryEntry[]) => {
+      downloadText(`bendy-arrows-puzzles-${dateKey()}.txt`, exportText(entries, location.href));
+      toast(`Exported ${entries.length} puzzle${entries.length === 1 ? '' : 's'}.`);
+      sheet.close();
+    };
+    all.addEventListener('click', () => exportEntries(this.rows.map((r) => r.entry)));
+    some.addEventListener('click', () => exportEntries(this.rows.filter((r) => chosen.has(r.entry.id)).map((r) => r.entry)));
+    update();
   }
 
   /** Ask what to call the collection the file's puzzles go into, then import them. */
@@ -200,13 +259,7 @@ export class LibraryView {
     t.dataset.code = r.code;
     if (r.code === this.currentCode) t.classList.add('current');
     if (r.solved) t.classList.add('solved');
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.classList.add('board');
-    // The solution once worked out, or (not unique) the lines the hints get to.
-    const solution = r.segments ? new Set(r.segments) : undefined;
-    const lines = solution ?? (r.reach?.segments.length ? new Set(r.reach.segments) : undefined);
-    const faint = !solution && r.reach?.faint?.length ? new Set(r.reach.faint) : undefined;
-    renderBoard(svg, r.puzzle, { coordinates: false, pad: padFor(r.puzzle, false, false), segments: lines, faint, solved: !!solution });
+    const svg = this.board(r);
     // Its size, with a check once solved.
     const size = el('span', 'lib-card-size', `${r.puzzle.w}×${r.puzzle.h}`);
     if (r.solved) size.prepend(el('span', 'lib-check', ICONS.check));
@@ -225,6 +278,17 @@ export class LibraryView {
     t.setAttribute('aria-label', `${r.oneShot ? 'One-shot' : 'Classic'} puzzle, ${r.puzzle.w} by ${r.puzzle.h}${r.unique === false ? ', more than one solution' : ''}${r.solved ? ', solved' : ''}${r.pack ? `, in ${r.pack}` : ''}`);
     t.addEventListener('click', () => this.openCard(r));
     return t;
+  }
+
+  /** A puzzle's board: its solution once worked out, or (not unique) the lines the hints get to. */
+  private board(r: LibRow): SVGSVGElement {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.classList.add('board');
+    const solution = r.segments ? new Set(r.segments) : undefined;
+    const lines = solution ?? (r.reach?.segments.length ? new Set(r.reach.segments) : undefined);
+    const faint = !solution && r.reach?.faint?.length ? new Set(r.reach.faint) : undefined;
+    renderBoard(svg, r.puzzle, { coordinates: false, pad: padFor(r.puzzle, false, false), segments: lines, faint, solved: !!solution });
+    return svg;
   }
 
   /** A card tapped: play it, edit it, or delete it. */
