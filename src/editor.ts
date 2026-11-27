@@ -195,7 +195,7 @@ export class EditorView {
       <div class="suggest-progress" hidden><span></span></div>
       <div class="toolbar">
         <details class="toolbar-section" open data-section="Tools">
-          <summary class="toolbar-title"><span class="toolbar-chevron">${ICONS.chevron}</span>Tools</summary>
+          <summary class="toolbar-title"><span class="toolbar-chevron">${ICONS.chevron}</span>Tools<span class="board-info"></span></summary>
           <div class="toolbar-row tool-row">
             <div class="segmented" role="group" aria-label="Editing tool">
               <button class="seg-btn" data-tool="tiles">Tiles</button>
@@ -248,8 +248,7 @@ export class EditorView {
             <button class="btn primary stacked" data-act="play" title="Play">${ICONS.play}<span>Play</span></button>
           </div>
         </details>
-      </div>
-      <div class="board-info"></div>`;
+      </div>`;
     this.svg = this.el.querySelector('svg')!;
     // Sections fold shut with a tap on their titles, and stay folded next time.
     const folded = new Set(this.storage.loadEditorFolded());

@@ -1323,23 +1323,19 @@ img.icon {
   padding: 0 8px;
 }
 
-/* A row under the editor's buttons for the hint count; it keeps its height when
-   empty so the board doesn't jump. */
+/* Whether the puzzle is unique, and how many hints it takes: on the right of the Tools title,
+   so it takes no room of its own. */
 .board-info {
-  flex: none;
-  min-height: 26px;
-  padding-bottom: 8px;
+  margin-left: auto;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.board-info > .hidden {
-  display: flex !important;
-  visibility: hidden;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: normal;
 }
 /* How many hints a player would need. */
 .rating-info {
-  padding: 2px 12px;
+  padding: 0;
   max-width: 100%;
   min-width: 0;
   display: flex;
@@ -1444,16 +1440,11 @@ img.icon {
       'board .'
       'board status'
       'board toolbar'
-      'board info'
       'board .';
     column-gap: 16px;
   }
   .editor-view > .board-wrap {
     grid-area: board;
-  }
-  .editor-view > .board-info {
-    grid-area: info;
-    margin-top: 12px;
   }
   .editor-view > .status {
     grid-area: status;
