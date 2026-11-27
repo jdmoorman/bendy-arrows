@@ -1,3 +1,4 @@
+import { checkSolution } from './rules';
 import { cellCount, cellEdges, edgeCells, edgeCount, endpointCells, isHorizontalEdge, isOneShot, isUsableEdge, neighbors, openCells, portCell, type Puzzle } from './model';
 
 /**
@@ -268,7 +269,13 @@ function analyse(p: Puzzle, state: LogicState, enabled: Set<RuleId>, opts: Logic
       if (enabled.has(rule)) deductions.push({ rule, cell: c, segments: free, xs: [] });
     }
   }
-  if (allDone) return { kind: 'solved' };
+  if (allDone) {
+    // Every tile has its lines, but they may still not be one path: a closed loop apart from it.
+    const check = checkSolution(p, state.segments);
+    if (check.solved) return { kind: 'solved' };
+    const cells = [...new Set([...check.loopEdges].flatMap((e) => edgeCells(p, e)))];
+    return { kind: 'contradiction', cell: cells[0] ?? open[0], cells: cells.length ? cells : undefined, reason: 'A closed loop is cut off from the path.', hint: CUT_OFF_LOOP };
+  }
   if (enabled.has('noLoops')) {
     for (const { edge: e, size } of earlyLoopEdges(p, state, need)) {
       if (size <= OBVIOUS_LOOP) continue; // already closed: obvious
@@ -719,6 +726,7 @@ const HINT_ORDER_ALL: RuleId[] = [...HINT_ORDER, 'imbalance', 'trial'];
 const STROKE_HINT_ORDER_ALL: RuleId[] = [...STROKE_HINT_ORDER, 'imbalance'];
 
 const TOO_MANY = 'Something is off: the highlighted tile has more lines than the path can use there.';
+const CUT_OFF_LOOP = 'Something is off: the highlighted lines close into a loop, apart from the path between the arrows.';
 const TOO_FEW = 'Something is off: the highlighted tile has too few ways in or out left — check the X marks around it.';
 
 export type Hint =

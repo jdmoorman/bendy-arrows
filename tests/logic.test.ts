@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { ALL_RULES, applyStep, BASIC_RULES, deductions, logicStep, strokeFrom, type LogicState, type RuleId } from '../src/logic';
+import { decodePuzzle } from '../src/codec';
+import { ALL_RULES, applyStep, BASIC_RULES, deductions, logicStep, runLogic, strokeFrom, type LogicState, type RuleId } from '../src/logic';
 import { createPuzzle, edgeBetween, edgeCount, endpointCells, isUsableEdge, portEnd, portId, type Puzzle } from '../src/model';
 import { solve } from '../src/solver';
 import { endsBottomRight, pathEdges } from './helpers';
@@ -598,4 +599,15 @@ describe('hintPrompt', async () => {
       expect(text, code).not.toMatch(/gets an X|So it|so it uses|must go (up|down|left|right)|\b(up|down|left|right)\b/);
     }
   }, 120_000);
+});
+
+describe('every tile with its lines, but not one path', () => {
+  // 5×5 whose lines all fill in, yet a closed loop stays apart from the path between the ends.
+  const p = decodePuzzle('BwUko7ZcAA');
+  test('is not solved: the rules find a problem', () => {
+    const run = runLogic(p, ALL_RULES);
+    expect(solve(p).status).toBe('none');
+    expect(run.solved).toBe(false);
+    expect(run.contradiction).toBeDefined();
+  });
 });
