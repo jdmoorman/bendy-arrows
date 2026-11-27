@@ -17,8 +17,9 @@ ctx.onmessage = (ev: MessageEvent<RatingRequest>) => {
     let rating: Rating;
     try {
       const p = decodePuzzle(code);
-      const unique = solve(p, { maxSolutions: 2 }).status === 'unique';
-      rating = { v: RATING_VERSION, unique, hints: null, tightest: null, effort: null };
+      const solved = solve(p, { maxSolutions: 2 });
+      const unique = solved.status === 'unique';
+      rating = { v: RATING_VERSION, unique, hints: null, tightest: null, effort: null, segments: unique ? solved.solutions[0] : null };
       if (unique) {
         // A one-shot's hints are those for its stroke.
         const j = isOneShot(p) ? strokeJourney(p) : hintJourney(p);
@@ -30,7 +31,7 @@ ctx.onmessage = (ev: MessageEvent<RatingRequest>) => {
         rating.effort = Math.round(m.effort);
       }
     } catch {
-      rating = { v: RATING_VERSION, unique: false, hints: null, tightest: null, effort: null };
+      rating = { v: RATING_VERSION, unique: false, hints: null, tightest: null, effort: null, segments: null };
     }
     ctx.postMessage({ code, rating } satisfies RatingMessage);
   }

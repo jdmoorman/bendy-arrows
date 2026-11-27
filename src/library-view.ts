@@ -1,28 +1,12 @@
-import { ALL_PACKS } from './levels';
 import { decodePuzzle } from './codec';
 import { ICONS } from './icons';
-import {
-  COLLECTIONS,
-  applyTable,
-  choicesFor,
-  COLUMNS,
-  columnByKey,
-  DEFAULT_TABLE_STATE,
-  filterActive,
-  libraryRows,
-  NAME_COLUMN,
-  RATING_VERSION,
-  type Column,
-  type Filter,
-  type LibRow,
-  type Rating,
-  type TableState,
-} from './library-table';
+import { COLLECTIONS, libraryRows, needsRating, type LibRow, type Rating } from './library-table';
 import type { Puzzle } from './model';
 import type { Progress } from './play';
 import type { RatingMessage } from './rating.worker';
+import { padFor, renderBoard } from './render';
 import { newId, type LibraryEntry, type Storage } from './storage';
-import { exportText, packText, parseImport } from './library-io';
+import { exportText, parseImport } from './library-io';
 import { defaultName } from './save-ui';
 import { el, openSheet, toast } from './ui';
 
@@ -39,7 +23,17 @@ function dateKey(d = new Date()): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-/** The Library tab: every puzzle in a table you can sort and filter. */
+/** The two sections, classic puzzles first. */
+const SECTIONS = [
+  { oneShot: false, title: 'Classic' },
+  { oneShot: true, title: 'One-shot' },
+];
+
+/**
+ * The Library tab: your saved puzzles (never the shipped levels, unless you made one and added it
+ * to a pack) as cards, like the Packs tab's, in two sections: classic and one-shot. Tap a card to
+ * play, edit or delete it.
+ */
 export class LibraryView {
   readonly el: HTMLElement;
   onOpen?: (req: OpenRequest, tab: 'play' | 'edit') => void;
@@ -47,72 +41,30 @@ export class LibraryView {
   onSave?: () => void;
   /** Called after a saved puzzle is deleted. */
   onDeleted?: (id: string) => void;
-  /** Share code of the puzzle being played, to mark its row. */
+  /** Share code of the puzzle being played, to mark its card. */
   currentCode = '';
 
-  private state: TableState;
   private ratings: Record<string, Rating>;
   private rows: LibRow[] = [];
   private worker: Worker | null = null;
   private requested = new Set<string>();
-  private table: HTMLTableElement;
-  private count: HTMLElement;
-  private filterBtn: HTMLButtonElement;
+  private body: HTMLElement;
   private search: HTMLInputElement;
-  private columnsRow: HTMLElement;
-  private renderQueued = false;
 
   constructor(private storage: Storage) {
-    const saved = storage.loadLibraryTable() ?? {};
-    this.state = {
-      search: typeof saved.search === 'string' ? saved.search : '',
-      // Drop filters saved with the old "All except" mode (read as Only they'd mean the opposite)
-      // and filters on columns that are gone.
-      filters: Object.fromEntries(Object.entries(saved.filters && typeof saved.filters === 'object' ? saved.filters : {}).filter(([k, f]) => columnByKey(k) && !(f as { exclude?: boolean } | null)?.exclude)),
-      sort: saved.sort && columnByKey(saved.sort.key) ? saved.sort : null,
-      columns: Array.isArray(saved.columns) ? saved.columns.filter((k) => columnByKey(k)) : DEFAULT_TABLE_STATE.columns,
-    };
-    // Packs used to be collections of their own: a Collection filter naming packs becomes
-    // Level packs, with those packs chosen in the Pack filter.
-    const cf = this.state.filters.collection;
-    if (cf && 'values' in cf) {
-      const packs = cf.values.filter((v) => ALL_PACKS.some((p) => p.name === v));
-      if (packs.length) {
-        this.state.filters.collection = { values: [...new Set([...cf.values.filter((v) => !packs.includes(v)), COLLECTIONS.levels])] };
-        this.state.filters.pack = { values: packs };
-      }
-    }
     this.ratings = storage.loadRatings();
-
     this.el = el('div', 'view library-view hidden');
     const top = el('div', 'lib-top');
     const save = el('button', 'btn', `${ICONS.save}<span>Save current</span>`);
     save.addEventListener('click', () => this.onSave?.());
-    top.append(save);
-    const controls = el('div', 'lib-controls');
     this.search = el('input', 'text-input lib-search') as HTMLInputElement;
     this.search.type = 'search';
     this.search.placeholder = 'Search names';
     this.search.setAttribute('aria-label', 'Search names');
-    this.search.value = this.state.search;
-    this.search.addEventListener('input', () => {
-      this.state.search = this.search.value;
-      this.changed();
-    });
-    this.filterBtn = el('button', 'btn', '');
-    // Columns are filtered from their headers. A filter left on a column that's since been hidden
-    // still applies, so this button (shown only then) lists those filters to change or clear.
-    this.filterBtn.addEventListener('click', () => this.openFilters(this.hiddenFiltered(), 'Filters on hidden columns'));
-    controls.append(this.search, this.filterBtn);
-    this.count = el('p', 'lib-count');
-    // One toggle per column, in a row that scrolls sideways, just above the table.
-    this.columnsRow = el('div', 'chip-row lib-columns');
-    this.columnsRow.setAttribute('role', 'group');
-    this.columnsRow.setAttribute('aria-label', 'Columns to show');
-    const wrap = el('div', 'lib-table-wrap');
-    this.table = el('table', 'lib-table');
-    wrap.append(this.table);
-    this.el.append(top, controls, this.count, this.columnsRow, wrap, this.transferRow());
+    this.search.addEventListener('input', () => this.draw());
+    top.append(save, this.search);
+    this.body = el('div', 'lib-body');
+    this.el.append(top, this.body);
   }
 
   // --- Export and import ------------------------------------------------------
@@ -169,7 +121,7 @@ export class LibraryView {
     go.type = 'submit';
     const check = () => {
       const n = name.value.trim();
-      const reserved = n === COLLECTIONS.yours || n === COLLECTIONS.levels;
+      const reserved = n === COLLECTIONS.yours;
       go.disabled = !n || reserved;
       note.classList.toggle('error', reserved);
       if (reserved) note.textContent = `“${n}” is taken: pick another name.`;
@@ -215,314 +167,106 @@ export class LibraryView {
     if (bad) parts.push(`${bad} line${bad === 1 ? '' : 's'} not understood`);
     if (failed) parts.push('storage is full');
     toast(`${parts.join(', ')}.${added ? ` Collection: “${collection}”.` : ''}`, failed || (!added && bad > 0) ? 'error' : '');
-    if (added) {
-      // A Collection filter that leaves the set out would hide what was just imported: add it.
-      const f = this.state.filters.collection;
-      if (f && 'values' in f && f.values.length && !f.values.includes(collection)) {
-        this.state.filters.collection = { values: [...f.values, collection] };
-        this.storage.saveLibraryTable(this.state);
-      }
-      this.refresh();
-    }
+    if (added) this.refresh();
   }
 
   /** Re-read the library and redraw (call when the tab is shown). */
   refresh(): void {
     this.rows = libraryRows(this.storage, this.ratings);
-    this.renderTable();
+    this.draw();
     this.rateMissing();
   }
 
-  // --- Table ----------------------------------------------------------------
+  // --- Cards ------------------------------------------------------------------
 
-  private changed() {
-    this.storage.saveLibraryTable(this.state);
-    this.renderTable();
-  }
-
-  private hiddenColumns(): Column[] {
-    return COLUMNS.filter((c) => !this.state.columns.includes(c.key));
-  }
-
-  /** Hidden columns that still have a filter on. */
-  private hiddenFiltered(): Column[] {
-    return this.hiddenColumns().filter((c) => filterActive(this.state.filters[c.key]));
-  }
-
-  private visibleColumns(): Column[] {
-    return COLUMNS.filter((c) => this.state.columns.includes(c.key));
-  }
-
-  private renderTable() {
-    const shown = applyTable(this.rows, this.state);
-    const active = Object.values(this.state.filters).filter(filterActive).length;
-    // The Filters button holds the filters of hidden columns (shown ones filter from their header).
-    const hiddenActive = this.hiddenFiltered().length;
-    this.filterBtn.innerHTML = `<span>Hidden filters (${hiddenActive})</span>`;
-    this.filterBtn.title = 'Filters still on columns that are hidden';
-    this.filterBtn.classList.toggle('active', hiddenActive > 0);
-    this.filterBtn.classList.toggle('hidden', hiddenActive === 0);
-    const narrowed = active > 0 || this.state.search.trim() !== '';
-    this.count.replaceChildren(`${shown.length === this.rows.length ? 'All' : `${shown.length} of`} ${this.rows.length} puzzles`);
-    if (narrowed) {
-      const clear = el('button', 'link-btn', 'Clear search and filters');
-      clear.addEventListener('click', () => {
-        this.state.filters = {};
-        this.state.search = '';
-        this.search.value = '';
-        this.changed();
-      });
-      this.count.append(' · ', clear);
-      // Export everything the search and filters leave, in the table's order, as a level pack.
-      if (shown.length) {
-        const exp = el('button', 'link-btn', `Export ${shown.length} shown`);
-        exp.addEventListener('click', () => {
-          // Named after the one pack or collection shown, if there's just one.
-          const sets = [...new Set(shown.map((r) => r.pack ?? r.collection))];
-          const base = sets.length === 1 ? sets[0].replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').toLowerCase() : 'bendy-arrows-pack';
-          downloadText(`${base || 'bendy-arrows-pack'}-${dateKey()}.txt`, packText(shown, location.href));
-          toast(`Exported ${shown.length} puzzle${shown.length === 1 ? '' : 's'}.`);
-        });
-        this.count.append(' · ', exp);
+  /** The two sections of cards (those matching the search), then export and import. */
+  private draw() {
+    const q = this.search.value.trim().toLocaleLowerCase();
+    const shown = this.rows.filter((r) => !q || r.name.toLocaleLowerCase().includes(q));
+    const sections = SECTIONS.map(({ oneShot, title }) => {
+      const rows = shown.filter((r) => r.oneShot === oneShot);
+      const all = this.rows.filter((r) => r.oneShot === oneShot).length;
+      const section = el('section', 'pack-group lib-section');
+      const head = el('h2', 'pack-group-title');
+      head.textContent = title;
+      const count = el('span', 'lib-section-count', q ? `${rows.length} of ${all}` : `${all}`);
+      head.append(' ', count);
+      section.append(head);
+      if (rows.length) {
+        const grid = el('div', 'pack-tiles lib-cards');
+        for (const r of rows) grid.append(this.card(r));
+        section.append(grid);
+      } else {
+        section.append(el('p', 'pack-group-note', all ? 'None match.' : oneShot ? 'No one-shots saved yet.' : 'No classic puzzles saved yet.'));
       }
-      // Delete everything the search and filters leave, e.g. one imported Collection.
-      const entries = shown.flatMap((r) => (r.entry ? [r.entry] : []));
-      if (entries.length) {
-        const n = entries.length;
-        const delAll = el('button', 'link-btn', `Delete ${n} shown`);
-        delAll.addEventListener('click', () => {
-          const sets = [...new Set(entries.map((e) => e.collection).filter(Boolean))];
-          const from = sets.length === 1 ? ` from “${sets[0]}”` : '';
-          if (!confirm(`Delete the ${n} saved puzzle${n === 1 ? '' : 's'}${from} shown? This can't be undone.`)) return;
-          this.storage.removeMany(entries.map((e) => e.id));
-          for (const e of entries) this.onDeleted?.(e.id);
-          toast(`Deleted ${n} puzzle${n === 1 ? '' : 's'}.`);
-          this.refresh();
-        });
-        this.count.append(' · ', delAll);
-      }
-    }
-
-    this.renderColumnToggles();
-    const cols = this.visibleColumns();
-    const head = el('tr');
-    for (const c of [NAME_COLUMN, ...cols]) {
-      const th = el('th', c.kind === 'number' ? 'num' : '');
-      const btn = el('button', 'lib-sort');
-      const sorted = this.state.sort?.key === c.key ? this.state.sort.dir : 0;
-      btn.innerHTML = `<span>${c.short ?? c.label}</span>${sorted ? `<span aria-hidden="true">${sorted === 1 ? '▲' : '▼'}</span>` : ''}`;
-      btn.title = `Sort by ${c.label.toLowerCase()}`;
-      th.setAttribute('aria-sort', sorted === 1 ? 'ascending' : sorted === -1 ? 'descending' : 'none');
-      // Tap once to sort up, again to sort down, a third time to stop sorting.
-      btn.addEventListener('click', () => {
-        this.state.sort = sorted === 0 ? { key: c.key, dir: 1 } : sorted === 1 ? { key: c.key, dir: -1 } : null;
-        this.changed();
-      });
-      th.append(btn);
-      if (c !== NAME_COLUMN) {
-        // Each column's filter sits in its header.
-        const on = filterActive(this.state.filters[c.key]);
-        const fb = el('button', `lib-filter-btn${on ? ' active' : ''}`, on ? ICONS.filterOn : ICONS.filter);
-        fb.setAttribute('aria-label', `Filter by ${c.label.toLowerCase()}${on ? ' (on)' : ''}`);
-        fb.title = `Filter by ${c.label.toLowerCase()}`;
-        fb.addEventListener('click', () => this.openFilters([c], c.label));
-        th.append(fb);
-      }
-      head.append(th);
-    }
-    head.append(el('th', 'lib-actions-head'));
-    const thead = el('thead');
-    thead.append(head);
-
-    const tbody = el('tbody');
-    for (const r of shown) {
-      const tr = el('tr');
-      if (r.code === this.currentCode) tr.classList.add('current');
-      if (r.status === 'Solved') tr.classList.add('solved');
-      const name = el('th', 'lib-name-cell');
-      name.scope = 'row';
-      // Real links, so the browser offers Open in new tab (right-click, long press, Cmd-click);
-      // a plain click opens here, as before.
-      const open = el('a', 'lib-open') as HTMLAnchorElement;
-      open.href = `#p=${r.code}`;
-      const title = el('span');
-      title.textContent = r.name;
-      open.append(title);
-      if (r.status === 'Solved') open.append(el('span', 'lib-check', ICONS.check));
-      open.setAttribute('aria-label', `Play ${r.name}`);
-      open.addEventListener('click', (ev) => this.followHere(ev, () => this.open(r, 'play')));
-      name.append(open);
-      tr.append(name);
-      for (const c of cols) {
-        const td = el('td', c.kind === 'number' ? 'num' : '');
-        const text = c.show ? c.show(r) : String(c.value(r) ?? '');
-        td.textContent = text;
-        if (c.key === 'symmetric' && r.symmetric) td.classList.add('lib-sym');
-        tr.append(td);
-      }
-      const actions = el('td', 'lib-actions');
-      const edit = el('a', 'btn icon', ICONS.edit) as HTMLAnchorElement;
-      edit.href = `#p=${r.code}&edit`;
-      edit.setAttribute('aria-label', `Edit ${r.name}`);
-      edit.addEventListener('click', (ev) => this.followHere(ev, () => this.open(r, 'edit')));
-      actions.append(edit);
-      const del = el('button', 'btn icon', ICONS.clear);
-      del.setAttribute('aria-label', `Delete ${r.name}`);
-      del.addEventListener('click', () => {
-        const entry = r.entry!;
-        if (!confirm(`Delete “${entry.name}”?`)) return;
-        this.storage.remove(entry.id);
-        this.onDeleted?.(entry.id);
-        this.refresh();
-      });
-      // Official levels can't be deleted; your puzzles can.
-      if (r.entry) actions.append(del);
-      tr.append(actions);
-      tbody.append(tr);
-    }
-    if (!shown.length) {
-      const tr = el('tr');
-      const td = el('td', 'lib-empty', this.rows.length ? 'No puzzles match.' : 'Nothing here yet. Save a puzzle, or import some.');
-      td.colSpan = cols.length + 2;
-      tr.append(td);
-      tbody.append(tr);
-    }
-    this.table.replaceChildren(thead, tbody);
-  }
-
-  /** A plain click on a puzzle link opens it here; with Cmd, Ctrl, Shift or Alt the browser handles it (a new tab or window). */
-  private followHere(ev: MouseEvent, openHere: () => void) {
-    if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
-    ev.preventDefault();
-    openHere();
-  }
-
-  private open(r: LibRow, tab: 'play' | 'edit') {
-    // A pack level opens on its own, not linked to a saved copy that happens to share its code
-    // (e.g. the puzzle it was exported from): saving then makes a separate Library copy.
-    const saved = r.entry ?? (r.key.startsWith('level:') ? undefined : this.storage.findByCode(r.code));
-    this.onOpen?.({ puzzle: decodePuzzle(r.code), progress: saved?.progress, id: saved?.id, name: saved?.name ?? r.name }, tab);
-  }
-
-  // --- Filters and columns -------------------------------------------------
-
-  /** A sheet with the filters of these columns (one column from its header, or the hidden ones). */
-  private openFilters(columns: Column[], title: string) {
-    const body = el('div', 'sheet-stack lib-filters');
-    openSheet(title, body);
-    const anyOn = () => columns.some((c) => filterActive(this.state.filters[c.key]));
-    const draw = () => {
-      body.replaceChildren();
-      const clear = el('button', 'btn', `<span>${columns.length === 1 ? 'Clear filter' : 'Clear these filters'}</span>`);
-      clear.disabled = !anyOn();
-      clear.addEventListener('click', () => {
-        for (const c of columns) delete this.state.filters[c.key];
-        this.changed();
-        draw();
-      });
-      body.append(clear);
-      if (!columns.length) body.append(el('p', 'field-label', 'No filters left on hidden columns: filter from the column headers.'));
-      for (const c of columns) {
-        const field = el('div', 'lib-filter');
-        if (columns.length > 1) field.append(el('p', 'field-label', c.label));
-        if (c.kind === 'choice') {
-          const f = this.state.filters[c.key];
-          const chosen = f && 'values' in f ? f.values : [];
-          const chips = el('div', 'chip-row');
-          for (const v of choicesFor(c, this.rows)) {
-            const chip = el('button', 'chip');
-            chip.type = 'button';
-            chip.textContent = v;
-            chip.setAttribute('aria-pressed', String(chosen.includes(v)));
-            chip.addEventListener('click', () => {
-              const next = chosen.includes(v) ? chosen.filter((x) => x !== v) : [...chosen, v];
-              this.setFilter(c.key, { values: next });
-              draw();
-            });
-            chips.append(chip);
-          }
-          field.append(chips);
-        } else {
-          const f = (this.state.filters[c.key] ?? {}) as { min?: number; max?: number };
-          const values = this.rows.map((r) => c.value(r)).filter((v): v is number => typeof v === 'number');
-          const hi = values.length ? Math.max(...values) : 0;
-          const range = el('div', 'range-row');
-          const input = (which: 'min' | 'max') => {
-            const i = el('input', 'text-input') as HTMLInputElement;
-            i.type = 'number';
-            i.inputMode = 'numeric';
-            // The lower bound starts its hint at 0; the upper one at the largest value there is.
-            i.placeholder = String(which === 'min' ? 0 : hi);
-            i.setAttribute('aria-label', `${c.label} ${which === 'min' ? 'at least' : 'at most'}`);
-            if (f[which] !== undefined) i.value = String(f[which]);
-            let wasEmpty = i.value === '';
-            i.addEventListener('input', (ev) => {
-              // The arrows step an empty field from 0; step from the faint number shown instead.
-              // (Typing reports an inputType; a step doesn't.)
-              if (wasEmpty && i.value !== '' && !(ev as InputEvent).inputType) {
-                i.value = String(Number(i.placeholder) + Math.sign(Number(i.value)));
-              }
-              wasEmpty = i.value === '';
-              const n = i.value.trim() === '' ? undefined : Number(i.value);
-              const cur = (this.state.filters[c.key] ?? {}) as { min?: number; max?: number };
-              this.setFilter(c.key, { ...cur, [which]: Number.isFinite(n) ? n : undefined });
-              clear.disabled = !anyOn();
-            });
-            return i;
-          };
-          range.append(input('min'), el('span', '', 'to'), input('max'));
-          field.append(range);
-        }
-        body.append(field);
-      }
-    };
-    draw();
-  }
-
-  private setFilter(key: string, f: Filter) {
-    if (filterActive(f)) this.state.filters[key] = f;
-    else delete this.state.filters[key];
-    this.changed();
-  }
-
-  /** The column toggles: tap one to show or hide that column. */
-  private renderColumnToggles() {
-    const chips = COLUMNS.map((c) => {
-      const on = this.state.columns.includes(c.key);
-      const chip = el('button', 'chip', c.short ?? c.label);
-      chip.type = 'button';
-      chip.title = c.label;
-      chip.setAttribute('aria-pressed', String(on));
-      chip.addEventListener('click', () => {
-        // Keep the columns in their usual order.
-        const shown = new Set(this.state.columns);
-        if (on) shown.delete(c.key);
-        else shown.add(c.key);
-        this.state.columns = COLUMNS.map((x) => x.key).filter((k) => shown.has(k));
-        this.changed();
-      });
-      return chip;
+      return section;
     });
-    const usual = DEFAULT_TABLE_STATE.columns;
-    if (this.state.columns.length !== usual.length || this.state.columns.some((k) => !usual.includes(k))) {
-      const reset = el('button', 'link-btn', 'Usual columns');
-      reset.addEventListener('click', () => {
-        this.state.columns = [...usual];
-        this.changed();
-      });
-      chips.push(reset);
-    }
-    const scroll = this.columnsRow.scrollLeft;
-    this.columnsRow.replaceChildren(...chips);
-    this.columnsRow.scrollLeft = scroll;
+    this.body.replaceChildren(...sections, this.transferRow());
   }
 
+  /** A puzzle's card: its board, name, size and hints, and the pack it's in. */
+  private card(r: LibRow): HTMLElement {
+    const t = el('button', 'pack-tile lib-card');
+    t.dataset.code = r.code;
+    if (r.code === this.currentCode) t.classList.add('current');
+    if (r.solved) t.classList.add('solved');
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.classList.add('board');
+    // The solution once worked out: of your own puzzles, and of those you've solved (an imported
+    // one you haven't solved yet stays a puzzle).
+    const lines = r.segments && (!r.entry.collection || r.solved) ? new Set(r.segments) : undefined;
+    renderBoard(svg, r.puzzle, { coordinates: false, pad: padFor(r.puzzle, false, false), segments: lines, solved: !!lines });
+    const name = el('span', 'lib-card-name');
+    const text = el('span');
+    text.textContent = r.name;
+    if (r.solved) name.append(el('span', 'lib-check', ICONS.check));
+    name.append(text);
+    const hints = r.hints === undefined ? (r.unique === false ? 'not unique' : '') : r.hints === null ? 'not unique' : `${r.hints}${r.hintsStuck ? '+' : ''} hint${r.hints === 1 && !r.hintsStuck ? '' : 's'}`;
+    const facts = el('span', 'pack-tile-label', [`${r.puzzle.w}×${r.puzzle.h}`, hints].filter(Boolean).join(' · '));
+    t.append(svg, name, facts);
+    if (r.pack) {
+      const pack = el('span', 'lib-card-pack');
+      pack.textContent = r.pack;
+      t.append(pack);
+    }
+    t.setAttribute('aria-label', `${r.name}, ${r.puzzle.w} by ${r.puzzle.h}${r.solved ? ', solved' : ''}${r.pack ? `, in ${r.pack}` : ''}`);
+    t.addEventListener('click', () => this.openCard(r));
+    return t;
+  }
+
+  /** A card tapped: play it, edit it, or delete it. */
+  private openCard(r: LibRow) {
+    const body = el('div', 'sheet-stack lib-card-sheet');
+    const meta = [r.entry.collection, r.pack ? `In the pack ${r.pack}` : ''].filter(Boolean).join(' · ');
+    if (meta) body.append(el('p', 'field-label', meta));
+    const row = el('div', 'lib-card-actions');
+    const play = el('button', 'btn primary', `${ICONS.play}<span>Play</span>`);
+    const edit = el('button', 'btn', `${ICONS.edit}<span>Edit</span>`);
+    const del = el('button', 'btn', `${ICONS.clear}<span>Delete</span>`);
+    row.append(play, edit, del);
+    body.append(row);
+    const sheet = openSheet(r.name, body);
+    const open = (tab: 'play' | 'edit') => {
+      sheet.close();
+      const e = r.entry;
+      this.onOpen?.({ puzzle: decodePuzzle(r.code), progress: e.progress, id: e.id, name: e.name }, tab);
+    };
+    play.addEventListener('click', () => open('play'));
+    edit.addEventListener('click', () => open('edit'));
+    del.addEventListener('click', () => {
+      if (!confirm(`Delete “${r.entry.name}”?${r.pack ? ` It stays a level in ${r.pack}.` : ''}`)) return;
+      sheet.close();
+      this.storage.remove(r.entry.id);
+      this.onDeleted?.(r.entry.id);
+      this.refresh();
+    });
+  }
 
   // --- Background ratings ---------------------------------------------------
 
-  /** Work out the uniqueness, hint steps and search metrics of puzzles that haven't been rated. */
+  /** Work out the uniqueness, solution and hint steps of puzzles that haven't been rated. */
   private rateMissing() {
-    const codes = [...new Set(this.rows.filter((r) => this.ratings[r.code]?.v !== RATING_VERSION).map((r) => r.code))].filter((c) => !this.requested.has(c));
+    const codes = [...new Set(this.rows.filter((r) => needsRating(this.ratings[r.code])).map((r) => r.code))].filter((c) => !this.requested.has(c));
     if (!codes.length) return;
     for (const c of codes) this.requested.add(c);
     if (!this.worker) {
@@ -533,26 +277,15 @@ export class LibraryView {
         this.storage.saveRating(code, rating);
         for (const r of this.rows) {
           if (r.code !== code) continue;
+          r.unique = rating.unique;
           r.hints = rating.hints;
           r.hintsStuck = rating.hintsStuck;
-          r.tightest = rating.tightest;
-          r.effort = rating.effort;
-          r.unique = rating.unique;
+          r.segments = rating.segments;
+          for (const t of this.body.querySelectorAll<HTMLElement>(`.lib-card[data-code="${code}"]`)) t.replaceWith(this.card(r));
         }
-        this.queueRender();
       };
     }
     this.worker.postMessage(codes);
-  }
-
-  /** Redraw once for a burst of results. */
-  private queueRender() {
-    if (this.renderQueued) return;
-    this.renderQueued = true;
-    requestAnimationFrame(() => {
-      this.renderQueued = false;
-      this.renderTable();
-    });
   }
 }
 

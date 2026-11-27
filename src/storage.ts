@@ -1,6 +1,6 @@
 import { FORMAT_VERSION, plainCode } from './codec';
 import type { JourneyFrame } from './logic';
-import type { Rating, TableState } from './library-table';
+import type { Rating } from './library-table';
 import type { Progress } from './play';
 
 /**
@@ -303,16 +303,6 @@ export class Storage {
 
   saveGeneratorOptions(o: object): void {
     this.write(GENERATOR_KEY, o);
-  }
-
-  /** The library table's search, filters, sort and columns, or null if never changed. */
-  loadLibraryTable(): Partial<TableState> | null {
-    const t = this.read<unknown>(TABLE_KEY, null);
-    return t && typeof t === 'object' ? (t as Partial<TableState>) : null;
-  }
-
-  saveLibraryTable(state: TableState): void {
-    this.write(TABLE_KEY, state);
   }
 
   /** The Packs tab's highlighted levels, by code. */

@@ -970,121 +970,101 @@ img.icon {
 /* ---------- Library ---------- */
 .library-view {
   gap: 8px;
-  padding: 4px 12px 12px;
+  padding: 4px 12px 0;
 }
-
-.lib-top,
-.lib-controls {
+.lib-top {
   display: flex;
   gap: var(--gap);
 }
-.lib-top > .btn,
-.lib-controls > .btn {
+.lib-top > .btn {
   flex: none;
 }
-.lib-controls > .btn.active {
+.lib-search {
+  flex: 1;
+  min-width: 0;
+}
+/* Classic and one-shot sections of cards, scrolling under the top row. */
+.lib-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+.lib-section-count {
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+/* Cards about 100px wide or more: three across on a phone, so names fit. */
+.pack-tiles.lib-cards {
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+}
+.lib-card {
+  position: relative;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.lib-card.current {
   border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.lib-card-name {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.lib-card-name > span:last-child {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lib-card.solved .lib-card-name {
+  color: var(--success);
+}
+/* The pack a puzzle of yours became a level of. */
+.lib-card-pack {
+  align-self: stretch;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.7rem;
   color: var(--accent);
 }
-
+.lib-check {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+.lib-check .icon {
+  width: 14px;
+  height: 14px;
+}
+.lib-card-actions {
+  display: flex;
+  gap: var(--gap);
+}
+.lib-card-actions > .btn {
+  flex: 1;
+}
+.lib-card-actions > .btn:last-child {
+  color: var(--error);
+}
 .lib-transfer {
   display: flex;
   gap: var(--gap);
   flex-wrap: wrap;
+  margin-top: 28px;
 }
-/* Column toggles: one row that scrolls sideways (it would take several rows on a phone). */
-.lib-columns {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
-  flex: none;
-  align-items: center;
-}
-.lib-columns::-webkit-scrollbar {
-  display: none;
-}
-.lib-columns > .chip {
-  flex: none;
-  min-height: 32px;
-  padding: 0 10px;
-  font-size: 0.85rem;
-}
-.lib-columns > .link-btn {
-  flex: none;
-  white-space: nowrap;
-}
-
-.lib-count {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
-/* The table scrolls both ways inside its box, with the header row and name column pinned. */
-.lib-table-wrap {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  overscroll-behavior: contain;
-}
-.lib-table {
-  border-collapse: separate;
-  border-spacing: 0;
-  min-width: 100%;
-  font-size: 0.9rem;
-}
-.lib-table th,
-.lib-table td {
-  padding: 0 8px;
-  height: 40px;
-  white-space: nowrap;
-  border-bottom: 1px solid var(--border);
-  text-align: left;
-  font-weight: 400;
-}
-.lib-table .num {
-  text-align: right;
-}
-.lib-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--surface-2);
-}
-.lib-table .lib-name-cell,
-.lib-table thead th:first-child {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-}
-.lib-table thead th:first-child {
-  z-index: 3;
-  background: var(--surface-2);
-}
-.lib-sort {
-  appearance: none;
-  border: 0;
-  background: none;
-  padding: 0;
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-weight: 600;
-  font-size: inherit;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.lib-sort > span + span {
-  font-size: 0.7em;
-  color: var(--accent);
-}
-/* The column's filter, beside its name: faint until a filter is on. */
 /* Import: name the collection the file's puzzles go into. */
 .lib-import .field-label {
   display: flex;
@@ -1098,89 +1078,6 @@ img.icon {
 }
 .lib-import-note.error {
   color: var(--error);
-}
-.lib-filter-btn {
-  appearance: none;
-  border: 0;
-  background: none;
-  padding: 0 2px;
-  min-height: 40px;
-  min-width: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  vertical-align: middle;
-  color: var(--text-muted);
-  opacity: 0.55;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.lib-filter-btn .icon {
-  width: 14px;
-  height: 14px;
-}
-.lib-filter-btn.active {
-  color: var(--accent);
-  opacity: 1;
-}
-.lib-open {
-  appearance: none;
-  color: inherit;
-  text-decoration: none;
-  border: 0;
-  background: none;
-  padding: 0;
-  min-height: 40px;
-  max-width: 44vw;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: 600;
-  font-size: inherit;
-  text-align: left;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.lib-open > span:first-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.lib-table tr.current .lib-name-cell {
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-.lib-table tr.solved .lib-open {
-  color: var(--success);
-}
-.lib-check {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  font-weight: 700;
-  font-size: 0.8rem;
-}
-.lib-check .icon {
-  width: 15px;
-  height: 15px;
-}
-.lib-actions {
-  padding: 0 2px;
-}
-.lib-actions .btn.icon {
-  width: 36px;
-  height: 36px;
-  min-height: 36px;
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-}
-.lib-empty {
-  color: var(--text-muted);
-  text-align: center;
-}
-
-/* Filters sheet. */
-.lib-filter > .field-label {
-  margin: 0 0 6px;
 }
 .chip-row {
   display: flex;
@@ -1538,9 +1435,6 @@ img.icon {
   font-size: 16px;
 }
 
-.lib-sym {
-  color: var(--error);
-}
 
 /* New puzzle sheet: "Size" label beside its picker. */
 .size-row {
