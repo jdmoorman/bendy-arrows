@@ -573,6 +573,13 @@ export class PlayView {
   private placing() {
     this.history.push(this.snapshot());
     this.changed = true;
+    // A hint goes away as soon as the player starts drawing (not at the end of the drag), and one
+    // still being worked out is dropped. Wrong marks pointed out stay while they're being taken
+    // off (see stillWrong, at the end of the drag).
+    if (this.shownHint && this.shownHint.kind !== 'wrong') {
+      this.shownHint = null;
+      this.changeCount++;
+    }
   }
 
   private setSegment(e: number, on: boolean) {
