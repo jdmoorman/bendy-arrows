@@ -80,7 +80,7 @@ let playing: Puzzle = createPuzzle(6, 6);
 let playingCode = encodePuzzle(playing);
 let libraryId: string | undefined;
 let puzzleName: string | undefined;
-/** Made with New puzzle or Generate and not saved yet: the title says "New puzzle" until it's saved with a name. */
+/** Made with New puzzle or Generate and not saved yet: the title says "New puzzle" until it's saved. */
 let unnamed = false;
 /**
  * The pack level the puzzle was opened from (it stays through edits), when it isn't linked to
@@ -120,7 +120,7 @@ play.onProgress = (progress, solved) => {
   saveSession();
 };
 editor.changeListeners.push(() => {
-  // New puzzle or Generate: the title says so until it's saved with a name.
+  // New puzzle or Generate: the title says so until it's saved.
   if (editor.replaced && !unnamed) {
     unnamed = true;
     updateHeader();
@@ -131,20 +131,20 @@ editor.changeListeners.push(() => {
 interface LoadMeta {
   progress?: Progress;
   id?: string;
-  name?: string;
 }
 
 /** Make `p` the current puzzle in both views. */
 function loadPuzzle(p: Puzzle, meta: LoadMeta = {}, startTab: Tab = 'play') {
   playing = clonePuzzle(p);
   playingCode = encodePuzzle(playing);
-  // A puzzle that is already in the library picks up its saved name and progress; a pack level
+  // A puzzle that is already in the library picks up its saved progress; a pack level
   // stays unlinked from saved copies that share its code (unless one was opened on purpose).
   const level = findLevel(playingCode);
   const saved = meta.id ? storage.get(meta.id) : level ? undefined : storage.findByCode(playingCode);
   libraryId = saved && saved.code === playingCode ? saved.id : undefined;
   fromLevel = libraryId ? undefined : level;
-  puzzleName = meta.name ?? saved?.name ?? (level ? levelName(level) : undefined);
+  // Only pack levels have names (saved puzzles go unnamed: their cards show what they look like).
+  puzzleName = fromLevel ? levelName(fromLevel) : undefined;
   unnamed = false;
   play.load(playing, meta.progress ?? saved?.progress);
   editor.load(playing);
@@ -191,7 +191,7 @@ function setTab(t: Tab) {
     libraryId = saved?.id;
     if (libraryId) fromLevel = undefined;
     else if (level) fromLevel = level;
-    puzzleName = saved?.name ?? (level ? levelName(level) : undefined);
+    puzzleName = level && !saved ? levelName(level) : undefined;
     // A new puzzle stays "New puzzle" until it's saved (or turns out to be one that was).
     if (saved || level) unnamed = false;
     // An edited puzzle is a new puzzle: keep the marks that still fit.
@@ -292,10 +292,9 @@ function saveCurrent(fromEditor: boolean, toLibrary = false) {
     onSaved: (entry) => {
       if (editing) {
         // Saving the editor's puzzle makes it the current puzzle.
-        loadPuzzle(decodePuzzle(entry.code), { id: entry.id, name: entry.name, progress: entry.progress }, tab);
+        loadPuzzle(decodePuzzle(entry.code), { id: entry.id, progress: entry.progress }, tab);
       } else if (entry.code === playingCode) {
         libraryId = entry.id;
-        puzzleName = entry.name;
         unnamed = false;
         updateHeader();
         saveSession();
@@ -356,11 +355,11 @@ function openLevelSaveSheet(level: LevelRef, p: Puzzle, fromEditor: boolean) {
 
 editor.onSave = () => saveCurrent(true);
 library.onSave = () => saveCurrent(lastBoardTab === 'edit');
-library.onOpen = ({ puzzle, progress, id, name }, t) => {
+library.onOpen = ({ puzzle, progress, id }, t) => {
   // A finished puzzle opens with an empty board for Play.
   const finished = !!progress && checkSolution(puzzle, new Set(progress.segments)).solved;
   const fresh: Progress = { segments: [], xMarks: [] };
-  loadPuzzle(puzzle, { progress: t === 'play' && finished ? fresh : progress, id, name }, t);
+  loadPuzzle(puzzle, { progress: t === 'play' && finished ? fresh : progress, id }, t);
 };
 library.onDeleted = (id) => {
   if (libraryId === id) {
@@ -418,9 +417,9 @@ function start() {
   }
   if (fromLink) {
     const same = session && sessionPuzzle && puzzlesEqual(fromLink, sessionPuzzle);
-    loadPuzzle(fromLink, same ? { progress: session.progress, id: session.libraryId, name: session.name } : {});
+    loadPuzzle(fromLink, same ? { progress: session.progress, id: session.libraryId } : {});
   } else if (session && sessionPuzzle) {
-    loadPuzzle(sessionPuzzle, { progress: session.progress, id: session.libraryId, name: session.name });
+    loadPuzzle(sessionPuzzle, { progress: session.progress, id: session.libraryId });
   } else {
     // First visit: open the library, where the levels are.
     loadPuzzle(createPuzzle(6, 6), {}, 'library');

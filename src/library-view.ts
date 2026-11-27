@@ -14,7 +14,6 @@ export interface OpenRequest {
   puzzle: Puzzle;
   progress?: Progress;
   id?: string;
-  name?: string;
 }
 
 /** Today's date (local time) as YYYY-MM-DD, for export file names. */
@@ -49,7 +48,6 @@ export class LibraryView {
   private worker: Worker | null = null;
   private requested = new Set<string>();
   private body: HTMLElement;
-  private search: HTMLInputElement;
 
   constructor(private storage: Storage) {
     this.ratings = storage.loadRatings();
@@ -57,12 +55,7 @@ export class LibraryView {
     const top = el('div', 'lib-top');
     const save = el('button', 'btn', `${ICONS.save}<span>Save current</span>`);
     save.addEventListener('click', () => this.onSave?.());
-    this.search = el('input', 'text-input lib-search') as HTMLInputElement;
-    this.search.type = 'search';
-    this.search.placeholder = 'Search names';
-    this.search.setAttribute('aria-label', 'Search names');
-    this.search.addEventListener('input', () => this.draw());
-    top.append(save, this.search);
+    top.append(save);
     this.body = el('div', 'lib-body');
     this.el.append(top, this.body);
   }
@@ -179,17 +172,14 @@ export class LibraryView {
 
   // --- Cards ------------------------------------------------------------------
 
-  /** The two sections of cards (those matching the search), then export and import. */
+  /** The two sections of cards, then export and import. */
   private draw() {
-    const q = this.search.value.trim().toLocaleLowerCase();
-    const shown = this.rows.filter((r) => !q || r.name.toLocaleLowerCase().includes(q));
     const sections = SECTIONS.map(({ oneShot, title }) => {
-      const rows = shown.filter((r) => r.oneShot === oneShot);
-      const all = this.rows.filter((r) => r.oneShot === oneShot).length;
+      const rows = this.rows.filter((r) => r.oneShot === oneShot);
       const section = el('section', 'pack-group lib-section');
       const head = el('h2', 'pack-group-title');
       head.textContent = title;
-      const count = el('span', 'lib-section-count', q ? `${rows.length} of ${all}` : `${all}`);
+      const count = el('span', 'lib-section-count', `${rows.length}`);
       head.append(' ', count);
       section.append(head);
       if (rows.length) {
@@ -197,7 +187,7 @@ export class LibraryView {
         for (const r of rows) grid.append(this.card(r));
         section.append(grid);
       } else {
-        section.append(el('p', 'pack-group-note', all ? 'None match.' : oneShot ? 'No one-shots saved yet.' : 'No classic puzzles saved yet.'));
+        section.append(el('p', 'pack-group-note', oneShot ? 'No one-shots saved yet.' : 'No classic puzzles saved yet.'));
       }
       return section;
     });
@@ -217,13 +207,11 @@ export class LibraryView {
     const lines = solution ?? (r.reach?.segments.length ? new Set(r.reach.segments) : undefined);
     const faint = !solution && r.reach?.faint?.length ? new Set(r.reach.faint) : undefined;
     renderBoard(svg, r.puzzle, { coordinates: false, pad: padFor(r.puzzle, false, false), segments: lines, faint, solved: !!solution });
-    const name = el('span', 'lib-card-name');
-    const text = el('span');
-    text.textContent = r.name;
-    if (r.solved) name.append(el('span', 'lib-check', ICONS.check));
-    name.append(text);
+    // Its size, with a check once solved.
+    const size = el('span', 'lib-card-size', `${r.puzzle.w}×${r.puzzle.h}`);
+    if (r.solved) size.prepend(el('span', 'lib-check', ICONS.check));
     const count = (n: number, stuck?: boolean) => `${n}${stuck ? '+' : ''} hint${n === 1 && !stuck ? '' : 's'}`;
-    t.append(svg, name, el('span', 'pack-tile-label', `${r.puzzle.w}×${r.puzzle.h}`));
+    t.append(svg, size);
     if (r.unique === false) {
       // How far the hints get (the lines on the board), then that it isn't unique.
       if (r.reach) t.append(el('span', 'pack-tile-label', count(r.reach.hints)));
@@ -234,7 +222,7 @@ export class LibraryView {
       pack.textContent = r.pack;
       t.append(pack);
     }
-    t.setAttribute('aria-label', `${r.name}, ${r.puzzle.w} by ${r.puzzle.h}${r.unique === false ? ', more than one solution' : ''}${r.solved ? ', solved' : ''}${r.pack ? `, in ${r.pack}` : ''}`);
+    t.setAttribute('aria-label', `${r.oneShot ? 'One-shot' : 'Classic'} puzzle, ${r.puzzle.w} by ${r.puzzle.h}${r.unique === false ? ', more than one solution' : ''}${r.solved ? ', solved' : ''}${r.pack ? `, in ${r.pack}` : ''}`);
     t.addEventListener('click', () => this.openCard(r));
     return t;
   }
@@ -250,16 +238,16 @@ export class LibraryView {
     const del = el('button', 'btn', `${ICONS.clear}<span>Delete</span>`);
     row.append(play, edit, del);
     body.append(row);
-    const sheet = openSheet(r.name, body);
+    const sheet = openSheet(`${r.oneShot ? 'One-shot' : 'Classic'} ${r.puzzle.w}×${r.puzzle.h}`, body);
     const open = (tab: 'play' | 'edit') => {
       sheet.close();
       const e = r.entry;
-      this.onOpen?.({ puzzle: decodePuzzle(r.code), progress: e.progress, id: e.id, name: e.name }, tab);
+      this.onOpen?.({ puzzle: decodePuzzle(r.code), progress: e.progress, id: e.id }, tab);
     };
     play.addEventListener('click', () => open('play'));
     edit.addEventListener('click', () => open('edit'));
     del.addEventListener('click', () => {
-      if (!confirm(`Delete “${r.entry.name}”?${r.pack ? ` It stays a level in ${r.pack}.` : ''}`)) return;
+      if (!confirm(`Delete this puzzle?${r.pack ? ` It stays a level in ${r.pack}.` : ''}`)) return;
       sheet.close();
       this.storage.remove(r.entry.id);
       this.onDeleted?.(r.entry.id);

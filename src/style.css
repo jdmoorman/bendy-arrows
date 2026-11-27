@@ -979,10 +979,6 @@ img.icon {
 .lib-top > .btn {
   flex: none;
 }
-.lib-search {
-  flex: 1;
-  min-width: 0;
-}
 /* Classic and one-shot sections of cards, scrolling under the top row. */
 .lib-body {
   flex: 1;
@@ -1017,21 +1013,16 @@ img.icon {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
-.lib-card-name {
-  align-self: stretch;
+.lib-card-size {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 2px;
-  min-width: 0;
   font-size: 0.75rem;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
-.lib-card-name > span:last-child {
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.lib-card.solved .lib-card-size {
+  color: var(--success);
 }
 /* Shown whole: on a phone's card it may run a little into the padding. */
 .lib-card .lib-nonunique {
@@ -1040,9 +1031,6 @@ img.icon {
   overflow: visible;
   text-overflow: clip;
   margin: 0 -4px;
-}
-.lib-card.solved .lib-card-name {
-  color: var(--success);
 }
 /* The pack a puzzle of yours became a level of. */
 .lib-card-pack {

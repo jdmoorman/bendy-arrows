@@ -13,7 +13,7 @@ export interface SaveContext {
   solved?: boolean;
   /** Library entry the puzzle was opened from, if any. */
   currentId?: string;
-  /** For a new entry: the name to suggest, and the collection to put it in. */
+  /** For a new entry: the name to store (a pack level's), and the collection to put it in. */
   suggestedName?: string;
   collection?: string;
   onSaved(entry: LibraryEntry): void;
@@ -23,25 +23,25 @@ export function defaultName(p: Puzzle): string {
   return `Path ${p.w}×${p.h}`;
 }
 
-/** Save a puzzle to the library under a name (or update the entry it came from). */
+/**
+ * Save a puzzle to the library: a new one straight away; one opened from the library asks whether
+ * to update it or save a new copy. (Puzzles go unnamed: their cards show what they look like; the
+ * stored name is only a fallback for exports.)
+ */
 export function openSaveSheet(ctx: SaveContext): void {
   const { storage } = ctx;
-  const body = el('div', 'sheet-stack');
+  if (!storage.available) {
+    toast('Could not save — browser storage is unavailable', 'error');
+    return;
+  }
   const existing = ctx.currentId ? storage.get(ctx.currentId) : undefined;
-  const sheet = openSheet(existing ? 'Update saved puzzle' : 'Save puzzle', body);
   const code = encodePuzzle(ctx.current);
-
-  const nameInput = el('input', 'text-input') as HTMLInputElement;
-  nameInput.value = existing?.name ?? ctx.suggestedName ?? defaultName(ctx.current);
-  nameInput.setAttribute('aria-label', 'Puzzle name');
-  nameInput.maxLength = 60;
-  const save = (asNew: boolean) => {
-    const name = nameInput.value.trim() || defaultName(ctx.current);
+  const save = (asNew: boolean): boolean => {
     const now = Date.now();
     const keepProgress = !asNew && existing?.code === code;
     const entry: LibraryEntry = {
       id: asNew || !existing ? newId() : existing.id,
-      name,
+      name: (!asNew && existing?.name) || ctx.suggestedName || defaultName(ctx.current),
       code,
       created: asNew || !existing ? now : existing.created,
       updated: now,
@@ -51,27 +51,23 @@ export function openSaveSheet(ctx: SaveContext): void {
     };
     if (!storage.put(entry)) {
       toast('Could not save — browser storage is unavailable', 'error');
-      return;
+      return false;
     }
     ctx.onSaved(entry);
-    toast(`Saved “${name}”`);
-    sheet.close();
+    toast(asNew || !existing ? 'Saved to your Library' : 'Updated in your Library');
+    return true;
   };
+  if (!existing) {
+    save(true);
+    return;
+  }
+  const body = el('div', 'sheet-stack');
+  const sheet = openSheet('Update saved puzzle', body);
   const row = el('div', 'sheet-row');
-  if (existing) {
-    const asNewBtn = el('button', 'btn', '<span>Save as new</span>');
-    asNewBtn.addEventListener('click', () => save(true));
-    row.append(asNewBtn);
-  }
-  const saveBtn = el('button', 'btn primary', `${ICONS.save}<span>${existing ? 'Update' : 'Save'}</span>`);
-  saveBtn.addEventListener('click', () => save(false));
-  row.append(saveBtn);
-  nameInput.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter') save(false);
-  });
-  body.append(el('p', 'field-label', 'Name'), nameInput, row);
-  if (!storage.available) {
-    saveBtn.disabled = true;
-    body.append(el('p', 'field-label', 'Browser storage is unavailable, so saving is disabled.'));
-  }
+  const asNewBtn = el('button', 'btn', '<span>Save as new</span>');
+  asNewBtn.addEventListener('click', () => save(true) && sheet.close());
+  const saveBtn = el('button', 'btn primary', `${ICONS.save}<span>Update</span>`);
+  saveBtn.addEventListener('click', () => save(false) && sheet.close());
+  row.append(asNewBtn, saveBtn);
+  body.append(row);
 }

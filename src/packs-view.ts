@@ -498,13 +498,9 @@ export class PacksView {
       })
       .sort((a, b) => b.e.updated - a.e.updated);
     const body = el('div', 'pack-add-sheet');
-    const search = el('input', 'text-input');
-    search.type = 'search';
-    search.placeholder = 'Search your Library';
-    search.setAttribute('aria-label', 'Search your Library');
     const list = el('div', 'pack-add-list');
     const empty = el('p', 'pack-add-empty');
-    body.append(search, list, empty);
+    body.append(list, empty);
     const sheet = openSheet(`Add to ${this.packs[pi].name}`, body);
     // Each puzzle's solution on its board: solved in the background, the shown ones first.
     const boards = new Map<string, SVGSVGElement[]>();
@@ -532,10 +528,8 @@ export class PacksView {
     };
     sheet.dialog.addEventListener('close', () => solver?.terminate());
     const show = () => {
-      const q = search.value.trim().toLowerCase();
-      const shown = entries.filter(({ e }) => !q || e.name.toLowerCase().includes(q) || (e.collection ?? '').toLowerCase().includes(q));
-      empty.textContent = entries.length ? (shown.length ? '' : 'Nothing in your Library matches.') : 'Your Library is empty.';
-      const listed = shown;
+      empty.textContent = entries.length ? '' : 'Your Library is empty.';
+      const listed = entries;
       boards.clear();
       list.replaceChildren(
         ...listed.map(({ e, code, why }) => {
@@ -549,9 +543,10 @@ export class PacksView {
           }
           const text = el('span', 'pack-add-text');
           const name = el('span', 'pack-add-name');
-          name.textContent = e.name;
+          // Saved puzzles go unnamed: the board shows which it is.
+          name.textContent = p ? `${p.w}×${p.h}` : '';
           const meta = el('span', 'pack-add-meta');
-          meta.textContent = [p ? `${p.w}×${p.h}` : '', e.collection ?? '', why].filter(Boolean).join(' · ');
+          meta.textContent = [e.collection ?? '', why].filter(Boolean).join(' · ');
           text.append(name, meta);
           row.append(svg, text);
           row.disabled = !!why || !code;
@@ -562,7 +557,7 @@ export class PacksView {
             sheet.close();
             this.draw();
             this.solveNew();
-            toast(`Added ${e.name} to ${this.packs[pi].name}.`);
+            toast(`Added to ${this.packs[pi].name}.`);
             this.body.querySelector(`.pack-tiles[data-pack="${pi}"] .pack-add`)?.scrollIntoView({ block: 'nearest' });
           });
           return row;
@@ -570,7 +565,6 @@ export class PacksView {
       );
       solveShown(listed.flatMap((x) => (x.code ? [x.code] : [])));
     };
-    search.addEventListener('input', show);
     show();
   }
 
