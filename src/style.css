@@ -1457,6 +1457,16 @@ img.icon {
   padding: 4px 12px 24px;
   gap: 0;
 }
+/* Under the packs: a link to the creator. */
+.levels-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 28px;
+}
+.levels-create {
+  text-decoration: none;
+  color: var(--text);
+}
 /* A kind of level (classic or one-shot): a heading and a short explanation above its packs. */
 .level-kind {
   max-width: 880px;

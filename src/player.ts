@@ -324,6 +324,12 @@ function drawLevels() {
     }
     out.push(packs[pi]);
   });
+  // At the bottom: the creator, to make puzzles of your own.
+  const create = el('a', 'btn levels-create', `${ICONS.edit}<span>Make your own puzzles</span>`);
+  create.href = 'create.html';
+  const footer = el('div', 'levels-footer');
+  footer.append(create);
+  out.push(footer);
   levels.replaceChildren(...out);
 }
 
