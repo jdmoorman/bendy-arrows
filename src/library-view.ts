@@ -210,6 +210,8 @@ export class LibraryView {
     t.dataset.code = r.code;
     if (r.code === this.currentCode) t.classList.add('current');
     if (r.solved) t.classList.add('solved');
+    // Not unique: marked as the Packs tab marks such a level.
+    if (r.unique === false) t.classList.add('bad');
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.classList.add('board');
     // The solution once worked out: of your own puzzles, and of those you've solved (an imported
@@ -221,15 +223,15 @@ export class LibraryView {
     text.textContent = r.name;
     if (r.solved) name.append(el('span', 'lib-check', ICONS.check));
     name.append(text);
-    const hints = r.hints === undefined ? (r.unique === false ? 'not unique' : '') : r.hints === null ? 'not unique' : `${r.hints}${r.hintsStuck ? '+' : ''} hint${r.hints === 1 && !r.hintsStuck ? '' : 's'}`;
-    const facts = el('span', 'pack-tile-label', [`${r.puzzle.w}×${r.puzzle.h}`, hints].filter(Boolean).join(' · '));
-    t.append(svg, name, facts);
+    const hints = r.hints === undefined ? (r.unique === false ? '2+ paths' : '') : r.hints === null ? '2+ paths' : `${r.hints}${r.hintsStuck ? '+' : ''} hint${r.hints === 1 && !r.hintsStuck ? '' : 's'}`;
+    t.append(svg, name, el('span', 'pack-tile-label', `${r.puzzle.w}×${r.puzzle.h}`));
+    if (hints) t.append(el('span', 'pack-tile-label', hints));
     if (r.pack) {
       const pack = el('span', 'lib-card-pack');
       pack.textContent = r.pack;
       t.append(pack);
     }
-    t.setAttribute('aria-label', `${r.name}, ${r.puzzle.w} by ${r.puzzle.h}${r.solved ? ', solved' : ''}${r.pack ? `, in ${r.pack}` : ''}`);
+    t.setAttribute('aria-label', `${r.name}, ${r.puzzle.w} by ${r.puzzle.h}${r.unique === false ? ', more than one solution' : ''}${r.solved ? ', solved' : ''}${r.pack ? `, in ${r.pack}` : ''}`);
     t.addEventListener('click', () => this.openCard(r));
     return t;
   }

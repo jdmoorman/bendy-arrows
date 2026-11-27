@@ -995,9 +995,16 @@ img.icon {
   font-weight: 400;
   color: var(--text-muted);
 }
-/* Cards about 100px wide or more: three across on a phone, so names fit. */
-.pack-tiles.lib-cards {
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+/* The cards are the Packs tab's size: 5 a row, 10 on a wide screen. */
+.lib-section {
+  container-type: inline-size;
+}
+.lib-card .pack-tile-label {
+  align-self: stretch;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .lib-card {
   position: relative;
@@ -1015,9 +1022,9 @@ img.icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 600;
 }
 .lib-card-name > span:last-child {
@@ -1046,8 +1053,8 @@ img.icon {
   align-items: center;
 }
 .lib-check .icon {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 .lib-card-actions {
   display: flex;
