@@ -1,27 +1,5 @@
 import { plainCode } from './codec';
 
-/**
- * The official level packs: what players see in the Levels tab (and the creator's Library
- * lists each pack as a collection).
- *
- * To publish a level:
- *   1. Make it in the creator (create.html). It must have exactly one solution (the hint count
- *      shows under the board).
- *   2. Save it to the Library, then, running locally, add it to a pack in the Packs tab and
- *      save the packs (or paste the code into a pack's `levels` below by hand: everything after
- *      `#p=` in the puzzle's share link). Levels play in the order listed.
- *   3. `npm test` checks every pack: a name, at least one level
- *      (any number past that), each no more than twice as long as it is wide (either way up), with
- *      exactly one solution, and no level used twice (not even turned, mirrored or with its
- *      ends swapped).
- *   4. Commit and push to main. GitHub builds the site and publishes it to Pages.
- *
- * Each code carries the level's difficulty, so players see it without working it out; `npm
- * test` checks it's right, and `npm run rate-levels` puts it right.
- *
- * Players' progress is kept by a level's code (less its difficulty), so changing a published
- * level's walls, tiles or ends resets everyone's progress on it.
- */
 export interface LevelPack {
   name: string;
   /** Share codes, in play order. */
