@@ -70,8 +70,6 @@ export class PlayView {
   private hintsUsed = 0;
   /** Auto-check has shown a mistake on this board: like a hint, it costs the gold star. */
   private caught = false;
-  /** The Hints show the move setting. */
-  private hintMoves = false;
   /** The Win animation setting: on solving, the arrow pulls in and spins into a check mark. */
   private winAnimation = true;
   /** The last input was a key (not a touch or click): a board focused now shows its cursor. */
@@ -395,11 +393,6 @@ export class PlayView {
       this.stopRetract();
       this.render();
     }
-  }
-
-  setHintMoves(on: boolean): void {
-    this.hintMoves = on;
-    this.render();
   }
 
   /** Where the keyboard cursor is: on a one-shot, the stroke's head (none without ends). */
@@ -826,22 +819,20 @@ export class PlayView {
     // draw the move (that's the player's to find).
     const hint = this.shownHint;
     const d = hint?.kind === 'deduction' ? hint.deduction : null;
-    // (With Hints show the move: the old way, the move drawn and the rule's full explanation.)
-    const prompt = d && !this.hintMoves ? hintPrompt(this.puzzle, { segments: this.segments, xs: this.xMarks }, d) : null;
+    const prompt = d ? hintPrompt(this.puzzle, { segments: this.segments, xs: this.xMarks }, d) : null;
     const focus = prompt ? prompt.cells : d ? (d.cells ?? [d.cell]) : hint?.kind === 'mistake' ? (hint.cells ?? [hint.cell]) : [];
     // A One-step trial hint: the lines its supposition leads to, faintly, and where that breaks.
     // In a one-shot, only those carrying the stroke on from its head (the path from the tail)
     // (and those where it breaks; the tiles the hint is about stay green even where it breaks).
-    const trial = d?.rule === 'trial' && !this.hintMoves ? trialPreview(this.puzzle, this.segments, d) : null;
+    const trial = d?.rule === 'trial' ? trialPreview(this.puzzle, this.segments, d) : null;
     for (const c of trial?.broken ?? []) if (!focus.includes(c)) errorCells.add(c);
     const phantom = new Set(trial?.phantom ?? []);
     renderBoard(this.svg, this.puzzle, {
       pad: padFor(this.puzzle),
       tightCoordinates: true,
-      segments: d && this.hintMoves ? new Set([...this.segments, ...d.segments]) : this.segments,
-      xMarks: d && this.hintMoves ? new Set([...this.xMarks, ...d.xs]) : this.xMarks,
-      highlight: d && this.hintMoves ? new Set([...d.segments, ...d.xs]) : undefined,
-      faint: phantom.size && !this.hintMoves ? phantom : undefined,
+      segments: this.segments,
+      xMarks: this.xMarks,
+      faint: phantom.size ? phantom : undefined,
       focusCells: focus.length ? new Set(focus) : undefined,
       errorCells,
       errorEdges,

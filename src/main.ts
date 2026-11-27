@@ -73,7 +73,6 @@ if (packs) {
   packs.onOpen = (code) => loadPuzzle(decodePuzzle(code), {}, 'edit');
 }
 play.setAutoCheck(settings.autoCheck);
-play.setHintMoves(settings.hintMoves);
 play.setWinAnimation(settings.winAnimation);
 
 /** The puzzle currently loaded in the play view, and where it came from. */
@@ -252,7 +251,6 @@ app.querySelector('[data-act=settings]')!.addEventListener('click', () => {
     play.render();
     editor.render();
     play.setAutoCheck(s.autoCheck);
-    play.setHintMoves(s.hintMoves);
     play.setWinAnimation(s.winAnimation);
     storage.saveSettings(s);
   }, hasLogs() ? exportSolveLogs : undefined, exportPuzzleLog());

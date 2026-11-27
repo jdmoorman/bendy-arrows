@@ -23,7 +23,7 @@ export function applySettings(s: Settings): void {
   setShowCoordinates(s.coordinates);
 }
 
-type Flag = 'checkerboard' | 'coordinates' | 'autoCheck' | 'hintMoves' | 'winAnimation';
+type Flag = 'checkerboard' | 'coordinates' | 'autoCheck' | 'winAnimation';
 const flag = (key: Flag, label: string) => ({
   label,
   get: (s: Settings) => s[key],
@@ -35,7 +35,6 @@ const SWITCHES: { label: string; get: (s: Settings) => boolean; set: (s: Setting
   flag('checkerboard', 'Checkerboard shading'),
   flag('coordinates', 'Grid coordinates'),
   flag('autoCheck', 'Auto-check'),
-  flag('hintMoves', 'Hints show the move'),
   flag('winAnimation', 'Win animation'),
 ];
 
