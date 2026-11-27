@@ -210,22 +210,25 @@ export class LibraryView {
     t.dataset.code = r.code;
     if (r.code === this.currentCode) t.classList.add('current');
     if (r.solved) t.classList.add('solved');
-    // Not unique: marked as the Packs tab marks such a level.
-    if (r.unique === false) t.classList.add('bad');
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.classList.add('board');
-    // The solution once worked out: of your own puzzles, and of those you've solved (an imported
-    // one you haven't solved yet stays a puzzle).
-    const lines = r.segments && (!r.entry.collection || r.solved) ? new Set(r.segments) : undefined;
-    renderBoard(svg, r.puzzle, { coordinates: false, pad: padFor(r.puzzle, false, false), segments: lines, solved: !!lines });
+    // The solution once worked out, or (not unique) the lines the hints get to.
+    const solution = r.segments ? new Set(r.segments) : undefined;
+    const lines = solution ?? (r.reach?.segments.length ? new Set(r.reach.segments) : undefined);
+    const faint = !solution && r.reach?.faint?.length ? new Set(r.reach.faint) : undefined;
+    renderBoard(svg, r.puzzle, { coordinates: false, pad: padFor(r.puzzle, false, false), segments: lines, faint, solved: !!solution });
     const name = el('span', 'lib-card-name');
     const text = el('span');
     text.textContent = r.name;
     if (r.solved) name.append(el('span', 'lib-check', ICONS.check));
     name.append(text);
-    const hints = r.hints === undefined ? (r.unique === false ? '2+ paths' : '') : r.hints === null ? '2+ paths' : `${r.hints}${r.hintsStuck ? '+' : ''} hint${r.hints === 1 && !r.hintsStuck ? '' : 's'}`;
+    const count = (n: number, stuck?: boolean) => `${n}${stuck ? '+' : ''} hint${n === 1 && !stuck ? '' : 's'}`;
     t.append(svg, name, el('span', 'pack-tile-label', `${r.puzzle.w}×${r.puzzle.h}`));
-    if (hints) t.append(el('span', 'pack-tile-label', hints));
+    if (r.unique === false) {
+      // How far the hints get (the lines on the board), then that it isn't unique.
+      if (r.reach) t.append(el('span', 'pack-tile-label', count(r.reach.hints)));
+      t.append(el('span', 'pack-tile-label lib-nonunique', 'nonunique'));
+    } else if (typeof r.hints === 'number') t.append(el('span', 'pack-tile-label', count(r.hints, r.hintsStuck)));
     if (r.pack) {
       const pack = el('span', 'lib-card-pack');
       pack.textContent = r.pack;
@@ -283,6 +286,7 @@ export class LibraryView {
           r.hints = rating.hints;
           r.hintsStuck = rating.hintsStuck;
           r.segments = rating.segments;
+          r.reach = rating.reach;
           for (const t of this.body.querySelectorAll<HTMLElement>(`.lib-card[data-code="${code}"]`)) t.replaceWith(this.card(r));
         }
       };

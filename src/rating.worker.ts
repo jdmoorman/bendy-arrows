@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { decodePuzzle } from './codec';
 import { RATING_VERSION, type Rating } from './library-table';
-import { hintJourney, searchMetrics, strokeJourney } from './logic';
+import { hintJourney, searchMetrics, strokeJourney, type JourneyFrame } from './logic';
 import { isOneShot } from './model';
 import { solve } from './solver';
 
@@ -29,9 +29,22 @@ ctx.onmessage = (ev: MessageEvent<RatingRequest>) => {
         const m = searchMetrics(p);
         rating.tightest = Math.round(m.tightest);
         rating.effort = Math.round(m.effort);
+      } else {
+        // Not unique: how far the hints get before they're stuck.
+        let segments: number[] = [];
+        const watch = (f: JourneyFrame) => (segments = f.segments);
+        const j = isOneShot(p) ? strokeJourney(p, {}, watch) : hintJourney(p, {}, watch);
+        // A one-shot's stroke that stalls: what the hints find over the rest of the board (drawn
+        // faintly, as the editor does).
+        let faint: number[] = [];
+        if (isOneShot(p)) {
+          const stroke = new Set(segments);
+          hintJourney({ ...p, oneShot: undefined }, {}, (f) => (faint = f.segments.filter((e) => !stroke.has(e))));
+        }
+        rating.reach = { segments, hints: j.steps.length, faint };
       }
     } catch {
-      rating = { v: RATING_VERSION, unique: false, hints: null, tightest: null, effort: null, segments: null };
+      rating = { v: RATING_VERSION, unique: false, hints: null, tightest: null, effort: null, segments: null, reach: { segments: [], hints: 0, faint: [] } };
     }
     ctx.postMessage({ code, rating } satisfies RatingMessage);
   }

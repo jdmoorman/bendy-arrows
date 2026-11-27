@@ -20,6 +20,8 @@ export interface LibRow {
   hintsStuck?: boolean;
   /** Its one solution's lines, once worked out (null if it has none, or more than one). */
   segments?: number[] | null;
+  /** Not unique: how far the hints get (see Rating). */
+  reach?: Reach;
   solved: boolean;
 }
 
@@ -45,10 +47,21 @@ export interface Rating {
   effort?: number | null;
   /** The one solution's lines, for the Library's cards (null if not unique; missing in old ratings). */
   segments?: number[] | null;
+  /**
+   * Not unique: how far the hints get before they're stuck (the lines drawn, and the hints taken);
+   * for a one-shot, `faint` is what the hints find over the rest of the board once its stroke stalls.
+   */
+  reach?: Reach;
 }
 
-/** A rating to (re)do: missing, from older rules, or without the solution a card shows. */
-export const needsRating = (r: Rating | undefined): boolean => !r || r.v !== RATING_VERSION || (r.unique && r.segments === undefined);
+export interface Reach {
+  segments: number[];
+  hints: number;
+  faint?: number[];
+}
+
+/** A rating to (re)do: missing, from older rules, or without the lines a card shows. */
+export const needsRating = (r: Rating | undefined): boolean => !r || r.v !== RATING_VERSION || (r.unique ? r.segments === undefined : r.reach?.faint === undefined);
 
 /** Collections: where saved puzzles came from (imports are named by you). */
 export const COLLECTIONS = {
@@ -96,6 +109,7 @@ export function libraryRows(storage: Storage, ratings: Record<string, Rating>): 
       hints: r?.hints,
       hintsStuck: r?.hintsStuck,
       segments: r?.segments,
+      reach: r?.reach,
       solved: storage.isSolved(e.code) || !!e.solved,
     });
   }

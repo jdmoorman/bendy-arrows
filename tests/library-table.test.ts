@@ -38,12 +38,14 @@ describe('library', () => {
     expect(r).toMatchObject({ unique: true, hints: 2, segments: [1, 2] });
   });
 
-  test('ratings are redone when from older rules, or without the solution a card shows', () => {
+  test('ratings are redone when from older rules, or without the lines a card shows', () => {
     expect(needsRating(undefined)).toBe(true);
     expect(needsRating({ v: RATING_VERSION - 1, unique: true, hints: 1, segments: [1] })).toBe(true);
     expect(needsRating({ v: RATING_VERSION, unique: true, hints: 1 })).toBe(true);
     expect(needsRating({ v: RATING_VERSION, unique: true, hints: 1, segments: [1] })).toBe(false);
-    expect(needsRating({ v: RATING_VERSION, unique: false, hints: null })).toBe(false);
+    expect(needsRating({ v: RATING_VERSION, unique: false, hints: null })).toBe(true);
+    expect(needsRating({ v: RATING_VERSION, unique: false, hints: null, reach: { segments: [3], hints: 1 } })).toBe(true);
+    expect(needsRating({ v: RATING_VERSION, unique: false, hints: null, reach: { segments: [3], hints: 1, faint: [] } })).toBe(false);
   });
 });
 

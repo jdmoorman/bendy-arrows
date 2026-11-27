@@ -1033,6 +1033,14 @@ img.icon {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Shown whole: on a phone's card it may run a little into the padding. */
+.lib-card .lib-nonunique {
+  color: var(--error);
+  font-size: 0.7rem;
+  overflow: visible;
+  text-overflow: clip;
+  margin: 0 -4px;
+}
 .lib-card.solved .lib-card-name {
   color: var(--success);
 }
