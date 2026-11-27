@@ -21,6 +21,8 @@ Draw back over lines or tap them to erase. Tap a border to mark it with an X whe
 - Progress saved in the browser
 - Shareable links
 - Touch-first, keyboard-accessible
+- Hint engine
+- Level editor
 
 ## Development
 
