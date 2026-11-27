@@ -7,8 +7,8 @@ import { plainCode } from './codec';
  * To publish a level:
  *   1. Make it in the creator (create.html). It must have exactly one solution (the hint count
  *      shows under the board).
- *   2. Running locally, tap "Copy level entry" beside the hint count, and paste the
- *      line into a pack's `levels` below (or write the code by hand: everything after
+ *   2. Save it to the Library, then, running locally, add it to a pack in the Packs tab and
+ *      save the packs (or paste the code into a pack's `levels` below by hand: everything after
  *      `#p=` in the puzzle's share link). Levels play in the order listed.
  *   3. `npm test` checks every pack: a name, at least one level
  *      (any number past that), each no more than twice as long as it is wide (either way up), with

@@ -1,5 +1,4 @@
-import { decodePuzzle, encodePuzzle } from './codec';
-import { difficultyLevel, ratingHints } from './difficulty';
+import { encodePuzzle } from './codec';
 import type { EditorView } from './editor';
 import type { LogicCheck } from './logic';
 import { missingEnds } from './rules';
@@ -34,34 +33,16 @@ export function attachUniquenessCheck(editor: EditorView): void {
   const hints = document.createElement('span');
   hints.className = 'hint-count hidden';
   info.append(state, hints);
-  // Running locally: copy the puzzle as a line for src/levels.ts, once it's unique and rated.
-  const copyBtn = document.createElement('button');
-  copyBtn.type = 'button';
-  copyBtn.className = 'link-btn copy-level hidden';
-  copyBtn.textContent = 'Copy level entry';
-  let entry = '';
-  copyBtn.addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(entry);
-      editor.setMessage('Copied. Paste it into a pack’s levels in src/levels.ts.', 'success');
-    } catch {
-      // No clipboard (e.g. a phone on the dev server over plain http): show it to copy by hand.
-      window.prompt('Copy this line into a pack’s levels in src/levels.ts.', entry);
-    }
-  });
-  if (import.meta.env.DEV) info.append(copyBtn);
   editor.el.querySelector('.board-info')!.append(info);
   let rater: Worker | null = null;
   const stopRating = () => {
     rater?.terminate();
     rater = null;
     hints.classList.add('hidden');
-    copyBtn.classList.add('hidden');
   };
   const rate = () => {
     stopRating();
     if (last?.status !== 'unique') return;
-    copyBtn.classList.add('hidden');
     hints.textContent = 'Counting hints…';
     hints.classList.remove('hidden');
     const worker = new Worker(new URL('./rating.worker.ts', import.meta.url), { type: 'module' });
@@ -74,12 +55,6 @@ export function attachUniquenessCheck(editor: EditorView): void {
       const n = ev.data.rating.hints ?? 0;
       const count = n ? `${n} hint${n === 1 ? '' : 's'}` : 'No hints';
       hints.textContent = ev.data.rating.hintsStuck ? `${count}, then stuck` : count;
-      const p = editor.current;
-      const h = ratingHints(ev.data.rating);
-      // The level's code carries its difficulty.
-      const code = h ? encodePuzzle(decodePuzzle(ev.data.code), difficultyLevel(h)) : ev.data.code;
-      entry = `      '${code}', // ${hints.textContent} ${p.w}×${p.h}`;
-      copyBtn.classList.remove('hidden');
     };
     worker.postMessage([encodePuzzle(editor.current)] satisfies RatingRequest);
   };
